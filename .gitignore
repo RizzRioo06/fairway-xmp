@@ -1,0 +1,14 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/resources/runtime/*
+!src-tauri/resources/runtime/.gitkeep
+.build-tools/
+.runtime-cache/
+.runtime-work/
+artifacts/
+.DS_Store
+*.log
+__pycache__/
+src-tauri/gen/
+VERIFICATION.md

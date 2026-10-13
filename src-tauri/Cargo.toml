@@ -1,0 +1,39 @@
+[package]
+name = "fairway"
+version = "0.1.0"
+description = "A consistent PHP development environment for the classroom"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+repository = "https://github.com/eimg/fairway-xmp"
+homepage = "https://github.com/eimg/fairway-xmp"
+
+[lib]
+name = "fairway_core"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "fairway"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater"]
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true, features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+rand = "0.9"
+libc = "0.2"
+tauri = { version = "2", optional = true, features = [] }
+tauri-plugin-single-instance = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_System_JobObjects", "Win32_System_Threading"] }

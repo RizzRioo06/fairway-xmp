@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+USER_NAME=$(/usr/bin/stat -f '%Su' /dev/console)
+if [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then
+  echo 'No logged-in student account was found for user PATH integration.' >&2
+  exit 1
+fi
+/usr/bin/sudo -u "$USER_NAME" -H '/Applications/Fairway.app/Contents/MacOS/fairway' --install-cli

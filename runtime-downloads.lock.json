@@ -1,0 +1,239 @@
+{
+  "brew-abseil-arm64-sequoia": {
+    "sha256": "8a6b64d5f9d44c579343f1ffa7587d08be653c193f5af24579f6ffc1530431ea",
+    "url": "https://ghcr.io/v2/homebrew/core/abseil/blobs/sha256:8a6b64d5f9d44c579343f1ffa7587d08be653c193f5af24579f6ffc1530431ea",
+    "version": "20260817.0"
+  },
+  "brew-aom-arm64-sequoia": {
+    "sha256": "d8b133d6a8e7b2193f34f2f3cbc2cb327e8898331432daf2cc4cb84164871b35",
+    "url": "https://ghcr.io/v2/homebrew/core/aom/blobs/sha256:d8b133d6a8e7b2193f34f2f3cbc2cb327e8898331432daf2cc4cb84164871b35",
+    "version": "3.15.2"
+  },
+  "brew-argon2-arm64-sequoia": {
+    "sha256": "4fe5808e09d5c48eac1991bb19bca51ac39517ae46d8e9f696580dc004c0bd08",
+    "url": "https://ghcr.io/v2/homebrew/core/argon2/blobs/sha256:4fe5808e09d5c48eac1991bb19bca51ac39517ae46d8e9f696580dc004c0bd08",
+    "version": "20190702"
+  },
+  "brew-brotli-arm64-sequoia": {
+    "sha256": "b8e388c96be5a63a46e0335c390fecb20dda7adb1368a2ba0209b38cae17c708",
+    "url": "https://ghcr.io/v2/homebrew/core/brotli/blobs/sha256:b8e388c96be5a63a46e0335c390fecb20dda7adb1368a2ba0209b38cae17c708",
+    "version": "1.2.0"
+  },
+  "brew-curl-arm64-sequoia": {
+    "sha256": "d8aa7bafda1c7d74fdde3b6d52865aabfc347fab26f1c4a27df054c0d10cdc53",
+    "url": "https://ghcr.io/v2/homebrew/core/curl/blobs/sha256:d8aa7bafda1c7d74fdde3b6d52865aabfc347fab26f1c4a27df054c0d10cdc53",
+    "version": "8.22.0"
+  },
+  "brew-dav1d-arm64-sequoia": {
+    "sha256": "5f573db161c0685ba7e8d27bd3b6a494e6952e47c7c99355a0d090b253b566af",
+    "url": "https://ghcr.io/v2/homebrew/core/dav1d/blobs/sha256:5f573db161c0685ba7e8d27bd3b6a494e6952e47c7c99355a0d090b253b566af",
+    "version": "1.5.4"
+  },
+  "brew-fontconfig-arm64-sequoia": {
+    "sha256": "a5f5df5f8d02e8a5b2587cac464c7bd45128447da06b7ab39938a9645982ef49",
+    "url": "https://ghcr.io/v2/homebrew/core/fontconfig/blobs/sha256:a5f5df5f8d02e8a5b2587cac464c7bd45128447da06b7ab39938a9645982ef49",
+    "version": "2.18.3"
+  },
+  "brew-freetds-arm64-sequoia": {
+    "sha256": "a2f7136be85c9197685c90cc8f65a537a093613aaef4ae87e33707d3f0cc7c32",
+    "url": "https://ghcr.io/v2/homebrew/core/freetds/blobs/sha256:a2f7136be85c9197685c90cc8f65a537a093613aaef4ae87e33707d3f0cc7c32",
+    "version": "1.5.19"
+  },
+  "brew-freetype-arm64-sequoia": {
+    "sha256": "6453db5c6dba77200b4a1a653912bc63d251bdf2c8649c69ce19c336cfb3494a",
+    "url": "https://ghcr.io/v2/homebrew/core/freetype/blobs/sha256:6453db5c6dba77200b4a1a653912bc63d251bdf2c8649c69ce19c336cfb3494a",
+    "version": "2.14.3"
+  },
+  "brew-gd-arm64-sequoia": {
+    "sha256": "c4e22a92d28f3b8a49c10e29cf04f5a9b4b4932691ec4326021bc149ac0dae4c",
+    "url": "https://ghcr.io/v2/homebrew/core/gd/blobs/sha256:c4e22a92d28f3b8a49c10e29cf04f5a9b4b4932691ec4326021bc149ac0dae4c",
+    "version": "2.3.3"
+  },
+  "brew-gettext-arm64-sequoia": {
+    "sha256": "98a116d35792ccd730360ffc8c0d8fc5799b2282b96bb7696192c573f064a331",
+    "url": "https://ghcr.io/v2/homebrew/core/gettext/blobs/sha256:98a116d35792ccd730360ffc8c0d8fc5799b2282b96bb7696192c573f064a331",
+    "version": "1.0"
+  },
+  "brew-gmp-arm64-sequoia": {
+    "sha256": "b30bf31c50c294e0981d2a7cb4c149e9c43f50f3cf4f7f552c3dcf9da66b95b5",
+    "url": "https://ghcr.io/v2/homebrew/core/gmp/blobs/sha256:b30bf31c50c294e0981d2a7cb4c149e9c43f50f3cf4f7f552c3dcf9da66b95b5",
+    "version": "6.3.0"
+  },
+  "brew-icu4c@78-arm64-sequoia": {
+    "sha256": "d1206febbce23e5014f51b631afd7129b2a247ee18a9f97226cd5889e66c1686",
+    "url": "https://ghcr.io/v2/homebrew/core/icu4c/78/blobs/sha256:d1206febbce23e5014f51b631afd7129b2a247ee18a9f97226cd5889e66c1686",
+    "version": "78.3"
+  },
+  "brew-jpeg-turbo-arm64-sequoia": {
+    "sha256": "6dc55edcd33c693e474299ed2bba3c472ac1331cbe300066ec8ef99b88fab17c",
+    "url": "https://ghcr.io/v2/homebrew/core/jpeg-turbo/blobs/sha256:6dc55edcd33c693e474299ed2bba3c472ac1331cbe300066ec8ef99b88fab17c",
+    "version": "3.2.0"
+  },
+  "brew-krb5-arm64-sequoia": {
+    "sha256": "8bc2adf379fd6e0d0dd3bbe663effe87f625f25b9aa5a1bac71aef4b450ccc23",
+    "url": "https://ghcr.io/v2/homebrew/core/krb5/blobs/sha256:8bc2adf379fd6e0d0dd3bbe663effe87f625f25b9aa5a1bac71aef4b450ccc23",
+    "version": "1.22.2"
+  },
+  "brew-libavif-arm64-sequoia": {
+    "sha256": "0d1a9ce6320d9ddacb3e7ca31bb2ef3216529755ab1df24eac833fec27b25c95",
+    "url": "https://ghcr.io/v2/homebrew/core/libavif/blobs/sha256:0d1a9ce6320d9ddacb3e7ca31bb2ef3216529755ab1df24eac833fec27b25c95",
+    "version": "1.4.2"
+  },
+  "brew-libnghttp2-arm64-sequoia": {
+    "sha256": "2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
+    "url": "https://ghcr.io/v2/homebrew/core/libnghttp2/blobs/sha256:2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
+    "version": "1.70.0"
+  },
+  "brew-libnghttp3-arm64-sequoia": {
+    "sha256": "f0c56bcde3273d2599455d0ab18a281d6a329d63af4672fdbdf3f07633276475",
+    "url": "https://ghcr.io/v2/homebrew/core/libnghttp3/blobs/sha256:f0c56bcde3273d2599455d0ab18a281d6a329d63af4672fdbdf3f07633276475",
+    "version": "1.18.0"
+  },
+  "brew-libngtcp2-arm64-sequoia": {
+    "sha256": "9213450a97f4ddc6a0dbcdf1b2280b93efd0f02818d953b6935995d12a885ea3",
+    "url": "https://ghcr.io/v2/homebrew/core/libngtcp2/blobs/sha256:9213450a97f4ddc6a0dbcdf1b2280b93efd0f02818d953b6935995d12a885ea3",
+    "version": "1.25.0"
+  },
+  "brew-libpng-arm64-sequoia": {
+    "sha256": "6461c4dde6a693b559c531357b32126bd649ab67f53db5a5b70c25a5c12de4f1",
+    "url": "https://ghcr.io/v2/homebrew/core/libpng/blobs/sha256:6461c4dde6a693b559c531357b32126bd649ab67f53db5a5b70c25a5c12de4f1",
+    "version": "1.6.59"
+  },
+  "brew-libpq-arm64-sequoia": {
+    "sha256": "9e91d1af37e0c44755059d6a402d6d94138e817c3f36400c4c9bfcfadc7ea054",
+    "url": "https://ghcr.io/v2/homebrew/core/libpq/blobs/sha256:9e91d1af37e0c44755059d6a402d6d94138e817c3f36400c4c9bfcfadc7ea054",
+    "version": "18.6"
+  },
+  "brew-libpsl-arm64-sequoia": {
+    "sha256": "392f0aceca4e4febcb583688fa4bb701853e4a41a3d11446b0deac5231c32a53",
+    "url": "https://ghcr.io/v2/homebrew/core/libpsl/blobs/sha256:392f0aceca4e4febcb583688fa4bb701853e4a41a3d11446b0deac5231c32a53",
+    "version": "0.23.3"
+  },
+  "brew-libsodium-arm64-sequoia": {
+    "sha256": "b231db8b0f993cb764b57560b69f484efe059ec87e47887505aa2d5872cc5a01",
+    "url": "https://ghcr.io/v2/homebrew/core/libsodium/blobs/sha256:b231db8b0f993cb764b57560b69f484efe059ec87e47887505aa2d5872cc5a01",
+    "version": "1.0.22"
+  },
+  "brew-libssh2-arm64-sequoia": {
+    "sha256": "e0cd7666188510728b2e133ddfab7357437f4df5c347dfbe12cc89d8c06bd2ee",
+    "url": "https://ghcr.io/v2/homebrew/core/libssh2/blobs/sha256:e0cd7666188510728b2e133ddfab7357437f4df5c347dfbe12cc89d8c06bd2ee",
+    "version": "1.11.1"
+  },
+  "brew-libtiff-arm64-sequoia": {
+    "sha256": "e971adc15ce3387a9c68a10ff1cf431755faf0e86b9d3a6daf668efc2f6f31d8",
+    "url": "https://ghcr.io/v2/homebrew/core/libtiff/blobs/sha256:e971adc15ce3387a9c68a10ff1cf431755faf0e86b9d3a6daf668efc2f6f31d8",
+    "version": "4.7.2"
+  },
+  "brew-libtool-arm64-sequoia": {
+    "sha256": "86f6495e08630095d0a0a4a8be76d8ba0350985a55ec13fb43a73f5473d2a410",
+    "url": "https://ghcr.io/v2/homebrew/core/libtool/blobs/sha256:86f6495e08630095d0a0a4a8be76d8ba0350985a55ec13fb43a73f5473d2a410",
+    "version": "2.6.2"
+  },
+  "brew-libvmaf-arm64-sequoia": {
+    "sha256": "d3cf35724639ceb6d9d92ee25a7fa4953f7ff952dc4be90aa83eb006910248b4",
+    "url": "https://ghcr.io/v2/homebrew/core/libvmaf/blobs/sha256:d3cf35724639ceb6d9d92ee25a7fa4953f7ff952dc4be90aa83eb006910248b4",
+    "version": "3.2.1"
+  },
+  "brew-libzip-arm64-sequoia": {
+    "sha256": "925c64a198b759de45cbe32aeeae0854560278363e43c9b538e42c6623002c7f",
+    "url": "https://ghcr.io/v2/homebrew/core/libzip/blobs/sha256:925c64a198b759de45cbe32aeeae0854560278363e43c9b538e42c6623002c7f",
+    "version": "1.12"
+  },
+  "brew-lz4-arm64-sequoia": {
+    "sha256": "91674f1c7407b1f7b73d5bd1d85ed1abaaca93be3b68607af4ef3df632540ac0",
+    "url": "https://ghcr.io/v2/homebrew/core/lz4/blobs/sha256:91674f1c7407b1f7b73d5bd1d85ed1abaaca93be3b68607af4ef3df632540ac0",
+    "version": "1.10.0"
+  },
+  "brew-mysql@8.4-arm64-sequoia": {
+    "sha256": "88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
+    "url": "https://ghcr.io/v2/homebrew/core/mysql/8.4/blobs/sha256:88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
+    "version": "8.4.11"
+  },
+  "brew-net-snmp-arm64-sequoia": {
+    "sha256": "d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
+    "url": "https://ghcr.io/v2/homebrew/core/net-snmp/blobs/sha256:d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
+    "version": "5.9.5.2"
+  },
+  "brew-nginx-arm64-sequoia": {
+    "sha256": "1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
+    "url": "https://ghcr.io/v2/homebrew/core/nginx/blobs/sha256:1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
+    "version": "1.31.6"
+  },
+  "brew-oniguruma-arm64-sequoia": {
+    "sha256": "7d6ab71fff646664b91e8ff91744696ec775357787dbc1a28e45d52759662e8d",
+    "url": "https://ghcr.io/v2/homebrew/core/oniguruma/blobs/sha256:7d6ab71fff646664b91e8ff91744696ec775357787dbc1a28e45d52759662e8d",
+    "version": "6.9.10"
+  },
+  "brew-openldap-arm64-sequoia": {
+    "sha256": "03bcbc4d521f23a2941917039345cd72fc2a8b663b54e2bae28c006622f904f9",
+    "url": "https://ghcr.io/v2/homebrew/core/openldap/blobs/sha256:03bcbc4d521f23a2941917039345cd72fc2a8b663b54e2bae28c006622f904f9",
+    "version": "2.7.1"
+  },
+  "brew-openssl@4-arm64-sequoia": {
+    "sha256": "e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
+    "url": "https://ghcr.io/v2/homebrew/core/openssl/4/blobs/sha256:e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
+    "version": "4.0.3"
+  },
+  "brew-pcre2-arm64-sequoia": {
+    "sha256": "0ec47d18c50f5770db2b3f07b5b85644284cc6ee8e07e23b11d2727e95932b77",
+    "url": "https://ghcr.io/v2/homebrew/core/pcre2/blobs/sha256:0ec47d18c50f5770db2b3f07b5b85644284cc6ee8e07e23b11d2727e95932b77",
+    "version": "10.49"
+  },
+  "brew-php@8.4-arm64-sequoia": {
+    "sha256": "7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
+    "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
+    "version": "8.4.26"
+  },
+  "brew-protobuf-arm64-sequoia": {
+    "sha256": "153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
+    "url": "https://ghcr.io/v2/homebrew/core/protobuf/blobs/sha256:153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
+    "version": "36.2"
+  },
+  "brew-sqlite-arm64-sequoia": {
+    "sha256": "b36720af4c3db32f5d1f16ee6129018bdde236cd8f7e6189092b52c20d31c5ca",
+    "url": "https://ghcr.io/v2/homebrew/core/sqlite/blobs/sha256:b36720af4c3db32f5d1f16ee6129018bdde236cd8f7e6189092b52c20d31c5ca",
+    "version": "3.54.0"
+  },
+  "brew-tidy-html5-arm64-sequoia": {
+    "sha256": "570d2482168cd8be11bb433f743f934bf7797a952863cd282230111b5de15a73",
+    "url": "https://ghcr.io/v2/homebrew/core/tidy-html5/blobs/sha256:570d2482168cd8be11bb433f743f934bf7797a952863cd282230111b5de15a73",
+    "version": "5.8.0"
+  },
+  "brew-unixodbc-arm64-sequoia": {
+    "sha256": "e1522105d20545743c713e90c17bf6393d7a829ec01137ec0d6942bbc04ea2d2",
+    "url": "https://ghcr.io/v2/homebrew/core/unixodbc/blobs/sha256:e1522105d20545743c713e90c17bf6393d7a829ec01137ec0d6942bbc04ea2d2",
+    "version": "2.3.14"
+  },
+  "brew-webp-arm64-sequoia": {
+    "sha256": "3f5c1ccc592312b2170bc1ea673f902aa65fc479aa9a4c308ff0b1b1a35315fe",
+    "url": "https://ghcr.io/v2/homebrew/core/webp/blobs/sha256:3f5c1ccc592312b2170bc1ea673f902aa65fc479aa9a4c308ff0b1b1a35315fe",
+    "version": "1.6.0"
+  },
+  "brew-xz-arm64-sequoia": {
+    "sha256": "c2724c0db0398134694b8366d30d14f4de376115fb54c559c331d5fd0474af76",
+    "url": "https://ghcr.io/v2/homebrew/core/xz/blobs/sha256:c2724c0db0398134694b8366d30d14f4de376115fb54c559c331d5fd0474af76",
+    "version": "5.8.4"
+  },
+  "brew-zlib-ng-compat-arm64-sequoia": {
+    "sha256": "73a98dbbff35ba8f880438081be740da8131b0e3bbfa41f01e0072d140f4a9e7",
+    "url": "https://ghcr.io/v2/homebrew/core/zlib-ng-compat/blobs/sha256:73a98dbbff35ba8f880438081be740da8131b0e3bbfa41f01e0072d140f4a9e7",
+    "version": "2.3.3"
+  },
+  "brew-zstd-arm64-sequoia": {
+    "sha256": "d72adf48460a8384b256f88061cd7b9df4977df7fa2e0794051d427db754a565",
+    "url": "https://ghcr.io/v2/homebrew/core/zstd/blobs/sha256:d72adf48460a8384b256f88061cd7b9df4977df7fa2e0794051d427db754a565",
+    "version": "1.5.7"
+  },
+  "ca-certificates": {
+    "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+    "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl"
+  },
+  "composer": {
+    "sha256": "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6",
+    "url": "https://getcomposer.org/download/2.10.3/composer.phar"
+  },
+  "phpmyadmin": {
+    "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",
+    "url": "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip"
+  }
+}
