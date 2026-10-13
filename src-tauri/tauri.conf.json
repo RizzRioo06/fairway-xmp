@@ -26,6 +26,8 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
         "installerHooks": "../packaging/windows/hooks.nsh",
         "minimumWebview2Version": "120.0.0.0"
       },
