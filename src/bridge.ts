@@ -23,7 +23,7 @@ export const preview: Snapshot = {
   ],
   documentRoot: '~/fairway/www', dataDir: 'Fairway XMP application data',
   runtimeReady: false, runtimeVersions: null, pathInstalled: false,
-  pathPhp: null, pathComposer: null, version: '0.1.0',
+  pathPhp: null, pathComposer: null, version: '0.1.0-alpha.1',
 };
 
 export function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {

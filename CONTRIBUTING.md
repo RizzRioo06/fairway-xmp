@@ -53,7 +53,7 @@ cargo tauri build --bundles app
 sh scripts/package_macos.sh
 ```
 
-Windows setup uses current-user NSIS hooks and an offline WebView2 prerequisite. macOS packaging creates a pkg plus the app's bundled uninstall utility. Unsigned output is a verification build, not a ready-to-distribute classroom release. `scripts/package_macos.sh` supports `APPLE_SIGNING_IDENTITY`, `APPLE_INSTALLER_IDENTITY`, and `APPLE_NOTARY_PROFILE` for distribution signing and notarization.
+Windows setup uses current-user NSIS hooks and an offline WebView2 prerequisite. macOS packaging creates a pkg plus the app's bundled uninstall utility. Unsigned output can be published as an explicitly labeled alpha prerelease. Stable classroom releases require distribution signing and macOS notarization. `scripts/package_macos.sh` supports `APPLE_SIGNING_IDENTITY`, `APPLE_INSTALLER_IDENTITY`, and `APPLE_NOTARY_PROFILE` for distribution signing and notarization.
 
 To configure a signed updater release:
 
@@ -64,19 +64,21 @@ cargo tauri build --config artifacts/tauri.release.json
 
 Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. The default feed is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
 
-## Publishing a future release
+## Publishing a release
 
 For an unsigned x64 Windows test installer, dispatch the **Windows test installer** workflow with `gh workflow run windows-test-build.yml --ref main`. It checks the source, stages the pinned runtime, exercises real services and cleanup, then builds an NSIS installer. Download its `fairway-windows-x64-test` artifact with `gh run download RUN_ID --name fairway-windows-x64-test --dir artifacts/windows-test`. The artifact includes its SHA256, source commit, and proposed Windows runtime checksum lock for review. It expires after 14 days and does not create a GitHub Release.
 
-Binary releases are held until native testing is complete. Publish them only from a reviewed commit after verifying installation, updates, backups, and removal on the supported systems.
+The initial release is `v0.1.0-alpha.1`, an unsigned GitHub prerelease with manual updates. Publish alpha builds with clear installation limitations and never mark them as the latest stable release. Stable releases require installation, updates, backups, and removal checks on the supported systems.
 
-The dedicated repository is [eimg/fairway-xmp](https://github.com/eimg/fairway-xmp). A future GitHub release should include:
+On the Mac builder, after staging the locked runtime, run `python3 scripts/package_sources.py`. It verifies the cached bottles, saves their recipes and build metadata, downloads version-matched upstream source and patches, and creates a bundled-tool source archive under `artifacts/alpha-VERSION`. Review and commit the resulting `runtime-sources.lock.json`; subsequent runs verify those source checksums. The archive also contains the application source at the build commit and the runtime staging scripts. Source packages are distributed beside the installers; students only need their platform's installer.
+
+The dedicated repository is [eimg/fairway-xmp](https://github.com/eimg/fairway-xmp). A stable GitHub release should include:
 
 - Signed Windows and signed/notarized macOS installers.
 - Tauri updater artifacts and their signatures.
 - A `latest.json` file with the release version, notes, publication date, and supported platform entries. Each entry needs its signature and an HTTPS URL to the corresponding release asset. Windows uses `windows-x86_64`; Apple Silicon uses `darwin-aarch64`.
 - Checksums and the corresponding source archives required by bundled components.
 
-Keep the updater private key outside the repository. The public key used by installed clients must match the key signing update artifacts. Build the macOS app with the release overlay, then run the packaging script to produce its installer. Do not upload unsigned test builds as releases.
+Keep the updater private key outside the repository. The public key used by installed clients must match the key signing update artifacts. Build the macOS app with the release overlay, then run the packaging script to produce its installer. Unsigned alpha prereleases omit updater artifacts and `latest.json`; users install updates manually. Include both installers, SHA-256 checksums, pinned runtime metadata, and the bundled-tool source archive. Use `--prerelease --latest=false` when publishing an alpha with `gh release create`.
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md) for behavior and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for component licenses.

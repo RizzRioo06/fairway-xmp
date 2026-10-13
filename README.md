@@ -6,7 +6,18 @@ A simple PHP development environment for Windows and Apple Silicon Macs. Start y
 
 ## Downloads
 
-**Installers are not available yet.** Windows and macOS downloads will appear on the [Releases page](https://github.com/eimg/fairway-xmp/releases) after testing is complete.
+**v0.1.0-alpha.1 is available for early testing.** Back up any important databases before using an alpha version.
+
+| Computer | Download |
+| --- | --- |
+| Windows 10 22H2 / Windows 11, x64 | [Windows installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-alpha.1/Fairway-XMP-0.1.0-alpha.1-windows-x64-setup.exe) |
+| macOS 15+, Apple Silicon | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-alpha.1/Fairway-XMP-0.1.0-alpha.1-macos-arm64-unsigned.pkg) |
+
+These alpha installers are unsigned. Windows may display an unknown-publisher warning. macOS may block the package or app; if you trust the download, follow [Apple’s instructions for opening an app from an unidentified developer](https://support.apple.com/en-us/102445).
+
+Find release notes, SHA-256 checksums, and bundled-tool source code on the [alpha release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-alpha.1).
+
+If you installed an earlier test build named **Fairway**, uninstall that test build first, choosing to keep your data and projects. This does not apply to other apps that happen to share that name.
 
 ## What’s included
 
@@ -29,8 +40,6 @@ PHP and Composer are added to your user PATH so you can use them from a terminal
 Intel Macs and Linux are not supported. Install Node.js separately if your course or project needs it.
 
 ## Your first PHP project
-
-Once an installer is available:
 
 1. Install Fairway XMP, then reopen your terminal and VS Code.
 2. Open Fairway XMP and click **Start all**. Wait for **All services ready**.
@@ -86,7 +95,7 @@ If another application is using a port, Fairway XMP explains the conflict. Stop 
 
 Click **Stop all** or quit Fairway XMP to stop its services. Minimize the window if you want them to keep running.
 
-Use **Updates** to check for a new version. Updates preserve your projects and database data; before an in-app update, Fairway XMP backs up your databases and stops services.
+Alpha updates are installed manually. Open **Updates → View downloads**, download the newer installer, back up your databases, then stop all services and quit Fairway XMP before installing. Your projects and database data are kept.
 
 To uninstall, use Windows’ installed-apps settings or **Uninstall Fairway XMP.command** inside the macOS application bundle. The uninstaller removes Fairway XMP’s PHP and Composer PATH entries. Your projects and database data are kept by default; deleting them is a separate choice.
 

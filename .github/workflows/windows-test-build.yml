@@ -70,7 +70,7 @@ jobs:
             run = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
             target = 'x86_64-pc-windows-msvc'
             signed = $false
-            purpose = 'Local testing; not a published release'
+            purpose = 'Unsigned installer; publication is a separate step'
           } | ConvertTo-Json | Set-Content "$output/build-info.json" -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
