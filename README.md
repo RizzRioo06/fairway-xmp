@@ -17,7 +17,7 @@ These alpha installers are unsigned. Windows may display an unknown-publisher wa
 
 Find release notes, SHA-256 checksums, and bundled-tool source code on the [alpha release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-alpha.1).
 
-If you installed an earlier test build named **Fairway**, uninstall that test build first, choosing to keep your data and projects. This does not apply to other apps that happen to share that name.
+If you installed a pre-alpha test build (version **0.1.0**, named **Fairway** or **Fairway XMP**), uninstall that test build first, choosing to keep your data and projects. This does not apply to other apps that happen to share the Fairway name.
 
 ## What’s included
 

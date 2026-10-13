@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import hashlib
+import http.client
 import json
 from pathlib import Path
 import re
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import tarfile
 import urllib.parse
+import zipfile
 
 from prepare_runtime import CACHE, LOCK_PATH, MANIFEST, ROOT, download, read_json
 
@@ -84,6 +86,27 @@ def collect_plan(stage):
     certifi = read_json(f'https://pypi.org/pypi/certifi/{certifi_version}/json')
     sdist, = [file for file in certifi['urls'] if file['packagetype'] == 'sdist']
     plan.append(source_input('ca-certificates', sdist['url'], sdist['digests']['sha256']))
+    # Windows PHP's SBOM identifies the exact dependency repositories, including
+    # LGPL libraries and their Windows build recipes/patches.
+    php_windows = lock['php-windows']
+    windows_archive, _ = download(php_windows['url'], php_windows['sha256'])
+    windows_metadata = stage / 'windows-php'
+    windows_metadata.mkdir(exist_ok=True)
+    with zipfile.ZipFile(windows_archive) as php:
+        for filename in ['extras/sbom/php.spdx.json', 'extras/sbom/php.cdx.json', 'readme-redist-bins.txt', 'license.txt']:
+            (windows_metadata / Path(filename).name).write_bytes(php.read(filename))
+        sbom = json.loads(php.read('extras/sbom/php.spdx.json'))
+    seen = set()
+    for package in sbom['packages']:
+        for ref in package.get('externalRefs') or []:
+            match = re.fullmatch(r'git\+https://github.com/([^/]+/[^/]+)\.git@([0-9a-f]{40})', ref.get('referenceLocator', ''))
+            if not match or match.group(0) in seen:
+                continue
+            seen.add(match.group(0))
+            repo, revision = match.groups()
+            extra = source_input('windows-' + repo.replace('/', '-'), f'https://codeload.github.com/{repo}/tar.gz/{revision}')
+            extra.update(revision=revision, binaryPackage=package['name'], binaryVersion=package.get('versionInfo'))
+            plan.append(extra)
     source_lock = ROOT / 'runtime-sources.lock.json'
     if source_lock.exists():
         pinned = {item['name']: item for item in json.loads(source_lock.read_text())}
@@ -99,6 +122,7 @@ def collect_plan(stage):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plan-only', action='store_true', help='Write recipes and download plan without fetching source archives')
+    parser.add_argument('--source-ref', default='HEAD', help='Application source revision matching the installers')
     args = parser.parse_args()
     version = json.loads((ROOT / 'package.json').read_text())['version']
     stage = ROOT / '.runtime-work' / f'sources-{version}'
@@ -114,13 +138,22 @@ def main():
 
     def fetch(item):
         failure = None
+        archive = None
         for url in [item['url'], *item.get('mirrors', [])]:
-            try:
-                archive, sha = download(url, item['sha256'])
+            for attempt in range(3):
+                try:
+                    archive, sha = download(url, item['sha256'])
+                    break
+                except RuntimeError as error:
+                    if 'Checksum mismatch' not in str(error) or attempt == 2:
+                        raise
+                    # A corrupt transfer is discarded; the retry must still match
+                    # the original reviewed checksum. Never accept a new digest.
+                except (OSError, http.client.HTTPException) as error:
+                    failure = error
+            if archive is not None:
                 break
-            except OSError as error:
-                failure = error
-        else:
+        if archive is None:
             raise RuntimeError(f'Cannot obtain source for {item["name"]}') from failure
         destination = sources / item['file']
         shutil.copyfile(archive, destination)
@@ -131,10 +164,11 @@ def main():
         verified = list(pool.map(fetch, plan))
     plan_path.write_text(json.dumps(verified, indent=2) + '\n')
     (ROOT / 'runtime-sources.lock.json').write_text(json.dumps(verified, indent=2) + '\n')
-    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    commit = subprocess.check_output(['git', 'rev-parse', args.source_ref], cwd=ROOT, text=True).strip()
     subprocess.run(['git', 'archive', '--format=tar.gz', f'--output={stage / "fairway-xmp-source.tar.gz"}', commit], cwd=ROOT, check=True)
     shutil.copyfile(LOCK_PATH, stage / LOCK_PATH.name)
     shutil.copyfile(ROOT / 'runtime-manifest.json', stage / 'runtime-manifest.json')
+    shutil.copyfile(Path(__file__), stage / 'package_sources.py')
     (stage / 'README.md').write_text(f'''# Fairway XMP {version}: bundled-tool source
 
 This archive accompanies the Windows x64 and macOS ARM64 installers.
@@ -150,6 +184,10 @@ bottles. Recipes include inline patches; externally downloaded patches and
 resource sources are in `upstream/`. Use the recorded recipes to build native
 components with Homebrew and their listed build prerequisites. These source
 archives retain the components' own licenses.
+
+`windows-php/` retains the official PHP distribution's software bill of
+materials and notices. Its immutable repository references supply Windows
+dependency sources and build recipes under `upstream/windows-*`.
 
 `fairway-xmp-source.tar.gz` contains the application, configuration templates,
 and scripts that stage, relocate, and package the runtimes. Extract it and see

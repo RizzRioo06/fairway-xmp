@@ -1,0 +1,1120 @@
+[
+  {
+    "name": "abseil",
+    "url": "https://github.com/abseil/abseil-cpp/archive/refs/tags/20260817.0.tar.gz",
+    "sha256": "f7e05179df39c45434cad433f5783840bb3788ef322976f9138bc6b72b3a107d",
+    "file": "abseil.tar.gz",
+    "binary": {
+      "key": "brew-abseil-arm64-sequoia",
+      "sha256": "8a6b64d5f9d44c579343f1ffa7587d08be653c193f5af24579f6ffc1530431ea",
+      "url": "https://ghcr.io/v2/homebrew/core/abseil/blobs/sha256:8a6b64d5f9d44c579343f1ffa7587d08be653c193f5af24579f6ffc1530431ea",
+      "version": "20260817.0"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "aom",
+    "url": "https://aomedia.googlesource.com/aom/+archive/af3dc9aadc793c1b00edc003e3fc19a44fdeb574.tar.gz",
+    "sha256": "846bd8f5d1c2762b78e58bd9c9c1a125dbd547ebf3d727abca6d064313c184fd",
+    "file": "aom.tar.gz",
+    "revision": "af3dc9aadc793c1b00edc003e3fc19a44fdeb574",
+    "binary": {
+      "key": "brew-aom-arm64-sequoia",
+      "sha256": "d8b133d6a8e7b2193f34f2f3cbc2cb327e8898331432daf2cc4cb84164871b35",
+      "url": "https://ghcr.io/v2/homebrew/core/aom/blobs/sha256:d8b133d6a8e7b2193f34f2f3cbc2cb327e8898331432daf2cc4cb84164871b35",
+      "version": "3.15.2"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "argon2",
+    "url": "https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/20190702.tar.gz",
+    "sha256": "daf972a89577f8772602bf2eb38b6a3dd3d922bf5724d45e7f9589b5e830442c",
+    "file": "argon2.tar.gz",
+    "binary": {
+      "key": "brew-argon2-arm64-sequoia",
+      "sha256": "4fe5808e09d5c48eac1991bb19bca51ac39517ae46d8e9f696580dc004c0bd08",
+      "url": "https://ghcr.io/v2/homebrew/core/argon2/blobs/sha256:4fe5808e09d5c48eac1991bb19bca51ac39517ae46d8e9f696580dc004c0bd08",
+      "version": "20190702"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "brotli",
+    "url": "https://github.com/google/brotli/archive/refs/tags/v1.2.0.tar.gz",
+    "sha256": "816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec",
+    "file": "brotli.tar.gz",
+    "binary": {
+      "key": "brew-brotli-arm64-sequoia",
+      "sha256": "b8e388c96be5a63a46e0335c390fecb20dda7adb1368a2ba0209b38cae17c708",
+      "url": "https://ghcr.io/v2/homebrew/core/brotli/blobs/sha256:b8e388c96be5a63a46e0335c390fecb20dda7adb1368a2ba0209b38cae17c708",
+      "version": "1.2.0"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/brotli-1.2.0.tar.gz",
+      "http://fresh-center.net/linux/misc/legacy/brotli-1.2.0.tar.gz"
+    ]
+  },
+  {
+    "name": "curl",
+    "url": "https://curl.se/download/curl-8.22.0.tar.bz2",
+    "sha256": "5d956a6a22b3c279f50c421ee5d3c9e9d660cb6f115dcf881b579e952130549c",
+    "file": "curl.tar.bz2",
+    "binary": {
+      "key": "brew-curl-arm64-sequoia",
+      "sha256": "d8aa7bafda1c7d74fdde3b6d52865aabfc347fab26f1c4a27df054c0d10cdc53",
+      "url": "https://ghcr.io/v2/homebrew/core/curl/blobs/sha256:d8aa7bafda1c7d74fdde3b6d52865aabfc347fab26f1c4a27df054c0d10cdc53",
+      "version": "8.22.0"
+    },
+    "mirrors": [
+      "https://github.com/curl/curl/releases/download/curl-8_22_0/curl-8.22.0.tar.bz2",
+      "http://fresh-center.net/linux/www/curl-8.22.0.tar.bz2",
+      "http://fresh-center.net/linux/www/legacy/curl-8.22.0.tar.bz2"
+    ]
+  },
+  {
+    "name": "dav1d",
+    "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.5.4/dav1d-1.5.4.tar.bz2",
+    "sha256": "2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011",
+    "file": "dav1d.tar.bz2",
+    "binary": {
+      "key": "brew-dav1d-arm64-sequoia",
+      "sha256": "5f573db161c0685ba7e8d27bd3b6a494e6952e47c7c99355a0d090b253b566af",
+      "url": "https://ghcr.io/v2/homebrew/core/dav1d/blobs/sha256:5f573db161c0685ba7e8d27bd3b6a494e6952e47c7c99355a0d090b253b566af",
+      "version": "1.5.4"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "fontconfig",
+    "url": "https://gitlab.freedesktop.org/fontconfig/fontconfig/-/archive/2.18.3/fontconfig-2.18.3.tar.gz",
+    "sha256": "9ae01e1d53acdef56010c5451cd34aa41d325b2faccd8606448d8fa01b2496b3",
+    "file": "fontconfig.tar.gz",
+    "binary": {
+      "key": "brew-fontconfig-arm64-sequoia",
+      "sha256": "a5f5df5f8d02e8a5b2587cac464c7bd45128447da06b7ab39938a9645982ef49",
+      "url": "https://ghcr.io/v2/homebrew/core/fontconfig/blobs/sha256:a5f5df5f8d02e8a5b2587cac464c7bd45128447da06b7ab39938a9645982ef49",
+      "version": "2.18.3"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "freetds",
+    "url": "https://www.freetds.org/files/stable/freetds-1.5.19.tar.bz2",
+    "sha256": "0dc2df2fea9934e3a99e00d417f3d192e9897572f6aff3905bd48f2507d16dff",
+    "file": "freetds.tar.bz2",
+    "binary": {
+      "key": "brew-freetds-arm64-sequoia",
+      "sha256": "a2f7136be85c9197685c90cc8f65a537a093613aaef4ae87e33707d3f0cc7c32",
+      "url": "https://ghcr.io/v2/homebrew/core/freetds/blobs/sha256:a2f7136be85c9197685c90cc8f65a537a093613aaef4ae87e33707d3f0cc7c32",
+      "version": "1.5.19"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "freetype",
+    "url": "https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/freetype-2.14.3.tar.xz",
+    "sha256": "36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f",
+    "file": "freetype.tar.xz",
+    "binary": {
+      "key": "brew-freetype-arm64-sequoia",
+      "sha256": "6453db5c6dba77200b4a1a653912bc63d251bdf2c8649c69ce19c336cfb3494a",
+      "url": "https://ghcr.io/v2/homebrew/core/freetype/blobs/sha256:6453db5c6dba77200b4a1a653912bc63d251bdf2c8649c69ce19c336cfb3494a",
+      "version": "2.14.3"
+    },
+    "mirrors": [
+      "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz"
+    ]
+  },
+  {
+    "name": "gd",
+    "url": "https://github.com/libgd/libgd/releases/download/gd-2.3.3/libgd-2.3.3.tar.xz",
+    "sha256": "3fe822ece20796060af63b7c60acb151e5844204d289da0ce08f8fdf131e5a61",
+    "file": "gd.tar.xz",
+    "binary": {
+      "key": "brew-gd-arm64-sequoia",
+      "sha256": "c4e22a92d28f3b8a49c10e29cf04f5a9b4b4932691ec4326021bc149ac0dae4c",
+      "url": "https://ghcr.io/v2/homebrew/core/gd/blobs/sha256:c4e22a92d28f3b8a49c10e29cf04f5a9b4b4932691ec4326021bc149ac0dae4c",
+      "version": "2.3.3"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "gd-resource-0",
+    "url": "https://github.com/libgd/libgd/commit/f4bc1f5c26925548662946ed7cfa473c190a104a.patch?full_index=1",
+    "sha256": "1015f6e125f139a1e922ac4bc2a18abbc498b0142193fa692846bf0f344a3691",
+    "file": "gd-patch-0.patch"
+  },
+  {
+    "name": "gettext",
+    "url": "https://ftpmirror.gnu.org/gettext/gettext-1.0.tar.gz",
+    "sha256": "85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a",
+    "file": "gettext.tar.gz",
+    "binary": {
+      "key": "brew-gettext-arm64-sequoia",
+      "sha256": "98a116d35792ccd730360ffc8c0d8fc5799b2282b96bb7696192c573f064a331",
+      "url": "https://ghcr.io/v2/homebrew/core/gettext/blobs/sha256:98a116d35792ccd730360ffc8c0d8fc5799b2282b96bb7696192c573f064a331",
+      "version": "1.0"
+    },
+    "mirrors": [
+      "https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.gz"
+    ]
+  },
+  {
+    "name": "gmp",
+    "url": "https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz",
+    "sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898",
+    "file": "gmp.tar.xz",
+    "binary": {
+      "key": "brew-gmp-arm64-sequoia",
+      "sha256": "b30bf31c50c294e0981d2a7cb4c149e9c43f50f3cf4f7f552c3dcf9da66b95b5",
+      "url": "https://ghcr.io/v2/homebrew/core/gmp/blobs/sha256:b30bf31c50c294e0981d2a7cb4c149e9c43f50f3cf4f7f552c3dcf9da66b95b5",
+      "version": "6.3.0"
+    },
+    "mirrors": [
+      "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
+    ]
+  },
+  {
+    "name": "icu4c@78",
+    "url": "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",
+    "sha256": "3a2e7a47604ba702f345878308e6fefeca612ee895cf4a5f222e7955fabfe0c0",
+    "file": "icu4c-78.tgz",
+    "binary": {
+      "key": "brew-icu4c@78-arm64-sequoia",
+      "sha256": "d1206febbce23e5014f51b631afd7129b2a247ee18a9f97226cd5889e66c1686",
+      "url": "https://ghcr.io/v2/homebrew/core/icu4c/78/blobs/sha256:d1206febbce23e5014f51b631afd7129b2a247ee18a9f97226cd5889e66c1686",
+      "version": "78.3"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "jpeg-turbo",
+    "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
+    "sha256": "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e",
+    "file": "jpeg-turbo.tar.gz",
+    "binary": {
+      "key": "brew-jpeg-turbo-arm64-sequoia",
+      "sha256": "6dc55edcd33c693e474299ed2bba3c472ac1331cbe300066ec8ef99b88fab17c",
+      "url": "https://ghcr.io/v2/homebrew/core/jpeg-turbo/blobs/sha256:6dc55edcd33c693e474299ed2bba3c472ac1331cbe300066ec8ef99b88fab17c",
+      "version": "3.2.0"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "krb5",
+    "url": "https://kerberos.org/dist/krb5/1.22/krb5-1.22.2.tar.gz",
+    "sha256": "3243ffbc8ea4d4ac22ddc7dd2a1dc54c57874c40648b60ff97009763554eaf13",
+    "file": "krb5.tar.gz",
+    "binary": {
+      "key": "brew-krb5-arm64-sequoia",
+      "sha256": "8bc2adf379fd6e0d0dd3bbe663effe87f625f25b9aa5a1bac71aef4b450ccc23",
+      "url": "https://ghcr.io/v2/homebrew/core/krb5/blobs/sha256:8bc2adf379fd6e0d0dd3bbe663effe87f625f25b9aa5a1bac71aef4b450ccc23",
+      "version": "1.22.2"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/krb5-1.22.2.tar.gz"
+    ]
+  },
+  {
+    "name": "krb5-resource-0",
+    "url": "https://github.com/krb5/krb5/commit/ceee5d558a2be93a9b2df717be1ea42c5d83ee51.patch?full_index=1",
+    "sha256": "f7af91992fa6c825a4d42bcc138cd521aa8b98d723f9301c3d39acc4e780d249",
+    "file": "krb5-patch-0.patch"
+  },
+  {
+    "name": "libavif",
+    "url": "https://github.com/AOMediaCodec/libavif/archive/refs/tags/v1.4.2.tar.gz",
+    "sha256": "2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d",
+    "file": "libavif.tar.gz",
+    "binary": {
+      "key": "brew-libavif-arm64-sequoia",
+      "sha256": "0d1a9ce6320d9ddacb3e7ca31bb2ef3216529755ab1df24eac833fec27b25c95",
+      "url": "https://ghcr.io/v2/homebrew/core/libavif/blobs/sha256:0d1a9ce6320d9ddacb3e7ca31bb2ef3216529755ab1df24eac833fec27b25c95",
+      "version": "1.4.2"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "libavif-resource-0",
+    "url": "https://github.com/kmurray/libargparse/archive/ee74d1b53bd680748af14e737378de57e2a0a954.tar.gz",
+    "sha256": "7727b0498851e5b6a6fcd734eb667a8a231897e2c86a357aec51cc0664813060",
+    "file": "libavif-resource-0.tar.gz"
+  },
+  {
+    "name": "libnghttp2",
+    "url": "https://github.com/nghttp2/nghttp2/releases/download/v1.70.0/nghttp2-1.70.0.tar.gz",
+    "sha256": "aa317e2cf9dca6afa0aed68f8fad6ff303ec6982e25a78c75c0b65e2b9b3ded5",
+    "file": "libnghttp2.tar.gz",
+    "binary": {
+      "key": "brew-libnghttp2-arm64-sequoia",
+      "sha256": "2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
+      "url": "https://ghcr.io/v2/homebrew/core/libnghttp2/blobs/sha256:2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
+      "version": "1.70.0"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/www/nghttp2-1.70.0.tar.gz",
+      "http://fresh-center.net/linux/www/legacy/nghttp2-1.70.0.tar.gz"
+    ]
+  },
+  {
+    "name": "libnghttp3",
+    "url": "https://github.com/ngtcp2/nghttp3/releases/download/v1.18.0/nghttp3-1.18.0.tar.xz",
+    "sha256": "aad782c23d3f01bd4bb52c8bac7a553b631ef8115fd1612703df6183449fef19",
+    "file": "libnghttp3.tar.xz",
+    "binary": {
+      "key": "brew-libnghttp3-arm64-sequoia",
+      "sha256": "f0c56bcde3273d2599455d0ab18a281d6a329d63af4672fdbdf3f07633276475",
+      "url": "https://ghcr.io/v2/homebrew/core/libnghttp3/blobs/sha256:f0c56bcde3273d2599455d0ab18a281d6a329d63af4672fdbdf3f07633276475",
+      "version": "1.18.0"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/www/nghttp3-1.18.0.tar.xz"
+    ]
+  },
+  {
+    "name": "libngtcp2",
+    "url": "https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz",
+    "sha256": "2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
+    "file": "libngtcp2.tar.xz",
+    "binary": {
+      "key": "brew-libngtcp2-arm64-sequoia",
+      "sha256": "9213450a97f4ddc6a0dbcdf1b2280b93efd0f02818d953b6935995d12a885ea3",
+      "url": "https://ghcr.io/v2/homebrew/core/libngtcp2/blobs/sha256:9213450a97f4ddc6a0dbcdf1b2280b93efd0f02818d953b6935995d12a885ea3",
+      "version": "1.25.0"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/www/ngtcp2-1.25.0.tar.xz"
+    ]
+  },
+  {
+    "name": "libpng",
+    "url": "https://downloads.sourceforge.net/project/libpng/libpng16/1.6.59/libpng-1.6.59.tar.xz",
+    "sha256": "d80dd2a38a37f803cb9b6ac7b14bd6e74ddc3b654780a8380bdf93523fdb4389",
+    "file": "libpng.tar.xz",
+    "binary": {
+      "key": "brew-libpng-arm64-sequoia",
+      "sha256": "6461c4dde6a693b559c531357b32126bd649ab67f53db5a5b70c25a5c12de4f1",
+      "url": "https://ghcr.io/v2/homebrew/core/libpng/blobs/sha256:6461c4dde6a693b559c531357b32126bd649ab67f53db5a5b70c25a5c12de4f1",
+      "version": "1.6.59"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "libpq",
+    "url": "https://ftp.postgresql.org/pub/source/v18.6/postgresql-18.6.tar.bz2",
+    "sha256": "555610c24d53e4316da5b7d3fc25c279d96856d5e0e23ee308c328c5fa881d9f",
+    "file": "libpq.tar.bz2",
+    "binary": {
+      "key": "brew-libpq-arm64-sequoia",
+      "sha256": "9e91d1af37e0c44755059d6a402d6d94138e817c3f36400c4c9bfcfadc7ea054",
+      "url": "https://ghcr.io/v2/homebrew/core/libpq/blobs/sha256:9e91d1af37e0c44755059d6a402d6d94138e817c3f36400c4c9bfcfadc7ea054",
+      "version": "18.6"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "libpsl",
+    "url": "https://github.com/rockdaboot/libpsl/releases/download/0.23.3/libpsl-0.23.3.tar.gz",
+    "sha256": "93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be",
+    "file": "libpsl.tar.gz",
+    "binary": {
+      "key": "brew-libpsl-arm64-sequoia",
+      "sha256": "392f0aceca4e4febcb583688fa4bb701853e4a41a3d11446b0deac5231c32a53",
+      "url": "https://ghcr.io/v2/homebrew/core/libpsl/blobs/sha256:392f0aceca4e4febcb583688fa4bb701853e4a41a3d11446b0deac5231c32a53",
+      "version": "0.23.3"
+    },
+    "mirrors": [
+      "http://distfiles.macports.org/libpsl/libpsl-0.23.3.tar.gz",
+      "http://ftp2.osuosl.org/pub/blfs/conglomeration/libpsl/libpsl-0.23.3.tar.gz"
+    ]
+  },
+  {
+    "name": "libsodium",
+    "url": "https://download.libsodium.org/libsodium/releases/libsodium-1.0.22.tar.gz",
+    "sha256": "adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349",
+    "file": "libsodium.tar.gz",
+    "binary": {
+      "key": "brew-libsodium-arm64-sequoia",
+      "sha256": "b231db8b0f993cb764b57560b69f484efe059ec87e47887505aa2d5872cc5a01",
+      "url": "https://ghcr.io/v2/homebrew/core/libsodium/blobs/sha256:b231db8b0f993cb764b57560b69f484efe059ec87e47887505aa2d5872cc5a01",
+      "version": "1.0.22"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "libssh2",
+    "url": "https://libssh2.org/download/libssh2-1.11.1.tar.gz",
+    "sha256": "d9ec76cbe34db98eec3539fe2c899d26b0c837cb3eb466a56b0f109cabf658f7",
+    "file": "libssh2.tar.gz",
+    "binary": {
+      "key": "brew-libssh2-arm64-sequoia",
+      "sha256": "e0cd7666188510728b2e133ddfab7357437f4df5c347dfbe12cc89d8c06bd2ee",
+      "url": "https://ghcr.io/v2/homebrew/core/libssh2/blobs/sha256:e0cd7666188510728b2e133ddfab7357437f4df5c347dfbe12cc89d8c06bd2ee",
+      "version": "1.11.1"
+    },
+    "mirrors": [
+      "https://github.com/libssh2/libssh2/releases/download/libssh2-1.11.1/libssh2-1.11.1.tar.gz",
+      "http://download.openpkg.org/components/cache/libssh2/libssh2-1.11.1.tar.gz"
+    ]
+  },
+  {
+    "name": "libssh2-resource-0",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2025-15661.patch",
+    "sha256": "7fbbb58149ea7e2df234f491d3ee1e7ce8416c8405b0dad0048ea6bbe5ffb5b9",
+    "file": "libssh2-patch-0.patch"
+  },
+  {
+    "name": "libssh2-resource-1",
+    "url": "https://github.com/libssh2/libssh2/commit/256d04b60d80bf1190e96b0ad1e91b2174d744b1.patch?full_index=1",
+    "sha256": "7c5fe26b0b58fb3ee3770c8a7648eddec09845fe016eff22b9074451d1a60c34",
+    "file": "libssh2-patch-1.patch"
+  },
+  {
+    "name": "libssh2-resource-2",
+    "url": "https://github.com/libssh2/libssh2/commit/17626857d20b3c9a1addfa45979dadcee1cd84a4.patch?full_index=1",
+    "sha256": "a236d5cfe1995a85c3b036ab16cc2672aa316fd3e1d6299100bcc4c07a539fd7",
+    "file": "libssh2-patch-2.patch"
+  },
+  {
+    "name": "libssh2-resource-3",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2026-55200.patch",
+    "sha256": "db9015ee5cbe95ea0861131109cc29e3cb408a4789d497c1c8812e86873533ac",
+    "file": "libssh2-patch-3.patch"
+  },
+  {
+    "name": "libssh2-resource-4",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2026-58050.patch",
+    "sha256": "052bd73ea87ddcbb473131e2a52bd3523de065a2201051878c1259230ed3bb7f",
+    "file": "libssh2-patch-4.patch"
+  },
+  {
+    "name": "libssh2-resource-5",
+    "url": "https://github.com/libssh2/libssh2/commit/a9758da45a52bc8c630ec9493804d0c6ea30b24a.patch?full_index=1",
+    "sha256": "46cc7c5184d333e93c80a9cac1c86469c17340e6fc0418aecb2d0d8f6eaa5f41",
+    "file": "libssh2-patch-5.patch"
+  },
+  {
+    "name": "libssh2-resource-6",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2026-66032.patch",
+    "sha256": "d46ed49ff9cf311306deae102fca3b8fd6bd649d43c3d794cc29be6ebb523e0a",
+    "file": "libssh2-patch-6.patch"
+  },
+  {
+    "name": "libssh2-resource-7",
+    "url": "https://github.com/libssh2/libssh2/commit/a2ed82d40964bbc0d64cd717aa0a5a892117d2e6.patch?full_index=1",
+    "sha256": "378b5f95f1a410afb790c57ceb67f2d4bd15cc42fc1db58d19fe26fd6f8acbed",
+    "file": "libssh2-patch-7.patch"
+  },
+  {
+    "name": "libssh2-resource-8",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2026-66034.patch",
+    "sha256": "4f4eac78ba3ecb7cd43f19e9fe23b1586caf73372a3d6a325f048098fa53b3dd",
+    "file": "libssh2-patch-8.patch"
+  },
+  {
+    "name": "libssh2-resource-9",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libssh2/CVE-2026-66035.patch",
+    "sha256": "c5ff4520b0815006e3ee925eea9a0cc97ae4f5b93b70183f99428f2e9845ccca",
+    "file": "libssh2-patch-9.patch"
+  },
+  {
+    "name": "libssh2-resource-10",
+    "url": "https://github.com/libssh2/libssh2/commit/631e2f82a32ef016299ebb1af66efeae0161f68e.patch?full_index=1",
+    "sha256": "a790ab6c15c8dd6300ca8a651121ecc91e90e0eda1a221ad8108f51de05e1cf3",
+    "file": "libssh2-patch-10.patch"
+  },
+  {
+    "name": "libssh2-resource-11",
+    "url": "https://github.com/libssh2/libssh2/commit/b89858b83d68d7e29e0c5b0bb803f8a68271710c.patch?full_index=1",
+    "sha256": "76bdf62172e16e2f74fdde35cd3daa3db27b753c48c4a7bdfd295463444eb936",
+    "file": "libssh2-patch-11.patch"
+  },
+  {
+    "name": "libtiff",
+    "url": "https://download.osgeo.org/libtiff/tiff-4.7.2.tar.gz",
+    "sha256": "672bd7d10aee4606171afb864f3570b83340f6a33e2c186dc0512f7145ffdf6a",
+    "file": "libtiff.tar.gz",
+    "binary": {
+      "key": "brew-libtiff-arm64-sequoia",
+      "sha256": "e971adc15ce3387a9c68a10ff1cf431755faf0e86b9d3a6daf668efc2f6f31d8",
+      "url": "https://ghcr.io/v2/homebrew/core/libtiff/blobs/sha256:e971adc15ce3387a9c68a10ff1cf431755faf0e86b9d3a6daf668efc2f6f31d8",
+      "version": "4.7.2"
+    },
+    "mirrors": [
+      "https://ftp2.osuosl.org/pub/osgeo/download/libtiff/tiff-4.7.2.tar.gz"
+    ]
+  },
+  {
+    "name": "libtool",
+    "url": "https://ftpmirror.gnu.org/gnu/libtool/libtool-2.6.2.tar.xz",
+    "sha256": "2ef1067c16c97db930fd740cc9bc3d3ba9a583804ae5ac42cc3e8719e49e191e",
+    "file": "libtool.tar.xz",
+    "binary": {
+      "key": "brew-libtool-arm64-sequoia",
+      "sha256": "86f6495e08630095d0a0a4a8be76d8ba0350985a55ec13fb43a73f5473d2a410",
+      "url": "https://ghcr.io/v2/homebrew/core/libtool/blobs/sha256:86f6495e08630095d0a0a4a8be76d8ba0350985a55ec13fb43a73f5473d2a410",
+      "version": "2.6.2"
+    },
+    "mirrors": [
+      "https://ftp.gnu.org/gnu/libtool/libtool-2.6.2.tar.xz"
+    ]
+  },
+  {
+    "name": "libvmaf",
+    "url": "https://github.com/Netflix/vmaf/archive/refs/tags/v3.2.1.tar.gz",
+    "sha256": "5df7386911bc15fd1ca783132528748d219768ae4fc5f8e0b61184f041648092",
+    "file": "libvmaf.tar.gz",
+    "binary": {
+      "key": "brew-libvmaf-arm64-sequoia",
+      "sha256": "d3cf35724639ceb6d9d92ee25a7fa4953f7ff952dc4be90aa83eb006910248b4",
+      "url": "https://ghcr.io/v2/homebrew/core/libvmaf/blobs/sha256:d3cf35724639ceb6d9d92ee25a7fa4953f7ff952dc4be90aa83eb006910248b4",
+      "version": "3.2.1"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "libzip",
+    "url": "https://libzip.org/download/libzip-1.12.tar.xz",
+    "sha256": "376908d0f0fda13180a19fdc4f7062a1abfb59e09ca07a392d361253b8e60c2b",
+    "file": "libzip.tar.xz",
+    "binary": {
+      "key": "brew-libzip-arm64-sequoia",
+      "sha256": "925c64a198b759de45cbe32aeeae0854560278363e43c9b538e42c6623002c7f",
+      "url": "https://ghcr.io/v2/homebrew/core/libzip/blobs/sha256:925c64a198b759de45cbe32aeeae0854560278363e43c9b538e42c6623002c7f",
+      "version": "1.12"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "lz4",
+    "url": "https://github.com/lz4/lz4/archive/refs/tags/v1.10.0.tar.gz",
+    "sha256": "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b",
+    "file": "lz4.tar.gz",
+    "binary": {
+      "key": "brew-lz4-arm64-sequoia",
+      "sha256": "91674f1c7407b1f7b73d5bd1d85ed1abaaca93be3b68607af4ef3df632540ac0",
+      "url": "https://ghcr.io/v2/homebrew/core/lz4/blobs/sha256:91674f1c7407b1f7b73d5bd1d85ed1abaaca93be3b68607af4ef3df632540ac0",
+      "version": "1.10.0"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/lz4-1.10.0.tar.gz",
+      "http://fresh-center.net/linux/misc/legacy/lz4-1.10.0.tar.gz"
+    ]
+  },
+  {
+    "name": "mysql@8.4",
+    "url": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11.tar.gz",
+    "sha256": "eb3051164d625dd346a8203f76e0d5d5d9aec51dbe9d51788e39ec6b3f1394c2",
+    "file": "mysql-8.4.tar.gz",
+    "binary": {
+      "key": "brew-mysql@8.4-arm64-sequoia",
+      "sha256": "88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
+      "url": "https://ghcr.io/v2/homebrew/core/mysql/8.4/blobs/sha256:88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
+      "version": "8.4.11"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "mysql@8.4-resource-0",
+    "url": "https://salsa.debian.org/mariadb-team/mysql/-/raw/ac6576612c0afddccebf939fccedacc3b97db567/debian/patches/support-openssl4.patch",
+    "sha256": "fd0eb6d47ce5aaef43e58240d9884d04b1ee30fd3c57395b405d9400ae136a02",
+    "file": "mysql-8.4-patch-0.patch"
+  },
+  {
+    "name": "net-snmp",
+    "url": "https://downloads.sourceforge.net/project/net-snmp/net-snmp/5.9.5.2/net-snmp-5.9.5.2.tar.gz",
+    "sha256": "16707719f833184a4b72835dac359ae188123b06b5e42817c00790d7dc1384bf",
+    "file": "net-snmp.tar.gz",
+    "binary": {
+      "key": "brew-net-snmp-arm64-sequoia",
+      "sha256": "d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
+      "url": "https://ghcr.io/v2/homebrew/core/net-snmp/blobs/sha256:d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
+      "version": "5.9.5.2"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "net-snmp-resource-0",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libtool/configure-big_sur.diff",
+    "sha256": "35acd6aebc19843f1a2b3a63e880baceb0f5278ab1ace661e57a502d9d78c93c",
+    "file": "net-snmp-patch-0.patch"
+  },
+  {
+    "name": "net-snmp-resource-1",
+    "url": "https://salsa.debian.org/debian/net-snmp/-/raw/27ec8dbccda7b9b2f78f38445b5735f0398384f3/debian/patches/makefile_trap_needs_agent",
+    "sha256": "b884acb45f79ab324fb31faa5a3a97bf7ced948177a2d888af9df8dd355aa6de",
+    "file": "net-snmp-patch-1.patch"
+  },
+  {
+    "name": "nginx",
+    "url": "https://nginx.org/download/nginx-1.31.6.tar.gz",
+    "sha256": "974ed5298a5e398e008704ed5db284e655fc270c596493dbccada452448fc9f1",
+    "file": "nginx.tar.gz",
+    "binary": {
+      "key": "brew-nginx-arm64-sequoia",
+      "sha256": "1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
+      "url": "https://ghcr.io/v2/homebrew/core/nginx/blobs/sha256:1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
+      "version": "1.31.6"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "oniguruma",
+    "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.10/onig-6.9.10.tar.gz",
+    "sha256": "2a5cfc5ae259e4e97f86b68dfffc152cdaffe94e2060b770cb827238d769fc05",
+    "file": "oniguruma.tar.gz",
+    "binary": {
+      "key": "brew-oniguruma-arm64-sequoia",
+      "sha256": "7d6ab71fff646664b91e8ff91744696ec775357787dbc1a28e45d52759662e8d",
+      "url": "https://ghcr.io/v2/homebrew/core/oniguruma/blobs/sha256:7d6ab71fff646664b91e8ff91744696ec775357787dbc1a28e45d52759662e8d",
+      "version": "6.9.10"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "openldap",
+    "url": "https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-2.7.1.tgz",
+    "sha256": "253db80f301258ea69cda1184766d57395b836aaabf41157eb0316eb0fac1341",
+    "file": "openldap.tgz",
+    "binary": {
+      "key": "brew-openldap-arm64-sequoia",
+      "sha256": "03bcbc4d521f23a2941917039345cd72fc2a8b663b54e2bae28c006622f904f9",
+      "url": "https://ghcr.io/v2/homebrew/core/openldap/blobs/sha256:03bcbc4d521f23a2941917039345cd72fc2a8b663b54e2bae28c006622f904f9",
+      "version": "2.7.1"
+    },
+    "mirrors": [
+      "http://mirror.koddos.net/OpenLDAP/openldap-release/openldap-2.7.1.tgz"
+    ]
+  },
+  {
+    "name": "openldap-resource-0",
+    "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/8d531f34ee09f1c7dcb942eceb16c3f2f8eed377/Patches/libtool/configure-big_sur.diff",
+    "sha256": "35acd6aebc19843f1a2b3a63e880baceb0f5278ab1ace661e57a502d9d78c93c",
+    "file": "openldap-patch-0.patch"
+  },
+  {
+    "name": "openssl@4",
+    "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz",
+    "sha256": "325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9",
+    "file": "openssl-4.tar.gz",
+    "binary": {
+      "key": "brew-openssl@4-arm64-sequoia",
+      "sha256": "e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
+      "url": "https://ghcr.io/v2/homebrew/core/openssl/4/blobs/sha256:e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
+      "version": "4.0.3"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/openssl-4.0.3.tar.gz"
+    ]
+  },
+  {
+    "name": "pcre2",
+    "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.bz2",
+    "sha256": "53c156e1ba416a20da8e65395daa132da0d80e76910424caca3fcdae7831d384",
+    "file": "pcre2.tar.bz2",
+    "binary": {
+      "key": "brew-pcre2-arm64-sequoia",
+      "sha256": "0ec47d18c50f5770db2b3f07b5b85644284cc6ee8e07e23b11d2727e95932b77",
+      "url": "https://ghcr.io/v2/homebrew/core/pcre2/blobs/sha256:0ec47d18c50f5770db2b3f07b5b85644284cc6ee8e07e23b11d2727e95932b77",
+      "version": "10.49"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "php@8.4",
+    "url": "https://www.php.net/distributions/php-8.4.26.tar.xz",
+    "sha256": "32a2de53862ad44ed4a5005244ce4f1b50c271e74dced215449a4443b40569f1",
+    "file": "php-8.4.tar.xz",
+    "binary": {
+      "key": "brew-php@8.4-arm64-sequoia",
+      "sha256": "7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
+      "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
+      "version": "8.4.26"
+    },
+    "mirrors": [
+      "https://fossies.org/linux/www/php-8.4.26.tar.xz"
+    ]
+  },
+  {
+    "name": "protobuf",
+    "url": "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protobuf-36.2.tar.gz",
+    "sha256": "3d9642a662d10e68ebae5e53f14dcce5105684212d5078f8e0d47d1ab3ae6b64",
+    "file": "protobuf.tar.gz",
+    "binary": {
+      "key": "brew-protobuf-arm64-sequoia",
+      "sha256": "153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
+      "url": "https://ghcr.io/v2/homebrew/core/protobuf/blobs/sha256:153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
+      "version": "36.2"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "sqlite",
+    "url": "https://www.sqlite.org/2026/sqlite-autoconf-3540000.tar.gz",
+    "sha256": "134ec0802dda5795816e25d25872d20b312cb3973438c49b30bc40b7705ea9ed",
+    "file": "sqlite.tar.gz",
+    "binary": {
+      "key": "brew-sqlite-arm64-sequoia",
+      "sha256": "b36720af4c3db32f5d1f16ee6129018bdde236cd8f7e6189092b52c20d31c5ca",
+      "url": "https://ghcr.io/v2/homebrew/core/sqlite/blobs/sha256:b36720af4c3db32f5d1f16ee6129018bdde236cd8f7e6189092b52c20d31c5ca",
+      "version": "3.54.0"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "tidy-html5",
+    "url": "https://github.com/htacg/tidy-html5/archive/refs/tags/5.8.0.tar.gz",
+    "sha256": "59c86d5b2e452f63c5cdb29c866a12a4c55b1741d7025cf2f3ce0cde99b0660e",
+    "file": "tidy-html5.tar.gz",
+    "binary": {
+      "key": "brew-tidy-html5-arm64-sequoia",
+      "sha256": "570d2482168cd8be11bb433f743f934bf7797a952863cd282230111b5de15a73",
+      "url": "https://ghcr.io/v2/homebrew/core/tidy-html5/blobs/sha256:570d2482168cd8be11bb433f743f934bf7797a952863cd282230111b5de15a73",
+      "version": "5.8.0"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "unixodbc",
+    "url": "https://www.unixodbc.org/unixODBC-2.3.14.tar.gz",
+    "sha256": "4e2814de3e01fc30b0b9f75e83bb5aba91ab0384ee951286504bb70205524771",
+    "file": "unixodbc.tar.gz",
+    "binary": {
+      "key": "brew-unixodbc-arm64-sequoia",
+      "sha256": "e1522105d20545743c713e90c17bf6393d7a829ec01137ec0d6942bbc04ea2d2",
+      "url": "https://ghcr.io/v2/homebrew/core/unixodbc/blobs/sha256:e1522105d20545743c713e90c17bf6393d7a829ec01137ec0d6942bbc04ea2d2",
+      "version": "2.3.14"
+    },
+    "mirrors": [
+      "https://fossies.org/linux/privat/unixODBC-2.3.14.tar.gz"
+    ]
+  },
+  {
+    "name": "webp",
+    "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+    "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+    "file": "webp.tar.gz",
+    "binary": {
+      "key": "brew-webp-arm64-sequoia",
+      "sha256": "3f5c1ccc592312b2170bc1ea673f902aa65fc479aa9a4c308ff0b1b1a35315fe",
+      "url": "https://ghcr.io/v2/homebrew/core/webp/blobs/sha256:3f5c1ccc592312b2170bc1ea673f902aa65fc479aa9a4c308ff0b1b1a35315fe",
+      "version": "1.6.0"
+    },
+    "mirrors": []
+  },
+  {
+    "name": "xz",
+    "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.gz",
+    "sha256": "0014c7886930454fe8bd4228665b51af55eeae560ea135c9c4cd33f55b2591d9",
+    "file": "xz.tar.gz",
+    "binary": {
+      "key": "brew-xz-arm64-sequoia",
+      "sha256": "c2724c0db0398134694b8366d30d14f4de376115fb54c559c331d5fd0474af76",
+      "url": "https://ghcr.io/v2/homebrew/core/xz/blobs/sha256:c2724c0db0398134694b8366d30d14f4de376115fb54c559c331d5fd0474af76",
+      "version": "5.8.4"
+    },
+    "mirrors": [
+      "https://downloads.sourceforge.net/project/lzmautils/xz-5.8.4.tar.gz",
+      "http://downloads.sourceforge.net/project/lzmautils/xz-5.8.4.tar.gz"
+    ]
+  },
+  {
+    "name": "zlib-ng-compat",
+    "url": "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz",
+    "sha256": "f9c65aa9c852eb8255b636fd9f07ce1c406f061ec19a2e7d508b318ca0c907d1",
+    "file": "zlib-ng-compat.tar.gz",
+    "binary": {
+      "key": "brew-zlib-ng-compat-arm64-sequoia",
+      "sha256": "73a98dbbff35ba8f880438081be740da8131b0e3bbfa41f01e0072d140f4a9e7",
+      "url": "https://ghcr.io/v2/homebrew/core/zlib-ng-compat/blobs/sha256:73a98dbbff35ba8f880438081be740da8131b0e3bbfa41f01e0072d140f4a9e7",
+      "version": "2.3.3"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/zlib-ng-2.3.3.tar.gz",
+      "http://fresh-center.net/linux/misc/legacy/zlib-ng-2.3.3.tar.gz"
+    ]
+  },
+  {
+    "name": "zstd",
+    "url": "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+    "sha256": "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3",
+    "file": "zstd.tar.gz",
+    "binary": {
+      "key": "brew-zstd-arm64-sequoia",
+      "sha256": "d72adf48460a8384b256f88061cd7b9df4977df7fa2e0794051d427db754a565",
+      "url": "https://ghcr.io/v2/homebrew/core/zstd/blobs/sha256:d72adf48460a8384b256f88061cd7b9df4977df7fa2e0794051d427db754a565",
+      "version": "1.5.7"
+    },
+    "mirrors": [
+      "http://fresh-center.net/linux/misc/zstd-1.5.7.tar.gz",
+      "http://fresh-center.net/linux/misc/legacy/zstd-1.5.7.tar.gz"
+    ]
+  },
+  {
+    "name": "phpmyadmin-distribution",
+    "url": "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip",
+    "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",
+    "file": "phpmyadmin-distribution.zip"
+  },
+  {
+    "name": "phpmyadmin-development",
+    "url": "https://codeload.github.com/phpmyadmin/phpmyadmin/tar.gz/refs/tags/RELEASE_5_2_3",
+    "sha256": "a3610bb2df7c172b9591704a5db27f6b44a5d8e6e30c4cfc4bd40e691ab0fc2e",
+    "file": "phpmyadmin-development.tar.gz"
+  },
+  {
+    "name": "composer",
+    "url": "https://codeload.github.com/composer/composer/tar.gz/refs/tags/2.10.3",
+    "sha256": "803a3de1c096cc6ba4b568de3859c6debcfd95a09b80404ee2fb6a19ddd22680",
+    "file": "composer.tar.gz"
+  },
+  {
+    "name": "ca-certificates",
+    "url": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz",
+    "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+    "file": "ca-certificates.tar.gz"
+  },
+  {
+    "name": "windows-winlibs-icu4c",
+    "url": "https://codeload.github.com/winlibs/icu4c/tar.gz/11bca20cc331c2ad3d38e240e5921ebfad8fe523",
+    "sha256": "e19f330617153778dc898e3fcf23e5dd657acb7aa70b90f7d7797144d90b9039",
+    "file": "windows-winlibs-icu4c.tar.gz",
+    "revision": "11bca20cc331c2ad3d38e240e5921ebfad8fe523",
+    "binaryPackage": "ICU",
+    "binaryVersion": "77.1-1"
+  },
+  {
+    "name": "windows-apache-httpd",
+    "url": "https://codeload.github.com/apache/httpd/tar.gz/736bb657405eb73fd68a64772c3a908807bdb887",
+    "sha256": "f49a0320c1172b42f69917b5fae0bfc4efb2ee51e53adc01bcfcf7aa2cc4842c",
+    "file": "windows-apache-httpd.tar.gz",
+    "revision": "736bb657405eb73fd68a64772c3a908807bdb887",
+    "binaryPackage": "apache",
+    "binaryVersion": "2.4.68"
+  },
+  {
+    "name": "windows-google-brotli",
+    "url": "https://codeload.github.com/google/brotli/tar.gz/028fb5a23661f123017c060daa546b55cf4bde29",
+    "sha256": "0afe09a53c8bad9861c8dd1fc1284308d54f19d2979ba3541cfdcc9b05fe360f",
+    "file": "windows-google-brotli.tar.gz",
+    "revision": "028fb5a23661f123017c060daa546b55cf4bde29",
+    "binaryPackage": "brotli",
+    "binaryVersion": "1.2.0"
+  },
+  {
+    "name": "windows-winlibs-freetype",
+    "url": "https://codeload.github.com/winlibs/freetype/tar.gz/3d8e776a1f1800dea07d433e20c91e8a9a161c4f",
+    "sha256": "6981f4d05b9e5be0f4812f4088fc472c0925f697dbdc834ae2bc33c2323e8740",
+    "file": "windows-winlibs-freetype.tar.gz",
+    "revision": "3d8e776a1f1800dea07d433e20c91e8a9a161c4f",
+    "binaryPackage": "freetype",
+    "binaryVersion": "2.14.3"
+  },
+  {
+    "name": "windows-winlibs-glib",
+    "url": "https://codeload.github.com/winlibs/glib/tar.gz/ca9d6adf53e11099045a6d51116dd0b678faa1f3",
+    "sha256": "ac4bd87da87070e3ea7470d7c16678b6e77a9073b845290cc8305ec8bda63ef3",
+    "file": "windows-winlibs-glib.tar.gz",
+    "revision": "ca9d6adf53e11099045a6d51116dd0b678faa1f3",
+    "binaryPackage": "glib",
+    "binaryVersion": "2.88.3"
+  },
+  {
+    "name": "windows-winlibs-libffi",
+    "url": "https://codeload.github.com/winlibs/libffi/tar.gz/30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
+    "sha256": "a88b10bf2471158cd863705956d1c2b3c182f32d04d21f3e7cc45a1b47b65cb6",
+    "file": "windows-winlibs-libffi.tar.gz",
+    "revision": "30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
+    "binaryPackage": "libffi",
+    "binaryVersion": "3.8.0"
+  },
+  {
+    "name": "windows-winlibs-gettext",
+    "url": "https://codeload.github.com/winlibs/gettext/tar.gz/cd6fcaeffc493305f9c0081310efa0e063060da6",
+    "sha256": "9867d0197491f8d23e30da46b6d81384b361b321e4bb75e86f185a1ff3838b7a",
+    "file": "windows-winlibs-gettext.tar.gz",
+    "revision": "cd6fcaeffc493305f9c0081310efa0e063060da6",
+    "binaryPackage": "libintl",
+    "binaryVersion": "1.0"
+  },
+  {
+    "name": "windows-winlibs-zlib",
+    "url": "https://codeload.github.com/winlibs/zlib/tar.gz/0089522e62e6b5d4950e62bd20f0cb06a9288413",
+    "sha256": "e2af9f28fcdf723e464b40af73fdeed07ce3e581a9ea110702c1ba733983f8a0",
+    "file": "windows-winlibs-zlib.tar.gz",
+    "revision": "0089522e62e6b5d4950e62bd20f0cb06a9288413",
+    "binaryPackage": "zlib",
+    "binaryVersion": "1.3.2"
+  },
+  {
+    "name": "windows-winlibs-argon2",
+    "url": "https://codeload.github.com/winlibs/argon2/tar.gz/fb53ef37be212380d51877b70f514f3bf2c1ee40",
+    "sha256": "f85424af0c0674e7a2b72f4b1fd5e90040e4edad07cca7925bc786d4dfe2fc1c",
+    "file": "windows-winlibs-argon2.tar.gz",
+    "revision": "fb53ef37be212380d51877b70f514f3bf2c1ee40",
+    "binaryPackage": "libargon2",
+    "binaryVersion": "20190702"
+  },
+  {
+    "name": "windows-winlibs-libavif",
+    "url": "https://codeload.github.com/winlibs/libavif/tar.gz/14976153789c7ebf2ca24b22215a964bbc5be213",
+    "sha256": "dd7f656eab6ae43b8b901fff439c0b6e18cbdcc876e4104d28da098894940754",
+    "file": "windows-winlibs-libavif.tar.gz",
+    "revision": "14976153789c7ebf2ca24b22215a964bbc5be213",
+    "binaryPackage": "libavif",
+    "binaryVersion": "1.4.2"
+  },
+  {
+    "name": "windows-winlibs-libbzip2",
+    "url": "https://codeload.github.com/winlibs/libbzip2/tar.gz/99d3c4812e2b98bc305ae4b867f35346946717f0",
+    "sha256": "04c79fe021deaf3bae461fe5da22863135158613307b345f3d41fffb40b70150",
+    "file": "windows-winlibs-libbzip2.tar.gz",
+    "revision": "99d3c4812e2b98bc305ae4b867f35346946717f0",
+    "binaryPackage": "libbzip2",
+    "binaryVersion": "1.0.8-1"
+  },
+  {
+    "name": "windows-winlibs-curl",
+    "url": "https://codeload.github.com/winlibs/curl/tar.gz/e4dd89bce50940c78fd32c70ffe31c102a6ce69f",
+    "sha256": "1f9d860f987ba3369177305125c5c0b337c498b126ac177238db37d53d24a4da",
+    "file": "windows-winlibs-curl.tar.gz",
+    "revision": "e4dd89bce50940c78fd32c70ffe31c102a6ce69f",
+    "binaryPackage": "libcurl",
+    "binaryVersion": "8.22.0"
+  },
+  {
+    "name": "windows-winlibs-libssh2",
+    "url": "https://codeload.github.com/winlibs/libssh2/tar.gz/7817741ff29d52165b0e8c157acbe4c0ec582117",
+    "sha256": "c08c3b964e6a2dac55d55d8dfdd106194b269fdcdae0a5e55309439383123cec",
+    "file": "windows-winlibs-libssh2.tar.gz",
+    "revision": "7817741ff29d52165b0e8c157acbe4c0ec582117",
+    "binaryPackage": "libssh2",
+    "binaryVersion": "1.11.1-6"
+  },
+  {
+    "name": "windows-winlibs-openssl",
+    "url": "https://codeload.github.com/winlibs/openssl/tar.gz/8b89dd78b48339632e3f655b030290a0f9484bb4",
+    "sha256": "b7d673e62177c73e2120e366b0a36960bb6a5ee1b1c56c1ffbcd107f2afa2912",
+    "file": "windows-winlibs-openssl.tar.gz",
+    "revision": "8b89dd78b48339632e3f655b030290a0f9484bb4",
+    "binaryPackage": "openssl",
+    "binaryVersion": "3.0.22.pl1"
+  },
+  {
+    "name": "windows-facebook-zstd",
+    "url": "https://codeload.github.com/facebook/zstd/tar.gz/f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c",
+    "file": "windows-facebook-zstd.tar.gz",
+    "revision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "binaryPackage": "libzstd",
+    "binaryVersion": "1.5.7"
+  },
+  {
+    "name": "windows-winlibs-nghttp2",
+    "url": "https://codeload.github.com/winlibs/nghttp2/tar.gz/50895b5f3cebeb2553a4e40a62561707a1a129e0",
+    "sha256": "b18755036852acd5b0cfcff34023894f8c1440c424076e48d18bf5fea8eefa93",
+    "file": "windows-winlibs-nghttp2.tar.gz",
+    "revision": "50895b5f3cebeb2553a4e40a62561707a1a129e0",
+    "binaryPackage": "nghttp2",
+    "binaryVersion": "1.70.0"
+  },
+  {
+    "name": "windows-winlibs-enchant",
+    "url": "https://codeload.github.com/winlibs/enchant/tar.gz/37e09ab3d76d61784d8a9d4cca2badbd56d080f4",
+    "sha256": "f4bf965c93a396e2fffa164d9b53635799734313ae657af225a330b39a4bff5a",
+    "file": "windows-winlibs-enchant.tar.gz",
+    "revision": "37e09ab3d76d61784d8a9d4cca2badbd56d080f4",
+    "binaryPackage": "libenchant2",
+    "binaryVersion": "2.8.19"
+  },
+  {
+    "name": "windows-winlibs-libiconv",
+    "url": "https://codeload.github.com/winlibs/libiconv/tar.gz/8f55a0aa6532f30f947261d90e72b200f350a5df",
+    "sha256": "3d2aa028550a104ba513aa4b9e23f59994445cf31089de9a43eb2f791fb00230",
+    "file": "windows-winlibs-libiconv.tar.gz",
+    "revision": "8f55a0aa6532f30f947261d90e72b200f350a5df",
+    "binaryPackage": "libiconv",
+    "binaryVersion": "1.19"
+  },
+  {
+    "name": "windows-winlibs-libjpeg",
+    "url": "https://codeload.github.com/winlibs/libjpeg/tar.gz/66ef88ad97f3c47eb1c7b85f2637ff1073ebce9b",
+    "sha256": "98bc79237b5f3c310b3621b1e89cee4cb6b4a52cef69ca9786e894a1e9979391",
+    "file": "windows-winlibs-libjpeg.tar.gz",
+    "revision": "66ef88ad97f3c47eb1c7b85f2637ff1073ebce9b",
+    "binaryPackage": "libjpeg-turbo",
+    "binaryVersion": "3.2.0"
+  },
+  {
+    "name": "windows-winlibs-lmdb",
+    "url": "https://codeload.github.com/winlibs/lmdb/tar.gz/337459047d55fbf52e634bc26285195d06ac145d",
+    "sha256": "54e405f291a03a56635a3630694a2acfd08528c407b3f98244ba43b9b40bbee9",
+    "file": "windows-winlibs-lmdb.tar.gz",
+    "revision": "337459047d55fbf52e634bc26285195d06ac145d",
+    "binaryPackage": "liblmdb",
+    "binaryVersion": "0.9.35"
+  },
+  {
+    "name": "windows-winlibs-liblzma",
+    "url": "https://codeload.github.com/winlibs/liblzma/tar.gz/4b9d0346008efc136ea6c407d9c23da47727fe3b",
+    "sha256": "bb103c2b2673d129843a2dfcbbf83c93c9618af57e6a1ecd6cd9475658776642",
+    "file": "windows-winlibs-liblzma.tar.gz",
+    "revision": "4b9d0346008efc136ea6c407d9c23da47727fe3b",
+    "binaryPackage": "liblzma",
+    "binaryVersion": "5.8.4"
+  },
+  {
+    "name": "windows-winlibs-oniguruma",
+    "url": "https://codeload.github.com/winlibs/oniguruma/tar.gz/fceeeffdb609661ffaea9be4075c6ff4d6696611",
+    "sha256": "064ef4fe0f63b466f7cd90276f5375f0315ec14450e91139540f27cc2cad9f04",
+    "file": "windows-winlibs-oniguruma.tar.gz",
+    "revision": "fceeeffdb609661ffaea9be4075c6ff4d6696611",
+    "binaryPackage": "libonig",
+    "binaryVersion": "6.9.10"
+  },
+  {
+    "name": "windows-winlibs-libpng",
+    "url": "https://codeload.github.com/winlibs/libpng/tar.gz/5d1b8aa0f6a0f20d7962270ac5ebb64b5795a896",
+    "sha256": "272cad81b72d51dd6d8eec495697b701fba59f916e2fc73335ff2579a2dc75df",
+    "file": "windows-winlibs-libpng.tar.gz",
+    "revision": "5d1b8aa0f6a0f20d7962270ac5ebb64b5795a896",
+    "binaryPackage": "libpng",
+    "binaryVersion": "1.6.58"
+  },
+  {
+    "name": "windows-winlibs-postgresql",
+    "url": "https://codeload.github.com/winlibs/postgresql/tar.gz/5cb6f940a63def19804e2f8c954bf985e4e30724",
+    "sha256": "48759f47c5e0101e5eeec7c3187bb832971527578650485fbc90a9efac8e3c66",
+    "file": "windows-winlibs-postgresql.tar.gz",
+    "revision": "5cb6f940a63def19804e2f8c954bf985e4e30724",
+    "binaryPackage": "libpq",
+    "binaryVersion": "16.15"
+  },
+  {
+    "name": "windows-winlibs-qdbm",
+    "url": "https://codeload.github.com/winlibs/qdbm/tar.gz/586aa477ff42f0d307dc26adada275642630b28f",
+    "sha256": "075c750c014fa20927547b71c06d9ba37c4f359f486c435c73d760649ab4770f",
+    "file": "windows-winlibs-qdbm.tar.gz",
+    "revision": "586aa477ff42f0d307dc26adada275642630b28f",
+    "binaryPackage": "libqdbm",
+    "binaryVersion": "1.8.78"
+  },
+  {
+    "name": "windows-winlibs-cyrus-sasl",
+    "url": "https://codeload.github.com/winlibs/cyrus-sasl/tar.gz/63a75ce9293206aea981e9f3edcd96645bafd677",
+    "sha256": "e88238589bd303ac9ba50e9af404d4691bc8879f01d555cc40ca563415f52e78",
+    "file": "windows-winlibs-cyrus-sasl.tar.gz",
+    "revision": "63a75ce9293206aea981e9f3edcd96645bafd677",
+    "binaryPackage": "libsasl",
+    "binaryVersion": "2.1.28"
+  },
+  {
+    "name": "windows-winlibs-sqlite3",
+    "url": "https://codeload.github.com/winlibs/sqlite3/tar.gz/90771f2f145baf5b9a2e094ff9ad36d700079125",
+    "sha256": "ee8839ce8766407fb67069185d6241ce0bfff7e2bad4b3bf93880116c5efa081",
+    "file": "windows-winlibs-sqlite3.tar.gz",
+    "revision": "90771f2f145baf5b9a2e094ff9ad36d700079125",
+    "binaryPackage": "sqlite3",
+    "binaryVersion": "3.53.4"
+  },
+  {
+    "name": "windows-winlibs-libsodium",
+    "url": "https://codeload.github.com/winlibs/libsodium/tar.gz/1777bbc853d2aeb124e7b842a11b916193db7bdf",
+    "sha256": "bf705a4170bab83fae69c06a374ecf6c2aeda6300f7bcd16aaa988092d8b090f",
+    "file": "windows-winlibs-libsodium.tar.gz",
+    "revision": "1777bbc853d2aeb124e7b842a11b916193db7bdf",
+    "binaryPackage": "libsodium",
+    "binaryVersion": "1.0.22"
+  },
+  {
+    "name": "windows-winlibs-libtidy",
+    "url": "https://codeload.github.com/winlibs/libtidy/tar.gz/8b6229fd70409656257a6446a254fd62fde8a03a",
+    "sha256": "ee3a26c322878dbf015e47e801803018a22f760aa12a4d54f7ad5cf8dca0ac81",
+    "file": "windows-winlibs-libtidy.tar.gz",
+    "revision": "8b6229fd70409656257a6446a254fd62fde8a03a",
+    "binaryPackage": "libtidy",
+    "binaryVersion": "5.8.0"
+  },
+  {
+    "name": "windows-winlibs-libwebp",
+    "url": "https://codeload.github.com/winlibs/libwebp/tar.gz/1b7801dd9a59c1dc5bda38895d8f94c815732a9f",
+    "sha256": "e3f77907c85e1f332a53d59449a8d8897a426b2a3ca6ad8da0d82f6158ba2aa7",
+    "file": "windows-winlibs-libwebp.tar.gz",
+    "revision": "1b7801dd9a59c1dc5bda38895d8f94c815732a9f",
+    "binaryPackage": "libwebp",
+    "binaryVersion": "1.6.0"
+  },
+  {
+    "name": "windows-winlibs-libxml2",
+    "url": "https://codeload.github.com/winlibs/libxml2/tar.gz/c8797dc3b7964fabdb94d0b3176afb461afbd40b",
+    "sha256": "e89cc6a0ce83cc94f247f5106f76fde8812dbef47142884b6b290f77b97274b6",
+    "file": "windows-winlibs-libxml2.tar.gz",
+    "revision": "c8797dc3b7964fabdb94d0b3176afb461afbd40b",
+    "binaryPackage": "libxml2",
+    "binaryVersion": "2.11.9-8"
+  },
+  {
+    "name": "windows-winlibs-libxpm",
+    "url": "https://codeload.github.com/winlibs/libxpm/tar.gz/90f573b4ae2aed9bda5dbb6df3b9d86f1bec9099",
+    "sha256": "76b54539f4aa7a289685ef918d2ddffbbae795cf98b15eb003c7ecbb049c1895",
+    "file": "windows-winlibs-libxpm.tar.gz",
+    "revision": "90f573b4ae2aed9bda5dbb6df3b9d86f1bec9099",
+    "binaryPackage": "libxpm",
+    "binaryVersion": "3.5.19"
+  },
+  {
+    "name": "windows-winlibs-libxslt",
+    "url": "https://codeload.github.com/winlibs/libxslt/tar.gz/9f399f8d223ddddeaeacd15285a2e993ec326c0f",
+    "sha256": "a87ebc69a280fd6e2e240f18161faff7ec0cbd9f12018503a34a1a0de53e05c7",
+    "file": "windows-winlibs-libxslt.tar.gz",
+    "revision": "9f399f8d223ddddeaeacd15285a2e993ec326c0f",
+    "binaryPackage": "libxslt",
+    "binaryVersion": "1.1.43-2"
+  },
+  {
+    "name": "windows-winlibs-libzip",
+    "url": "https://codeload.github.com/winlibs/libzip/tar.gz/94b3e6583c6ddf77d3fef95699310818a91bc23a",
+    "sha256": "1b382da2ecf71758410cebce27c1742f8b162b931050e8331e92e33282f507c2",
+    "file": "windows-winlibs-libzip.tar.gz",
+    "revision": "94b3e6583c6ddf77d3fef95699310818a91bc23a",
+    "binaryPackage": "libzip",
+    "binaryVersion": "1.11.4"
+  },
+  {
+    "name": "windows-winlibs-mpir",
+    "url": "https://codeload.github.com/winlibs/mpir/tar.gz/796ed2cee089c96dc254caec624fe9084c3a68c3",
+    "sha256": "10bd14ff7363a3c7bd524d039e3993a3349aad3452bc14eac4b61c635df27cce",
+    "file": "windows-winlibs-mpir.tar.gz",
+    "revision": "796ed2cee089c96dc254caec624fe9084c3a68c3",
+    "binaryPackage": "mpir",
+    "binaryVersion": "3.0.0-2"
+  },
+  {
+    "name": "windows-winlibs-net-snmp",
+    "url": "https://codeload.github.com/winlibs/net-snmp/tar.gz/7662537b29b1e278c65ab786ac4641cd6fb5b9d4",
+    "sha256": "48aed4cba40f436a386af3f2a5f3880b939fe038158b1e8455427dcf55235922",
+    "file": "windows-winlibs-net-snmp.tar.gz",
+    "revision": "7662537b29b1e278c65ab786ac4641cd6fb5b9d4",
+    "binaryPackage": "net-snmp",
+    "binaryVersion": "5.9.4-2"
+  },
+  {
+    "name": "windows-winlibs-openldap",
+    "url": "https://codeload.github.com/winlibs/openldap/tar.gz/4b2449a2e39d92b3b789ff71350b4bf70ed0713e",
+    "sha256": "8f731db6b4ebc183d0eef9c1f895954f841902d561302315bf10e264e0fe22d0",
+    "file": "windows-winlibs-openldap.tar.gz",
+    "revision": "4b2449a2e39d92b3b789ff71350b4bf70ed0713e",
+    "binaryPackage": "openldap",
+    "binaryVersion": "2.7.0-2"
+  },
+  {
+    "name": "windows-winlibs-wineditline",
+    "url": "https://codeload.github.com/winlibs/wineditline/tar.gz/39ae4ff02a06c97f804833844b767777d6625fb8",
+    "sha256": "3381e2fee75eaad585f5aa808b0fac157330427239e6ef6e56faa84dffe5668b",
+    "file": "windows-winlibs-wineditline.tar.gz",
+    "revision": "39ae4ff02a06c97f804833844b767777d6625fb8",
+    "binaryPackage": "wineditline",
+    "binaryVersion": "2.208"
+  }
+]
