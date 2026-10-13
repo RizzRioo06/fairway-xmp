@@ -316,12 +316,27 @@ pub fn matches_database(pid: u32, executable: &Path, config: &Path) -> bool {
             if let Ok(info) = serde_json::from_str::<serde_json::Value>(&text) {
                 let exe = info["ExecutablePath"].as_str().unwrap_or("");
                 let line = info["CommandLine"].as_str().unwrap_or("");
-                return exe.eq_ignore_ascii_case(&executable.to_string_lossy())
+                return same_windows_executable(Path::new(exe), executable)
                     && line.contains(&format!("--defaults-file={}", config.display()));
             }
         }
     }
     false
+}
+
+#[cfg(windows)]
+fn same_windows_executable(actual: &Path, expected: &Path) -> bool {
+    // CIM reports normalized paths; Rust paths may contain mixed separators or
+    // junctions. Compare resolved files rather than their original spelling.
+    match (
+        std::fs::canonicalize(actual),
+        std::fs::canonicalize(expected),
+    ) {
+        (Ok(actual), Ok(expected)) => actual
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&expected.to_string_lossy()),
+        _ => false,
+    }
 }
 
 #[cfg(windows)]
@@ -353,6 +368,19 @@ pub fn tail(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn database_executable_identity_accepts_normalized_windows_paths() {
+        let exe = std::env::current_exe().unwrap();
+        let mixed = exe.to_string_lossy().replace('\\', "/").to_lowercase();
+        assert!(same_windows_executable(Path::new(&mixed), &exe));
+        assert!(!same_windows_executable(&exe, exe.parent().unwrap()));
+        assert!(!same_windows_executable(
+            &exe.with_file_name("different-database.exe"),
+            &exe
+        ));
+    }
+
     #[test]
     fn occupied_ports_are_detected_without_stopping_the_owner() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();

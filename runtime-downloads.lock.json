@@ -232,8 +232,24 @@
     "sha256": "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6",
     "url": "https://getcomposer.org/download/2.10.3/composer.phar"
   },
+  "mysql-windows": {
+    "sha256": "a492371d687d2bab088b0062581144a0044b8964baefdf4faa579292b423d25c",
+    "url": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11-winx64.zip"
+  },
+  "nginx-windows": {
+    "sha256": "bb65edcfc22a2214a4afaac59f038f560c02b98d4b49c5dca1206d3cc5d631c9",
+    "url": "https://nginx.org/download/nginx-1.31.6.zip"
+  },
+  "php-windows": {
+    "sha256": "da68394f9193b7f6b89d0c76861a4034ae10efee7fd55a7255d8118c2acf70d7",
+    "url": "https://downloads.php.net/~windows/releases/php-8.4.26-nts-Win32-vs17-x64.zip"
+  },
   "phpmyadmin": {
     "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",
     "url": "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip"
+  },
+  "vc-runtime": {
+    "sha256": "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b",
+    "url": "https://aka.ms/vs/17/release/vc_redist.x64.exe"
   }
 }
