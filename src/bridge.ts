@@ -1,4 +1,6 @@
 import type { Snapshot } from './types';
+import manifest from '../runtime-manifest.json';
+import { version } from '../package.json';
 
 declare global {
   interface Window {
@@ -22,8 +24,11 @@ export const preview: Snapshot = {
     { id: 'phpmyadmin', running: false, ready: false, port: 8801, pid: null, message: null },
   ],
   documentRoot: '~/fairway/www', dataDir: 'Fairway XMP application data',
-  runtimeReady: false, runtimeVersions: null, pathInstalled: false,
-  pathPhp: null, pathComposer: null, version: '0.1.0-alpha.1',
+  runtimeReady: false, runtimeVersions: {
+    php: manifest.php, mysql: manifest.mysql, nginx: manifest.nginx,
+    phpmyadmin: manifest.phpmyadmin, composer: manifest.composer,
+  }, pathInstalled: false,
+  pathPhp: null, pathComposer: null, version,
 };
 
 export function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {

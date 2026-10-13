@@ -1,6 +1,6 @@
 # Contributing to Fairway XMP
 
-The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. A separate manual workflow builds Windows test installers as temporary Actions artifacts; CI does not publish GitHub Releases.
+The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. A separate manual workflow builds Windows installers as Actions artifacts; CI does not publish GitHub Releases. After testing, publish the exact downloaded installer rather than rebuilding it.
 
 ## Development
 
@@ -24,7 +24,9 @@ python3 scripts/prepare_runtime.py --refresh-lock
 python3 scripts/prepare_runtime.py
 ```
 
-Preparation downloads binaries into the workspace, verifies checksums, bundles required libraries, relocates macOS load commands, and checks PHP extensions. It does not install Homebrew or start services. macOS inputs use ARM macOS 15 bottles; Windows inputs use official ZIP distributions. Runtime files and caches are intentionally ignored by Git.
+Preparation downloads binaries into the workspace, verifies checksums, bundles required libraries, relocates macOS load commands, and checks PHP extensions. It does not install Homebrew or start services. macOS PHP/MySQL inputs use ARM macOS 15 bottles; stable Nginx is compiled locally from the pinned upstream source against pinned PCRE2/OpenSSL bottles and SDK zlib, using Xcode Command Line Tools. Its configure inputs are retained in `runtime/nginx/build.json`. Windows inputs use official ZIP distributions. Runtime files and caches are intentionally ignored by Git.
+
+Alpha 2 is currently being tested for Mac and Windows. Corresponding-source packaging and release publication remain separate from installer builds. The published alpha 1 installers and README download links remain valid.
 
 Refreshing the lock trusts upstream HTTPS for inputs without independently published SHA256 checksums and records their SHA256. Review those inputs and available upstream signatures before a classroom release. Normal builds require the reviewed lock and reject changed inputs.
 
@@ -38,6 +40,8 @@ npm run test:scripts
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- /absolute/path/to/isolated-test
+# Optional MySQL migration check using the saved alpha 1 runtime:
+cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- /absolute/path/to/isolated-upgrade /absolute/path/to/alpha1-runtime /absolute/path/to/alpha2-runtime
 ```
 
 The smoke example starts real runtimes on available test ports and uses an isolated home/data directory. It never edits your real shell profile. Browser checks are in `scripts/check_ui.mjs` (requires Playwright and its Chromium browser).
@@ -66,7 +70,9 @@ Set Tauri's signing key environment variables on the builder. Updater signatures
 
 ## Publishing a release
 
-For an unsigned x64 Windows test installer, dispatch the **Windows test installer** workflow with `gh workflow run windows-test-build.yml --ref main`. It checks the source, stages the pinned runtime, exercises real services and cleanup, then builds an NSIS installer. Download its `fairway-windows-x64-test` artifact with `gh run download RUN_ID --name fairway-windows-x64-test --dir artifacts/windows-test`. The artifact includes its SHA256, source commit, and proposed Windows runtime checksum lock for review. It expires after 14 days and does not create a GitHub Release.
+For an unsigned x64 Windows installer, dispatch the **Windows installer** workflow with `gh workflow run windows-test-build.yml --ref BUILD_COMMIT`. It checks the source, stages the pinned runtime, exercises real services and cleanup, and verifies an 8.4 → 9.7 database upgrade before building an NSIS installer. The alpha 1 migration fixtures retain its exact Windows versions and download checksums; the preparer stages them into a separate folder without replacing the current runtime.
+
+Download its versioned artifact, for example `gh run download RUN_ID --name fairway-windows-x64-0.1.0-alpha.2 --dir artifacts/windows-alpha2`. It contains the installer, SHA256, exact build commit/run, runtime metadata, and application source archive. Actions retains it for 90 days; keep a local copy for later publication. Publish that tested installer unchanged. An application or runtime change requires another build; release notes or corresponding-source collection do not. The workflow never creates a GitHub Release.
 
 The initial release is `v0.1.0-alpha.1`, an unsigned GitHub prerelease with manual updates. Publish alpha builds with clear installation limitations and never mark them as the latest stable release. Stable releases require installation, updates, backups, and removal checks on the supported systems.
 

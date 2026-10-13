@@ -3,3 +3,28 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition:none!important}}
 
 .brand-name{position:relative;line-height:1.1;padding-bottom:16px}.brand-edition{position:absolute;bottom:0;left:1px;font-size:10px;font-weight:650;letter-spacing:2.5px;color:var(--green)}@media(max-width:650px){.brand-edition{display:none}}
+
+/* Keep actions and long version/path labels usable at the minimum window size. */
+.button-row{flex-wrap:wrap;align-items:center}
+.update-actions>button{min-height:38px;padding:9px 13px;font-size:11px}
+.sidebar-footer{flex-wrap:wrap;gap:4px 10px}
+.card-title{flex-wrap:wrap}
+.card-title h2{min-width:0;overflow-wrap:anywhere}
+.service-card{display:flex;flex-direction:column}
+.service-actions{margin-top:auto}
+.service-name{flex-wrap:wrap;gap:3px 9px}
+.notice>span{min-width:0}
+.notice>button{flex-shrink:0;align-self:flex-start}
+.operation-status{max-width:calc(100vw - 260px);border-radius:12px}
+.path-list dd{max-width:100%}
+.modal code{overflow-wrap:anywhere}
+@media(max-width:900px){.operation-status{max-width:calc(100vw - 210px)}}
+@media(max-width:650px){
+  .sidebar-label,.sidebar-bottom{display:none}
+  .runtime-list{grid-template-columns:1fr}
+  .page-heading{flex-wrap:wrap}
+  .settings-card{padding:18px}
+  .advanced label{align-items:flex-start;flex-direction:column;gap:10px}
+  .advanced input{max-width:none}
+  .operation-status{max-width:calc(100vw - 90px)}
+}

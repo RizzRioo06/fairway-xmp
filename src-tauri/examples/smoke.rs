@@ -29,7 +29,11 @@ fn main() -> Result<(), String> {
             .nth(1)
             .ok_or("Provide the test directory.")?,
     );
-    let runtime = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime");
+    let runtime = std::env::args()
+        .nth(2)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime"));
+    let upgrade_runtime = std::env::args().nth(3).map(PathBuf::from);
     let layout = Layout::at(
         root.join("student's home"),
         root.join("student data"),
@@ -59,7 +63,11 @@ fn main() -> Result<(), String> {
             "php"
         }));
         php.args(["-r", "echo PHP_VERSION;"]);
-        assert!(process::output(php)?.starts_with("8.4."));
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(manager.layout.runtime.join("manifest.json")).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        assert_eq!(process::output(php)?, manifest["php"].as_str().unwrap());
         let mut composer = process::command(manager.layout.bin.join(if cfg!(windows) {
             "composer.cmd"
         } else {
@@ -102,6 +110,41 @@ fn main() -> Result<(), String> {
         manager.stop_all()?;
         assert!(manager.snapshot().services.iter().all(|s| !s.running));
         assert!(process::available(chosen.website) && process::available(chosen.mysql));
+        if let Some(runtime) = upgrade_runtime {
+            let probe = manager.layout.www.join("upgrade-check.php");
+            fs::write(&probe, format!("<?php $pdo = new PDO('mysql:host=127.0.0.1;port={};dbname=fairway','fairway','fairway'); echo $pdo->query('SELECT title FROM smoke WHERE id=1')->fetchColumn();", chosen.mysql)).map_err(|e| e.to_string())?;
+            let credentials =
+                fs::read(manager.layout.data.join("credentials")).map_err(|e| e.to_string())?;
+            let previous = manager.layout.clone();
+            manager = Manager::new(Layout::at(previous.home, previous.data, runtime))?;
+            manager.start_all()?;
+            assert!(http(chosen.website, "/upgrade-check.php").contains("classroom works"));
+            assert_eq!(
+                fs::read(manager.layout.data.join("credentials")).map_err(|e| e.to_string())?,
+                credentials
+            );
+            assert_eq!(
+                fs::read_to_string(manager.layout.data.join("database-ready"))
+                    .map_err(|e| e.to_string())?,
+                "9.7"
+            );
+            let journal: serde_json::Value = serde_json::from_slice(
+                &fs::read(manager.layout.data.join("database-upgrade.json"))
+                    .map_err(|e| e.to_string())?,
+            )
+            .map_err(|e| e.to_string())?;
+            assert!(PathBuf::from(journal["backup"].as_str().unwrap())
+                .join("mysql/mysql")
+                .is_dir());
+            assert!(fs::read_to_string(manager.backup()?)
+                .map_err(|e| e.to_string())?
+                .contains("classroom works"));
+            manager.stop_all()?;
+            manager.start_all()?;
+            assert!(http(chosen.website, "/upgrade-check.php").contains("classroom works"));
+            manager.stop_all()?;
+            println!("PASS: MySQL 8.4 → 9.7 upgrade, original database backup, preserved credentials/data, logical backup, and restart.");
+        }
         // Settings survive restart; coursework survives removal of PATH integration.
         assert_eq!(manager.layout.ports()?, chosen);
         integration::remove(&manager.layout)?;

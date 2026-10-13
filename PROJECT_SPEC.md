@@ -12,7 +12,7 @@ No Docker, WSL, Linux packages, Intel Mac packages, Node/npm bundle, or Laravel-
 
 Tauri 2, Rust service manager, React/TypeScript UI. Exact versions and required PHP extensions are recorded in `runtime-manifest.json`. Download inputs are pinned by SHA256 in `runtime-downloads.lock.json` once prepared and reviewed. Runtime preparation never installs Homebrew or system services.
 
-Runtime: PHP CLI and FastCGI (PHP-FPM on macOS; PHP-CGI on Windows), Nginx, MySQL 8.4 LTS, phpMyAdmin, Composer, CA trust roots, native runtime libraries and upstream notices.
+The alpha 2 runtime uses PHP 8.5.11 CLI/FastCGI, stable Nginx 1.30.5, MySQL 9.7.2 LTS, phpMyAdmin 5.2.3, Composer 2.10.3, CA trust roots, native runtime libraries and upstream notices. Mac Nginx is compiled from its pinned upstream source using pinned PCRE2/OpenSSL bottles and the macOS SDK's zlib. No system installation or Homebrew service is required. Windows inputs are official x64 ZIP distributions with checked SHA256 pins.
 
 ## Files
 
@@ -43,6 +43,8 @@ Student connection host is explicitly `127.0.0.1` with the saved database port. 
 
 Logical backups include student databases, routines, events, and triggers and exclude MySQL system schemas. Failed exports are not presented as completed backups. Existing database data and credentials are never silently reset on an error.
 
+Before the first supported MySQL 8.4 → 9.7 startup, preserve the stopped physical database, credentials, settings and version markers under the user's backups folder. Record the completed backup before starting MySQL; failed startup retries never replace it. Record the new database family after authenticated provisioning succeeds. Reject unknown transitions and attempted downgrades. Fresh initialization records its engine version separately from account provisioning so interrupted setup can retry. Test migration against isolated alpha 1 data before release; Mac verification has passed; Windows runs the same isolated migration check in the installer workflow.
+
 ## CLI integration
 
 Persistent user-level integration provides PHP and Composer launchers. Composer explicitly runs under bundled PHP and uses an app-owned Composer home.
@@ -57,7 +59,9 @@ Uninstall requires stopped services and preserves coursework/data by default. De
 
 ## Updates
 
-The source repository and download location are `https://github.com/eimg/fairway-xmp`. Version 0.1.0-alpha.1 is an unsigned prerelease with manual installer updates. Unsigned builds offer links to the releases page and explain manual backups and service shutdown. Alpha releases include checksums and corresponding bundled-tool source; they are not marked as the latest stable release. The default signed-update endpoint is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`. Release overlays configure the HTTPS endpoint and Tauri public verification key; signed artifacts are mandatory for the updater. Checks are student-triggered. Before installation, Fairway XMP starts MySQL if necessary to make a student-database backup, then gracefully stops services. Runtime and UI are updated together. Only tested updates within the pinned MySQL 8.4 family are in scope; major database changes require a separate reviewed migration strategy.
+The source repository and download location are `https://github.com/eimg/fairway-xmp`. Version 0.1.0-alpha.1 is the published unsigned prerelease; 0.1.0-alpha.2 is being tested on both platforms with no publication yet. Unsigned builds offer links to the releases page and explain manual backups and service shutdown. Alpha releases include checksums and corresponding bundled-tool source; they are not marked as the latest stable release. The default signed-update endpoint is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`. Release overlays configure the HTTPS endpoint and Tauri public verification key; signed artifacts are mandatory for the updater. Checks are student-triggered. Before installation, Fairway XMP starts MySQL if necessary to make a student-database backup, then gracefully stops services. Runtime and UI are updated together. The only major database transition currently implemented is 8.4 → 9.7, with a stopped physical backup. Other major transitions require a separate reviewed migration strategy.
+
+Updates actions share equal-height buttons in a wrapping row. Long version labels and file paths must fit at the 820×650 minimum desktop window size. The document root displays the actual platform path; browser previews show manifest versions but keep service controls disabled.
 
 Installer upgrades must also preserve data and coursework. Release testing must verify clean-machine operation without Homebrew, OS signing/notarization, Windows prerequisites, non-ASCII/space-containing user paths, uninstall, update recovery, and database compatibility. A successful compile is not proof of these checks.
 

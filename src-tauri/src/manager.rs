@@ -242,6 +242,7 @@ impl Manager {
             return Ok(());
         }
         if id == "mysql" {
+            crate::database::prepare_upgrade(&self.layout)?;
             self.initialize_database()?;
         }
         self.spawn_service(id)?;
@@ -372,7 +373,11 @@ impl Manager {
             self.layout.data.join("config/mysql.cnf").display()
         ))
         .arg("--initialize-insecure");
-        process::output(cmd).map(|_| ())
+        process::output(cmd)?;
+        atomic_write(
+            &self.layout.data.join("database-version"),
+            crate::database::runtime_family(&self.layout)?.as_bytes(),
+        )
     }
 
     fn database_command(&self, executable: &str, secure: bool) -> std::process::Command {
@@ -413,8 +418,15 @@ impl Manager {
         if !marker.exists() {
             process::sql(self.database_command("mysql", true),
                 "CREATE DATABASE IF NOT EXISTS fairway CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\nCREATE USER IF NOT EXISTS 'fairway'@'127.0.0.1' IDENTIFIED BY 'fairway';\nCREATE USER IF NOT EXISTS 'fairway'@'localhost' IDENTIFIED BY 'fairway';\nGRANT ALL PRIVILEGES ON *.* TO 'fairway'@'127.0.0.1';\nGRANT ALL PRIVILEGES ON *.* TO 'fairway'@'localhost';\n")?;
-            atomic_write(&marker, b"8.4")?;
         }
+        atomic_write(
+            &marker,
+            crate::database::runtime_family(&self.layout)?.as_bytes(),
+        )?;
+        atomic_write(
+            &self.layout.data.join("database-version"),
+            crate::database::runtime_family(&self.layout)?.as_bytes(),
+        )?;
         Ok(())
     }
 

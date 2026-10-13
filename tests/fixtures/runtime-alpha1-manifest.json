@@ -1,0 +1,39 @@
+{
+  "composer": "2.10.3",
+  "extensions": [
+    "bcmath",
+    "ctype",
+    "curl",
+    "dom",
+    "fileinfo",
+    "filter",
+    "gd",
+    "hash",
+    "intl",
+    "mbstring",
+    "mysqli",
+    "openssl",
+    "pcre",
+    "pdo",
+    "pdo_mysql",
+    "pdo_sqlite",
+    "session",
+    "simplexml",
+    "sodium",
+    "sqlite3",
+    "tokenizer",
+    "xml",
+    "xmlreader",
+    "xmlwriter",
+    "zip"
+  ],
+  "minimumOS": {
+    "macos": "macOS 15 arm64",
+    "windows": "Windows 10 22H2 x64"
+  },
+  "mysql": "8.4.11",
+  "nginx": "1.31.6",
+  "php": "8.4.26",
+  "phpmyadmin": "5.2.3",
+  "schema": 1
+}

@@ -1,4 +1,4 @@
-name: Windows test installer
+name: Windows installer
 
 on:
   workflow_dispatch:
@@ -41,6 +41,11 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Record release version
+        id: metadata
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Prepare Windows runtime
         run: |
           if ('${{ inputs.record_runtime_checksums }}' -eq 'true') {
@@ -53,31 +58,49 @@ jobs:
           $root = Join-Path (Get-Location) '.runtime-work/windows-smoke'
           cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- $root
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify MySQL upgrade from alpha 1
+        run: |
+          $legacy = Join-Path (Get-Location) '.runtime-work/alpha1-runtime'
+          python scripts/prepare_runtime.py --manifest tests/fixtures/runtime-alpha1-manifest.json --lockfile tests/fixtures/runtime-alpha1-downloads.lock.json --destination $legacy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $root = Join-Path (Get-Location) '.runtime-work/windows-upgrade'
+          $current = Join-Path (Get-Location) 'src-tauri/resources/runtime'
+          cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- $root $legacy $current
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build x64 NSIS installer
         run: npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc
       - name: Collect installer and checksums
         run: |
-          $output = 'artifacts/windows-test'
+          $output = 'artifacts/windows-installer'
           New-Item -ItemType Directory -Force $output | Out-Null
           $installers = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe')
           if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
-          Copy-Item $installers[0].FullName $output
+          $version = '${{ steps.metadata.outputs.version }}'
+          $filename = "Fairway-XMP-$version-windows-x64-setup.exe"
+          Copy-Item $installers[0].FullName (Join-Path $output $filename)
           Copy-Item runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
           $hash = Get-FileHash $installers[0].FullName -Algorithm SHA256
-          "$($hash.Hash.ToLower())  $($installers[0].Name)" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
+          "$($hash.Hash.ToLower())  $filename" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
+          git archive --format=tar.gz --output="$output/fairway-xmp-build-source.tar.gz" HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           @{
+            version = $version
             commit = '${{ github.sha }}'
             run = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
             target = 'x86_64-pc-windows-msvc'
             signed = $false
-            purpose = 'Unsigned installer; publication is a separate step'
-          } | ConvertTo-Json | Set-Content "$output/build-info.json" -Encoding utf8
+            installer = $filename
+            sha256 = $hash.Hash.ToLower()
+            runtime = Get-Content runtime-manifest.json -Raw | ConvertFrom-Json
+            checks = @('frontend build', 'packaging tests', 'Rust tests and clippy', 'fresh runtime smoke', 'MySQL 8.4 to 9.7 upgrade, backup and restart')
+            purpose = 'Release candidate installer; reuse this exact file after testing'
+          } | ConvertTo-Json -Depth 8 | Set-Content "$output/build-info.json" -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: fairway-windows-x64-test
-          path: artifacts/windows-test/
+          name: fairway-windows-x64-${{ steps.metadata.outputs.version }}
+          path: artifacts/windows-installer/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
       - name: Save failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -86,7 +109,8 @@ jobs:
           path: |
             runtime-downloads.lock.json
             .runtime-work/windows-smoke/student data/logs/*.log
+            .runtime-work/windows-upgrade/student data/logs/*.log
           if-no-files-found: ignore
           retention-days: 7
 
-# Manual test builds only. No release creation, tags, or write permissions.
+# Manual installer builds. Publication reuses the tested artifact; no release creation.

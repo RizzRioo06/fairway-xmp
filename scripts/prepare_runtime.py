@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -153,9 +154,10 @@ def common(target, lock, refresh):
 
 def windows(target, lock, refresh):
     php = MANIFEST['php']
+    mysql_series = '.'.join(MANIFEST['mysql'].split('.')[:2])
     sources = {
         'php-windows': (f'https://downloads.php.net/~windows/releases/php-{php}-nts-Win32-vs17-x64.zip', 'php'),
-        'mysql-windows': (f'https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-{MANIFEST["mysql"]}-winx64.zip', 'mysql'),
+        'mysql-windows': (f'https://cdn.mysql.com/Downloads/MySQL-{mysql_series}/mysql-{MANIFEST["mysql"]}-winx64.zip', 'mysql'),
         'nginx-windows': (f'https://nginx.org/download/nginx-{MANIFEST["nginx"]}.zip', 'nginx'),
     }
     for name, (url, service) in sources.items():
@@ -301,26 +303,61 @@ def macos(target, lock, refresh):
     if platform.machine() != 'arm64': raise RuntimeError('Only Apple Silicon builders are supported')
     with tempfile.TemporaryDirectory(prefix='fairway-bottles-') as folder:
         bottles = Bottles(Path(folder), lock, refresh)
-        php = bottles.fetch('php@8.4', MANIFEST['php'])
-        mysql = bottles.fetch('mysql@8.4', MANIFEST['mysql'])
-        nginx = bottles.fetch('nginx', MANIFEST['nginx'])
+        php = bottles.fetch('php', MANIFEST['php'])
+        mysql = bottles.fetch('mysql@9.7', MANIFEST['mysql'])
         for executable in ('php', 'php-cgi'):
             copy(php / 'bin' / executable, target / 'php/bin' / executable)
         copy(php / 'sbin/php-fpm', target / 'php/bin/php-fpm')
-        extensions = list(php.glob('lib/php/*'))
         (target / 'php/ext').mkdir(parents=True, exist_ok=True)
         for extension in php.rglob('*.so'):
             if 'httpd' not in str(extension): copy(extension, target / 'php/ext' / extension.name)
         for directory in ('bin', 'lib', 'share'): copy(mysql / directory, target / 'mysql' / directory)
-        copy(nginx / 'bin/nginx', target / 'nginx/bin/nginx')
-        mime = next(nginx.rglob('mime.types'), None)
-        if mime is None: raise RuntimeError('Nginx MIME configuration missing from bottle')
-        copy(mime, target / 'nginx/conf/mime.types')
+        build_nginx(target, bottles, lock, refresh)
         relocate(target, bottles)
         for name, keg in bottles.kegs.items():
             for file in keg.rglob('*'):
                 if file.is_file() and any(word in file.name.upper() for word in ('LICENSE', 'COPYING', 'NOTICE')):
                     copy(file, target / 'licenses' / name.replace('@', '-') / file.relative_to(keg))
+        # Keep only bottles actually used by this Mac runtime, retaining Windows pins.
+        for key in list(lock):
+            if key.startswith('brew-') and key not in {
+                f'brew-{name}-arm64-sequoia' for name in bottles.kegs
+            }:
+                del lock[key]
+
+
+def build_nginx(target, bottles, lock, refresh):
+    """Build upstream's stable branch with pinned libraries, without installing it."""
+    version = MANIFEST['nginx']
+    url = f'https://nginx.org/download/nginx-{version}.tar.gz'
+    archive = lock_download('nginx-macos-source', url, refresh=refresh, lock=lock)
+    pcre = bottles.fetch('pcre2')
+    openssl = bottles.fetch('openssl@3')
+    with tempfile.TemporaryDirectory(prefix='fairway-nginx-') as folder:
+        safe_extract(archive, Path(folder), 'tar')
+        source = Path(folder) / f'nginx-{version}'
+        cc_options = ' '.join(f'-I{shlex.quote(str(keg / "include"))}' for keg in (pcre, openssl))
+        ld_options = ' '.join(f'-L{shlex.quote(str(keg / "lib"))}' for keg in (pcre, openssl))
+        args = [
+            './configure', '--prefix=.', '--sbin-path=bin/nginx',
+            '--with-http_ssl_module', '--with-http_v2_module',
+            '--with-http_gzip_static_module', '--with-http_stub_status_module',
+            '--with-pcre-jit', '--with-compat',
+            f'--with-cc-opt={cc_options} -mmacosx-version-min=15.0',
+            f'--with-ld-opt={ld_options} -mmacosx-version-min=15.0',
+        ]
+        env = {**os.environ, 'MACOSX_DEPLOYMENT_TARGET': '15.0'}
+        subprocess.run(args, cwd=source, env=env, check=True)
+        subprocess.run(['make', f'-j{min(os.cpu_count() or 2, 8)}'], cwd=source, env=env, check=True)
+        copy(source / 'objs/nginx', target / 'nginx/bin/nginx')
+        copy(source / 'conf/mime.types', target / 'nginx/conf/mime.types')
+        copy(source / 'LICENSE', target / 'licenses/nginx/LICENSE')
+        (target / 'nginx/build.json').write_text(json.dumps({
+            'version': version, 'source': lock['nginx-macos-source'],
+            'configure': args, 'deploymentTarget': '15.0',
+            'libraries': {name: entry for name, entry in lock.items()
+                          if name in ('brew-pcre2-arm64-sequoia', 'brew-openssl@3-arm64-sequoia')},
+        }, indent=2) + '\n')
 
 
 def verify(target):
@@ -339,19 +376,32 @@ def verify(target):
     missing = set(MANIFEST['extensions']) - {item.lower() for item in info['extensions']}
     if info['version'] != MANIFEST['php'] or missing:
         raise RuntimeError(f'PHP validation failed: version={info["version"]}, missing={sorted(missing)}')
-    subprocess.run([str(php), '-c', str(ini), str(target / 'composer.phar'), '--version'], env=env, check=True)
-    subprocess.run([str(target / 'nginx/bin' / ('nginx' + suffix)), '-v'], check=True)
-    subprocess.run([str(target / 'mysql/bin' / ('mysqld' + suffix)), '--no-defaults', '--version'], check=True)
+    commands = [
+        ([str(php), '-c', str(ini), str(target / 'composer.phar'), '--version'], f'Composer version {MANIFEST["composer"]} '),
+        ([str(target / 'nginx/bin' / ('nginx' + suffix)), '-v'], f'nginx/{MANIFEST["nginx"]}'),
+        ([str(target / 'mysql/bin' / ('mysqld' + suffix)), '--no-defaults', '--version'], f'Ver {MANIFEST["mysql"]} '),
+    ]
+    for command, expected in commands:
+        output = subprocess.check_output(command, env=env, stderr=subprocess.STDOUT, text=True)
+        if expected not in output:
+            raise RuntimeError(f'Runtime version mismatch: expected {expected!r}, received {output.strip()!r}')
+        print(output.strip(), flush=True)
     ini.unlink()
 
 
 def main():
-    global RESUME_LOCK
+    global RESUME_LOCK, MANIFEST, LOCK_PATH, DEST
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--refresh-lock', action='store_true', help='Trust upstream HTTPS once; review and commit resulting SHA256 lock before release')
     parser.add_argument('--resume-lock', action='store_true', help='Resume interrupted preparation, retaining existing pins and recording missing inputs')
     parser.add_argument('--verify-only', action='store_true')
+    parser.add_argument('--manifest', type=Path, help='Version manifest for an isolated historical runtime')
+    parser.add_argument('--lockfile', type=Path, help='Download lock for an isolated historical runtime')
+    parser.add_argument('--destination', type=Path, help='Stage into a separate runtime folder')
     args = parser.parse_args()
+    if args.manifest: MANIFEST = json.loads(args.manifest.read_text())
+    if args.lockfile: LOCK_PATH = args.lockfile.resolve()
+    if args.destination: DEST = args.destination.resolve()
     RESUME_LOCK = args.resume_lock
     refresh = args.refresh_lock or args.resume_lock
     if args.verify_only: verify(DEST); return
@@ -369,6 +419,7 @@ def main():
         verify(work)
         if DEST.exists(): shutil.rmtree(DEST)
         shutil.move(work, DEST)
+        (DEST / '.gitkeep').touch()
         if refresh: LOCK_PATH.write_text(json.dumps(lock, indent=2, sort_keys=True) + '\n')
         print(f'Runtime prepared at {DEST}', flush=True)
     except Exception:

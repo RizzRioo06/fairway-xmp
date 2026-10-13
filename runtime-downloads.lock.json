@@ -144,20 +144,15 @@
     "url": "https://ghcr.io/v2/homebrew/core/lz4/blobs/sha256:91674f1c7407b1f7b73d5bd1d85ed1abaaca93be3b68607af4ef3df632540ac0",
     "version": "1.10.0"
   },
-  "brew-mysql@8.4-arm64-sequoia": {
-    "sha256": "88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
-    "url": "https://ghcr.io/v2/homebrew/core/mysql/8.4/blobs/sha256:88c1d662b11082b2cc82be2318f3ef1f5a61d61442b21ce5a56a19928b7518dd",
-    "version": "8.4.11"
+  "brew-mysql@9.7-arm64-sequoia": {
+    "sha256": "02e79d71225ee0e3459936a754d2274b23291a38bdb06930ac44d62329380c73",
+    "url": "https://ghcr.io/v2/homebrew/core/mysql/9.7/blobs/sha256:02e79d71225ee0e3459936a754d2274b23291a38bdb06930ac44d62329380c73",
+    "version": "9.7.2"
   },
   "brew-net-snmp-arm64-sequoia": {
     "sha256": "d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
     "url": "https://ghcr.io/v2/homebrew/core/net-snmp/blobs/sha256:d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
     "version": "5.9.5.2"
-  },
-  "brew-nginx-arm64-sequoia": {
-    "sha256": "1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
-    "url": "https://ghcr.io/v2/homebrew/core/nginx/blobs/sha256:1660d7abde703fd3f02c4019eadd41635843ad72dff68d26a39dfde9da1a69be",
-    "version": "1.31.6"
   },
   "brew-oniguruma-arm64-sequoia": {
     "sha256": "7d6ab71fff646664b91e8ff91744696ec775357787dbc1a28e45d52759662e8d",
@@ -169,6 +164,11 @@
     "url": "https://ghcr.io/v2/homebrew/core/openldap/blobs/sha256:03bcbc4d521f23a2941917039345cd72fc2a8b663b54e2bae28c006622f904f9",
     "version": "2.7.1"
   },
+  "brew-openssl@3-arm64-sequoia": {
+    "sha256": "0994a8029175af4578c3b93b3020e58dffa638ca21dc22d862c6bc02fea7e73b",
+    "url": "https://ghcr.io/v2/homebrew/core/openssl/3/blobs/sha256:0994a8029175af4578c3b93b3020e58dffa638ca21dc22d862c6bc02fea7e73b",
+    "version": "3.6.5"
+  },
   "brew-openssl@4-arm64-sequoia": {
     "sha256": "e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
     "url": "https://ghcr.io/v2/homebrew/core/openssl/4/blobs/sha256:e9968c63732a4aa642c6131f120d0a89a119885f7ce3cfec796ae672369b98a6",
@@ -179,10 +179,10 @@
     "url": "https://ghcr.io/v2/homebrew/core/pcre2/blobs/sha256:0ec47d18c50f5770db2b3f07b5b85644284cc6ee8e07e23b11d2727e95932b77",
     "version": "10.49"
   },
-  "brew-php@8.4-arm64-sequoia": {
-    "sha256": "7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-    "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-    "version": "8.4.26"
+  "brew-php-arm64-sequoia": {
+    "sha256": "6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
+    "url": "https://ghcr.io/v2/homebrew/core/php/blobs/sha256:6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
+    "version": "8.5.11"
   },
   "brew-protobuf-arm64-sequoia": {
     "sha256": "153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
@@ -233,16 +233,20 @@
     "url": "https://getcomposer.org/download/2.10.3/composer.phar"
   },
   "mysql-windows": {
-    "sha256": "a492371d687d2bab088b0062581144a0044b8964baefdf4faa579292b423d25c",
-    "url": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11-winx64.zip"
+    "sha256": "5592ea38e53edd67f5baa68303e7fcf2f0a40fc08978fdb4a7b0c38d12baea17",
+    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2-winx64.zip"
+  },
+  "nginx-macos-source": {
+    "sha256": "6c20565aa2325cb82216ae804f4a4ff1875179014759a381c42ddc8e11c4906d",
+    "url": "https://nginx.org/download/nginx-1.30.5.tar.gz"
   },
   "nginx-windows": {
-    "sha256": "bb65edcfc22a2214a4afaac59f038f560c02b98d4b49c5dca1206d3cc5d631c9",
-    "url": "https://nginx.org/download/nginx-1.31.6.zip"
+    "sha256": "e5afe28b6a50bec92c478bfe1a4d3758206b80fb77159277bc5c4e88955c2a35",
+    "url": "https://nginx.org/download/nginx-1.30.5.zip"
   },
   "php-windows": {
-    "sha256": "da68394f9193b7f6b89d0c76861a4034ae10efee7fd55a7255d8118c2acf70d7",
-    "url": "https://downloads.php.net/~windows/releases/php-8.4.26-nts-Win32-vs17-x64.zip"
+    "sha256": "0ea96e0d2b9b737a6036f05cf4e95c49313faa6d0f27bd97edb2742503f0c043",
+    "url": "https://downloads.php.net/~windows/releases/php-8.5.11-nts-Win32-vs17-x64.zip"
   },
   "phpmyadmin": {
     "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",
