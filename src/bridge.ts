@@ -21,13 +21,13 @@ export const preview: Snapshot = {
     { id: 'mysql', running: false, ready: false, port: 13306, pid: null, message: null },
     { id: 'phpmyadmin', running: false, ready: false, port: 8801, pid: null, message: null },
   ],
-  documentRoot: '~/fairway/www', dataDir: 'Fairway application data',
+  documentRoot: '~/fairway/www', dataDir: 'Fairway XMP application data',
   runtimeReady: false, runtimeVersions: null, pathInstalled: false,
   pathPhp: null, pathComposer: null, version: '0.1.0',
 };
 
 export function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (!window.__TAURI_INTERNALS__) return Promise.reject(new Error('Open the Fairway desktop app to use this control.'));
+  if (!window.__TAURI_INTERNALS__) return Promise.reject(new Error('Open the Fairway XMP desktop app to use this control.'));
   return window.__TAURI_INTERNALS__.invoke<T>(command, args);
 }
 

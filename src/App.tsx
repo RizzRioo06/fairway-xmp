@@ -110,8 +110,8 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway home">
-        <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span>fairway<span className="brand-period">.</span></span>
+      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home">
+        <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span className="brand-name">fairway<span className="brand-period">.</span><span className="brand-edition">XMP</span></span>
       </a>
       <div className="sidebar-label">DEVELOPMENT ENVIRONMENT</div>
       <nav aria-label="Main navigation">
@@ -122,7 +122,7 @@ export default function App() {
       <div className="sidebar-bottom">
         <div className="local-badge"><ShieldCheck size={16} /><div>Made for local learning<span>Everything stays on your computer</span></div></div>
         <button className="help-button" onClick={() => setHelp(true)}><CircleHelp size={17} />Getting started<ArrowUpRight size={14} /></button>
-        <div className="sidebar-footer">FAIRWAY <span>v{data.version}</span></div>
+        <div className="sidebar-footer">FAIRWAY XMP <span>v{data.version}</span></div>
       </div>
     </aside>
 
@@ -139,7 +139,7 @@ export default function App() {
             const service = data.services.find(s => s.id === id)!;
             return <ServiceCard key={id} service={service} version={versions?.[meta[id].version]} disabled={!usable} busy={!!busy} onAction={serviceAction} onOpen={open} onLog={showLog} />;
           })}</div>
-          {isDesktop && !data.runtimeReady && <div className="notice error" role="alert">Fairway’s PHP or database files are missing. Reinstall Fairway to restore them. Your projects and database data will be kept.</div>}
+          {isDesktop && !data.runtimeReady && <div className="notice error" role="alert">Fairway XMP’s PHP or database files are missing. Reinstall Fairway XMP to restore them. Your projects and database data will be kept.</div>}
 
           <div className="workspace-card">
             <div className="workspace-icon"><FolderOpen size={23} /></div>
@@ -166,15 +166,15 @@ export default function App() {
               <button className="primary" disabled={!isDesktop || anyRunning || !!busy} type="submit">Save ports</button>
             </form>
           </section>
-          <section className="settings-card"><div className="card-title"><h2>Command-line tools</h2><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Enabled' : 'Not enabled'}</span></div><p>Add PHP and Composer to your user PATH. Restart existing terminals and VS Code after changes.</p><dl className="path-list"><div><dt>Current PHP</dt><dd>{data.pathPhp ?? 'Not found'}</dd></div><div><dt>Current Composer</dt><dd>{data.pathComposer ?? 'Not found'}</dd></div></dl><p className="settings-hint">If an older PHP installation appears here, close and reopen Fairway and your terminal. “Open terminal” uses Fairway’s PHP and Composer.</p><button className="secondary" disabled={!isDesktop || !!busy || (!data.pathInstalled && !data.runtimeReady)} onClick={() => { void run('Updating user PATH…', async () => {
+          <section className="settings-card"><div className="card-title"><h2>Command-line tools</h2><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Enabled' : 'Not enabled'}</span></div><p>Add PHP and Composer to your user PATH. Restart existing terminals and VS Code after changes.</p><dl className="path-list"><div><dt>Current PHP</dt><dd>{data.pathPhp ?? 'Not found'}</dd></div><div><dt>Current Composer</dt><dd>{data.pathComposer ?? 'Not found'}</dd></div></dl><p className="settings-hint">If an older PHP installation appears here, close and reopen Fairway XMP and your terminal. “Open terminal” uses Fairway XMP’s PHP and Composer.</p><button className="secondary" disabled={!isDesktop || !!busy || (!data.pathInstalled && !data.runtimeReady)} onClick={() => { void run('Updating user PATH…', async () => {
             setData(await invoke<Snapshot>('cli_integration', { enabled: !data.pathInstalled })); setNotice({ kind: 'success', text: 'Command-line integration updated. Reopen your terminals and VS Code.' });
           }); }}>{data.pathInstalled ? 'Remove from user PATH' : 'Enable PHP and Composer'}</button></section>
           <section className="settings-card"><h2>Your files</h2><dl className="path-list"><div><dt>Document root</dt><dd>{data.documentRoot}</dd></div><div><dt>Settings and database data</dt><dd>{data.dataDir}</dd></div></dl><div className="button-row"><button className="secondary" disabled={!isDesktop || !!busy} onClick={() => open('logs')}><ScrollText size={15} />Open logs</button><button className="secondary" disabled={!isDesktop || !!busy} onClick={() => open('backups')}><FolderOpen size={15} />Open backups</button></div></section>
         </>}
 
         {view === 'updates' && <>
-          <div className="page-heading"><div><div className="eyebrow">KEEP YOUR TOOLS CURRENT</div><h1>A dependable environment.</h1><p>Tested updates for Fairway and your bundled tools.</p></div></div>
-          <section className="settings-card"><div className="card-title"><h2>Fairway {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : 'Composer'}</span><code>{versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>Updates are installed when you choose. Your projects and database data are preserved. Before installation, Fairway backs up student databases and stops its services.</p><button className="primary" disabled={!isDesktop || !!busy} onClick={() => { void run('Checking for updates…', async () => {
+          <div className="page-heading"><div><div className="eyebrow">KEEP YOUR TOOLS CURRENT</div><h1>A dependable environment.</h1><p>Tested updates for Fairway XMP and your bundled tools.</p></div></div>
+          <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : 'Composer'}</span><code>{versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>Updates are installed when you choose. Your projects and database data are preserved. Before installation, Fairway XMP backs up student databases and stops its services.</p><button className="primary" disabled={!isDesktop || !!busy} onClick={() => { void run('Checking for updates…', async () => {
             const result = await invoke<UpdateInfo>('check_update'); setUpdate(result);
             if (result.configured && !result.version) setNotice({ kind: 'success', text: 'You’re using the latest available release.' });
           }); }}><RefreshCw size={15} />Check for updates</button>
@@ -188,7 +188,7 @@ export default function App() {
     </main>
 
     {log && <Modal title={`${meta[log.service].name} logs`} onClose={() => setLog(null)}><pre className="log-output">{log.text}</pre><button className="secondary" disabled={!!busy} onClick={() => showLog(log.service)}><RefreshCw size={15} />Refresh log</button></Modal>}
-    {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Quitting Fairway stops its services. Minimize the window to keep working.</p></Modal>}
+    {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Quitting Fairway XMP stops its services. Minimize the window to keep working.</p></Modal>}
   </div>;
 }
 

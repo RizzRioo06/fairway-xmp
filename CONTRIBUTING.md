@@ -1,4 +1,4 @@
-# Contributing to Fairway
+# Contributing to Fairway XMP
 
 The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. A separate manual workflow builds Windows test installers as temporary Actions artifacts; CI does not publish GitHub Releases.
 

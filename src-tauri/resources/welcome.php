@@ -1,4 +1,4 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to Fairway</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to Fairway XMP</title>
 <style>body{font:17px/1.7 system-ui;background:#f5f6f8;color:#182431;margin:0;padding:10vh 8vw}main{max-width:680px;margin:auto}b{color:#16765c}h1{font-size:48px;line-height:1.1;letter-spacing:-2px}code{background:#e6ece9;padding:3px 7px;border-radius:5px}small{color:#68756e}</style></head>
 <body><main><b>fairway / www</b><h1>Your environment<br>is ready.</h1><p>Create a folder in <code>fairway/www</code>, add an <code>index.php</code>, and open that folder’s name in your browser.</p><p>For example: <code>http://127.0.0.1:<?= (int) $_SERVER['SERVER_PORT'] ?>/lesson-01/</code></p><small>PHP <?= htmlspecialchars(PHP_VERSION, ENT_QUOTES, 'UTF-8') ?> · Welcome to your first project.</small></main></body></html>

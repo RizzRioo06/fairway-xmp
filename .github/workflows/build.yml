@@ -1,4 +1,4 @@
-name: Build and verify Fairway
+name: Build and verify Fairway XMP
 
 on:
   push:

@@ -2,7 +2,7 @@
 
 A simple PHP development environment for Windows and Apple Silicon Macs. Start your web server and database from one control panel, then use your usual editor and terminal. No Docker setup required.
 
-![Fairway control panel with PHP, Nginx, MySQL, and phpMyAdmin running](docs/images/control-panel.png)
+![Fairway XMP control panel with PHP, Nginx, MySQL, and phpMyAdmin running](docs/images/control-panel.png)
 
 ## Downloads
 
@@ -32,14 +32,14 @@ Intel Macs and Linux are not supported. Install Node.js separately if your cours
 
 Once an installer is available:
 
-1. Install Fairway, then reopen your terminal and VS Code.
-2. Open Fairway and click **Start all**. Wait for **All services ready**.
+1. Install Fairway XMP, then reopen your terminal and VS Code.
+2. Open Fairway XMP and click **Start all**. Wait for **All services ready**.
 3. Click **Open folder**. Inside `fairway/www`, create a folder named `lesson-01`.
 4. Add an `index.php` file:
 
    ```php
    <?php
-   echo 'Hello from Fairway!';
+   echo 'Hello from Fairway XMP!';
    ```
 
 5. Open [http://127.0.0.1:8800/lesson-01/](http://127.0.0.1:8800/lesson-01/) in your browser.
@@ -67,7 +67,7 @@ Use these settings in your PHP projects:
 | Username | `fairway` |
 | Password | `fairway` |
 
-You can create additional databases in phpMyAdmin. These credentials are for your local lessons; Fairway’s services accept connections from your computer only.
+You can create additional databases in phpMyAdmin. These credentials are for your local lessons; Fairway XMP’s services accept connections from your computer only.
 
 Click **Back up databases** to save a SQL backup. Find saved backups under **Settings → Open backups**. You can import a backup through phpMyAdmin.
 
@@ -80,18 +80,18 @@ Click **Back up databases** to save a SQL backup. Find saved backups under **Set
 | MySQL | `13306` |
 | PHP’s internal connection to Nginx | `19000` |
 
-If another application is using a port, Fairway explains the conflict. Stop all services, change the port in **Settings**, and save. Saved ports stay the same when you reopen Fairway. Update your project’s database connection settings if you change the MySQL port.
+If another application is using a port, Fairway XMP explains the conflict. Stop all services, change the port in **Settings**, and save. Saved ports stay the same when you reopen Fairway XMP. Update your project’s database connection settings if you change the MySQL port.
 
 ## Finishing a lesson
 
-Click **Stop all** or quit Fairway to stop its services. Minimize the window if you want them to keep running.
+Click **Stop all** or quit Fairway XMP to stop its services. Minimize the window if you want them to keep running.
 
-Use **Updates** to check for a new version. Updates preserve your projects and database data; before an in-app update, Fairway backs up your databases and stops services.
+Use **Updates** to check for a new version. Updates preserve your projects and database data; before an in-app update, Fairway XMP backs up your databases and stops services.
 
-To uninstall, use Windows’ installed-apps settings or **Uninstall Fairway.command** inside the macOS application bundle. The uninstaller removes Fairway’s PHP and Composer PATH entries. Your projects and database data are kept by default; deleting them is a separate choice.
+To uninstall, use Windows’ installed-apps settings or **Uninstall Fairway XMP.command** inside the macOS application bundle. The uninstaller removes Fairway XMP’s PHP and Composer PATH entries. Your projects and database data are kept by default; deleting them is a separate choice.
 
 ## Help and license
 
-For problems or suggestions, [open an issue](https://github.com/eimg/fairway-xmp/issues). Include your operating system, what you tried, and any error shown in Fairway.
+For problems or suggestions, [open an issue](https://github.com/eimg/fairway-xmp/issues). Include your operating system, what you tried, and any error shown in Fairway XMP.
 
-Fairway’s application code is available under the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). To work on Fairway itself, see [Contributing](CONTRIBUTING.md).
+Fairway XMP’s application code is available under the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). To work on Fairway XMP itself, see [Contributing](CONTRIBUTING.md).

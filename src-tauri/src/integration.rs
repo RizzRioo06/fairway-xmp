@@ -203,10 +203,9 @@ fn read_profile(file: &Path) -> Result<String> {
 pub fn profile_with_block(previous: &str, block: Option<&str>) -> Result<String> {
     let mut text = previous.to_string();
     while let Some(start) = text.find(BEGIN) {
-        let end = text[start..]
-            .find(END)
-            .ok_or("The existing Fairway PATH block is incomplete; repair it before continuing.")?
-            + start
+        let end = text[start..].find(END).ok_or(
+            "The existing Fairway XMP PATH block is incomplete; repair it before continuing.",
+        )? + start
             + END.len();
         let end = if text[end..].starts_with('\n') {
             end + 1

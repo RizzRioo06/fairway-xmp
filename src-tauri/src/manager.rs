@@ -183,7 +183,7 @@ impl Manager {
 
     pub fn preflight(&self, ids: &[&str]) -> Result<()> {
         if !self.runtime_ready() {
-            return Err("Fairway’s PHP or database files are missing or incomplete. Reinstall Fairway to restore them; your projects and database data will be kept.".into());
+            return Err("Fairway XMP’s PHP or database files are missing or incomplete. Reinstall Fairway XMP to restore them; your projects and database data will be kept.".into());
         }
         let excluded = [
             self.ports.website,

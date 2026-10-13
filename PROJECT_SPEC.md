@@ -1,6 +1,8 @@
-# Fairway development environment
+# Fairway XMP development environment
 
 ## Product
+
+Display name: **Fairway XMP** on Windows and macOS. The green application mark is shared by the app, Windows installer, and uninstaller. The macOS bundle is `/Applications/Fairway XMP.app`; installer hooks and removal target only that bundle.
 
 A classroom PHP development environment with one consistent desktop control panel.
 Supported release targets: Windows 10 22H2 / Windows 11 x64, and macOS 15+ Apple Silicon.
@@ -31,7 +33,7 @@ The application tracks processes it starts. Nginx startup starts PHP; stopping P
 
 Minimizing leaves services running. Closing the window stops all; if graceful shutdown fails, the window stays open with the reason. Services do not start at login or automatically at app launch.
 
-Status distinguishes an owned live process from a ready endpoint. Website/phpMyAdmin listeners are checked against a Fairway health endpoint. Unexpected process exits surface a log hint.
+Status distinguishes an owned live process from a ready endpoint. Website/phpMyAdmin listeners are checked against a Fairway XMP health endpoint. Unexpected process exits surface a log hint.
 
 ## Database
 
@@ -55,7 +57,7 @@ Uninstall requires stopped services and preserves coursework/data by default. De
 
 ## Updates
 
-The source repository and future download location are `https://github.com/eimg/fairway-xmp`. Unsigned builds offer links to the releases page. The default signed-update endpoint is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`. Release overlays configure the HTTPS endpoint and Tauri public verification key; signed artifacts are mandatory for the updater. Checks are student-triggered. Before installation, Fairway starts MySQL if necessary to make a student-database backup, then gracefully stops services. Runtime and UI are updated together. Only tested updates within the pinned MySQL 8.4 family are in scope; major database changes require a separate reviewed migration strategy.
+The source repository and future download location are `https://github.com/eimg/fairway-xmp`. Unsigned builds offer links to the releases page. The default signed-update endpoint is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`. Release overlays configure the HTTPS endpoint and Tauri public verification key; signed artifacts are mandatory for the updater. Checks are student-triggered. Before installation, Fairway XMP starts MySQL if necessary to make a student-database backup, then gracefully stops services. Runtime and UI are updated together. Only tested updates within the pinned MySQL 8.4 family are in scope; major database changes require a separate reviewed migration strategy.
 
 Installer upgrades must also preserve data and coursework. Release testing must verify clean-machine operation without Homebrew, OS signing/notarization, Windows prerequisites, non-ASCII/space-containing user paths, uninstall, update recovery, and database compatibility. A successful compile is not proof of these checks.
 

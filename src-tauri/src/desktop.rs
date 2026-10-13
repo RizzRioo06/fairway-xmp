@@ -23,7 +23,7 @@ async fn access<T: Send + 'static>(
     tauri::async_runtime::spawn_blocking(move || {
         let mut manager = state
             .lock()
-            .map_err(|_| "The service manager is unavailable. Restart Fairway.")?;
+            .map_err(|_| "The service manager is unavailable. Restart Fairway XMP.")?;
         f(&mut manager)
     })
     .await
@@ -207,7 +207,7 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
                 })?;
                 if crate::process::pid_alive(pid) {
                     return Err(
-                        "Open Fairway, stop all services, and quit before uninstalling.".into(),
+                        "Open Fairway XMP, stop all services, and quit before uninstalling.".into(),
                     );
                 }
                 std::fs::remove_file(path).map_err(|e| e.to_string())?;
@@ -221,7 +221,7 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
             integration::remove(&layout)?;
             // Refuse cleanup while an owned server may still be using the data directory.
             if layout.data.join("mysql.pid").exists() || layout.data.join("nginx.pid").exists() {
-                return Err("Open Fairway and stop all services before deleting data.".into());
+                return Err("Open Fairway XMP and stop all services before deleting data.".into());
             }
             if layout.data.exists() {
                 std::fs::remove_dir_all(&layout.data).map_err(|e| e.to_string())?;
@@ -322,7 +322,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("Fairway could not initialize");
+        .expect("Fairway XMP could not initialize");
     app.run(move |app, event| {
         if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
             if code == Some(tauri::RESTART_EXIT_CODE) {

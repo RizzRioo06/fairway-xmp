@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
-APP='/Applications/Fairway.app/Contents/MacOS/fairway'
+APP='/Applications/Fairway XMP.app/Contents/MacOS/fairway'
 USER_NAME=$(/usr/bin/stat -f '%Su' /dev/console)
 if [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then
-  echo 'Install Fairway from a logged-in student account.' >&2
+  echo 'Install Fairway XMP from a logged-in student account.' >&2
   exit 1
 fi
 if [ -x "$APP" ]; then

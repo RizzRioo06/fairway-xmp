@@ -5,4 +5,4 @@ if [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then
   echo 'No logged-in student account was found for user PATH integration.' >&2
   exit 1
 fi
-/usr/bin/sudo -u "$USER_NAME" -H '/Applications/Fairway.app/Contents/MacOS/fairway' --install-cli
+/usr/bin/sudo -u "$USER_NAME" -H '/Applications/Fairway XMP.app/Contents/MacOS/fairway' --install-cli

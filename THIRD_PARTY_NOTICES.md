@@ -1,6 +1,6 @@
 # Third-party software
 
-Fairway bundles independently licensed software. The Fairway application code is MIT licensed; that license does not replace the licenses of bundled components.
+Fairway XMP bundles independently licensed software. The Fairway XMP application code is MIT licensed; that license does not replace the licenses of bundled components.
 
 | Component | License / upstream |
 |---|---|
