@@ -1,0 +1,92 @@
+name: Windows test installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      record_runtime_checksums:
+        description: Record Windows runtime download checksums for review
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: windows-test-installer
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npm run test:scripts
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Prepare Windows runtime
+        run: |
+          if ('${{ inputs.record_runtime_checksums }}' -eq 'true') {
+            python scripts/prepare_runtime.py --resume-lock
+          } else {
+            python scripts/prepare_runtime.py
+          }
+      - name: Exercise real services, backups, and PATH cleanup
+        run: |
+          $root = Join-Path (Get-Location) '.runtime-work/windows-smoke'
+          cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- $root
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build x64 NSIS installer
+        run: npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc
+      - name: Collect installer and checksums
+        run: |
+          $output = 'artifacts/windows-test'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $installers = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe')
+          if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          Copy-Item $installers[0].FullName $output
+          Copy-Item runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
+          $hash = Get-FileHash $installers[0].FullName -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $($installers[0].Name)" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
+          @{
+            commit = '${{ github.sha }}'
+            run = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            target = 'x86_64-pc-windows-msvc'
+            signed = $false
+            purpose = 'Local testing; not a published release'
+          } | ConvertTo-Json | Set-Content "$output/build-info.json" -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fairway-windows-x64-test
+          path: artifacts/windows-test/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Save failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-diagnostics
+          path: |
+            runtime-downloads.lock.json
+            .runtime-work/windows-smoke/student data/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+# Manual test builds only. No release creation, tags, or write permissions.

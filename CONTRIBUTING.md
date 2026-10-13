@@ -1,6 +1,6 @@
 # Contributing to Fairway
 
-The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS; CI does not publish installers or releases.
+The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. A separate manual workflow builds Windows test installers as temporary Actions artifacts; CI does not publish GitHub Releases.
 
 ## Development
 
@@ -65,6 +65,8 @@ cargo tauri build --config artifacts/tauri.release.json
 Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. The default feed is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
 
 ## Publishing a future release
+
+For an unsigned x64 Windows test installer, dispatch the **Windows test installer** workflow with `gh workflow run windows-test-build.yml --ref main`. It checks the source, stages the pinned runtime, exercises real services and cleanup, then builds an NSIS installer. Download its `fairway-windows-x64-test` artifact with `gh run download RUN_ID --name fairway-windows-x64-test --dir artifacts/windows-test`. The artifact includes its SHA256, source commit, and proposed Windows runtime checksum lock for review. It expires after 14 days and does not create a GitHub Release.
 
 Binary releases are held until native testing is complete. Publish them only from a reviewed commit after verifying installation, updates, backups, and removal on the supported systems.
 
