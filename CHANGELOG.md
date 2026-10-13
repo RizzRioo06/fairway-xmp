@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.1.0-alpha.2 — Unreleased
+## 0.1.0-alpha.2 — 2026-10-14
 
 - PHP 8.5.11, MySQL 9.7.2 LTS, and stable Nginx 1.30.5.
 - Aligned Updates buttons, clearer project paths, and improved layouts for smaller windows and long version labels.
 - A saved copy of your stopped MySQL 8.4 database before its first upgrade to 9.7.
 
-Composer 2.10.3 and phpMyAdmin 5.2.3 remain current. Keep database backups before testing an alpha version.
+Composer 2.10.3 and phpMyAdmin 5.2.3 remain current. Both installers are unsigned, and updates are installed manually. Back up your databases, stop services, and quit Fairway XMP before updating.
 
 ## 0.1.0-alpha.1 — 2026-10-13
 

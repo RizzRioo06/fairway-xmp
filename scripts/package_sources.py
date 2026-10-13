@@ -7,7 +7,7 @@ import concurrent.futures
 import hashlib
 import http.client
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -15,7 +15,52 @@ import tarfile
 import urllib.parse
 import zipfile
 
-from prepare_runtime import CACHE, LOCK_PATH, MANIFEST, ROOT, download, read_json
+from prepare_runtime import CACHE, LOCK_PATH, MANIFEST, ROOT, download, read_json, request
+
+
+def archive_git_tree(archive):
+    """Hash a Gitiles snapshot's files and modes without extracting or executing it."""
+    def object_hash(kind, body):
+        return hashlib.sha1(kind + b' ' + str(len(body)).encode() + b'\0' + body).digest()
+
+    root = {}
+    with tarfile.open(archive) as bundle:
+        for member in bundle:
+            if member.isdir(): continue
+            path = PurePosixPath(member.name)
+            if path.is_absolute() or '..' in path.parts:
+                raise RuntimeError('Unsafe source archive path')
+            parent = root
+            for part in path.parts[:-1]: parent = parent.setdefault(part, {})
+            if member.isfile():
+                body = bundle.extractfile(member).read()
+                mode = b'100755' if member.mode & 0o111 else b'100644'
+            elif member.issym():
+                body, mode = member.linkname.encode(), b'120000'
+            else:
+                raise RuntimeError('Unexpected source archive member')
+            if path.name in parent: raise RuntimeError('Duplicate source archive path')
+            parent[path.name] = (mode, object_hash(b'blob', body))
+
+    def tree(folder):
+        body = b''
+        for name, value in sorted(folder.items(), key=lambda item: item[0].encode() + (b'/' if isinstance(item[1], dict) else b'')):
+            mode, digest = (b'40000', tree(value)) if isinstance(value, dict) else value
+            body += mode + b' ' + name.encode() + b'\0' + digest
+        return object_hash(b'tree', body)
+    return tree(root).hex()
+
+
+def verify_gitiles_source(archive, item):
+    revision = item['revision']
+    url = item['url'].split('/+archive/', 1)[0] + '/+/' + revision + '?format=JSON'
+    with request(url) as response:
+        data = json.loads(response.read().decode().split('\n', 1)[1])
+    if data['commit'] != revision or archive_git_tree(archive) != data['tree']:
+        raise RuntimeError(f'Source contents do not match the pinned Git commit for {item["name"]}')
+    if item.get('gitTree') and item['gitTree'] != data['tree']:
+        raise RuntimeError(f'The pinned source tree changed for {item["name"]}')
+    item['gitTree'] = data['tree']
 
 
 def source_input(name, url, sha256=None):
@@ -24,8 +69,11 @@ def source_input(name, url, sha256=None):
     return {'name': name, 'url': url, 'sha256': sha256, 'file': name.replace('@', '-') + suffix}
 
 
-def collect_plan(stage):
+def collect_plan(stage, refresh=False):
     lock = json.loads(LOCK_PATH.read_text())
+    source_lock = ROOT / 'runtime-sources.lock.json'
+    pinned = {item['name']: item for item in json.loads(source_lock.read_text())} if source_lock.exists() else {}
+    pinned_by_url = {item['url']: item for item in json.loads(source_lock.read_text())} if source_lock.exists() else {}
     plan = []
     recipes = stage / 'homebrew'
     recipes.mkdir(parents=True, exist_ok=True)
@@ -62,6 +110,13 @@ def collect_plan(stage):
             patch_sha = re.search(r'^\s+sha256 "([0-9a-f]{64})"', block, re.M)
             local_patch = re.search(r'^\s+file "([^"]+)"', block, re.M)
             if local_patch:
+                previous = pinned.get(f'{name}-resource-{index}')
+                previous_main = pinned.get(name, {})
+                if previous and previous_main.get('binary', {}).get('sha256') == entry['sha256']:
+                    # An unchanged bottle keeps its historical patch URL even
+                    # when Homebrew's current tap head moves forward.
+                    plan.append(dict(previous))
+                    continue
                 if tap is None:
                     tap = read_json(f'https://formulae.brew.sh/api/formula/{urllib.parse.quote(name, safe="")}.json')
                     if tap['bottle']['stable']['files']['arm64_sequoia']['sha256'] != entry['sha256']:
@@ -76,6 +131,10 @@ def collect_plan(stage):
             if 'patch' in extra['url']:
                 extra['file'] = f'{name.replace("@", "-")}-patch-{index}.patch'
             plan.append(extra)
+    if 'nginx-macos-source' in lock:
+        nginx = lock['nginx-macos-source']
+        plan.append(source_input('nginx', nginx['url'], nginx['sha256']))
+        shutil.copyfile(ROOT / 'src-tauri/resources/runtime/nginx/build.json', stage / 'nginx-build.json')
     # The release distribution includes readable PHP/JavaScript and vendor files;
     # the Git tag also supplies the preferred development sources/build inputs.
     pma = lock['phpmyadmin']
@@ -104,18 +163,29 @@ def collect_plan(stage):
                 continue
             seen.add(match.group(0))
             repo, revision = match.groups()
-            extra = source_input('windows-' + repo.replace('/', '-'), f'https://codeload.github.com/{repo}/tar.gz/{revision}')
+            # PHP may bundle two versions of one dependency (such as OpenSSL).
+            # Keep their source archives distinct so parallel copies cannot overwrite them.
+            extra = source_input('windows-' + repo.replace('/', '-') + '-' + revision[:12], f'https://codeload.github.com/{repo}/tar.gz/{revision}')
             extra.update(revision=revision, binaryPackage=package['name'], binaryVersion=package.get('versionInfo'))
             plan.append(extra)
-    source_lock = ROOT / 'runtime-sources.lock.json'
-    if source_lock.exists():
-        pinned = {item['name']: item for item in json.loads(source_lock.read_text())}
+    if pinned:
         for item in plan:
-            previous = pinned.get(item['name'])
+            previous = pinned.get(item['name']) or pinned_by_url.get(item['url'])
             if previous:
+                if refresh and item.get('revision') and '.googlesource.com/' in item['url']:
+                    # Gitiles may recompress an unchanged snapshot. A refreshed
+                    # archive must reproduce the pinned commit's full Git tree.
+                    if item.get('revision') == previous.get('revision') and previous.get('gitTree'):
+                        item['gitTree'] = previous['gitTree']
+                    continue
                 if item['url'] != previous['url']:
+                    if refresh: continue
                     raise RuntimeError(f'Source URL changed for {item["name"]}; review the source lock')
+                if item.get('sha256') and item['sha256'] != previous['sha256']:
+                    raise RuntimeError(f'Source checksum changed for {item["name"]}; refused to replace its pin')
                 item['sha256'] = previous['sha256']
+    if len({item['file'] for item in plan}) != len(plan):
+        raise RuntimeError('Source archive filenames must be unique')
     return plan
 
 
@@ -123,11 +193,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plan-only', action='store_true', help='Write recipes and download plan without fetching source archives')
     parser.add_argument('--source-ref', default='HEAD', help='Application source revision matching the installers')
+    parser.add_argument('--refresh-lock', action='store_true', help='Allow reviewed version changes while retaining unchanged source pins')
     args = parser.parse_args()
     version = json.loads((ROOT / 'package.json').read_text())['version']
     stage = ROOT / '.runtime-work' / f'sources-{version}'
     stage.mkdir(parents=True, exist_ok=True)
-    plan = collect_plan(stage)
+    plan = collect_plan(stage, refresh=args.refresh_lock)
     plan_path = stage / 'source-inputs.json'
     plan_path.write_text(json.dumps(plan, indent=2) + '\n')
     if args.plan_only:
@@ -155,6 +226,8 @@ def main():
                 break
         if archive is None:
             raise RuntimeError(f'Cannot obtain source for {item["name"]}') from failure
+        if item.get('revision') and '.googlesource.com/' in item['url']:
+            verify_gitiles_source(archive, item)
         destination = sources / item['file']
         shutil.copyfile(archive, destination)
         print(f'Verified {item["name"]}: {destination.stat().st_size / 1024**2:.1f} MiB', flush=True)
@@ -162,6 +235,10 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         verified = list(pool.map(fetch, plan))
+    expected_files = {item['file'] for item in verified}
+    for obsolete in sources.iterdir():
+        if obsolete.is_file() and obsolete.name not in expected_files:
+            obsolete.unlink()
     plan_path.write_text(json.dumps(verified, indent=2) + '\n')
     (ROOT / 'runtime-sources.lock.json').write_text(json.dumps(verified, indent=2) + '\n')
     commit = subprocess.check_output(['git', 'rev-parse', args.source_ref], cwd=ROOT, text=True).strip()
@@ -175,7 +252,7 @@ This archive accompanies the Windows x64 and macOS ARM64 installers.
 Fairway XMP source commit: {commit}.
 
 `upstream/` contains source distributions for every bundled Homebrew component,
-MySQL (also used by the official Windows distribution), phpMyAdmin, Composer,
+MySQL (also used by the official Windows distribution), Nginx, phpMyAdmin, Composer,
 and the certificate bundle. `source-inputs.json` maps each archive to its URL,
 SHA-256, and matching macOS bottle when applicable.
 
@@ -185,6 +262,12 @@ resource sources are in `upstream/`. Use the recorded recipes to build native
 components with Homebrew and their listed build prerequisites. These source
 archives retain the components' own licenses.
 
+`nginx-build.json` records the stable Nginx source and configure options for the
+Mac build. The header/library paths in that record point to temporary extracted
+bottle folders on the builder; recreate them using the pinned PCRE2/OpenSSL
+inputs. The Mac build uses SDK zlib, stages the executable and MIME types, and
+relocates library load paths with `scripts/prepare_runtime.py`.
+
 `windows-php/` retains the official PHP distribution's software bill of
 materials and notices. Its immutable repository references supply Windows
 dependency sources and build recipes under `upstream/windows-*`.
@@ -192,8 +275,8 @@ dependency sources and build recipes under `upstream/windows-*`.
 `fairway-xmp-source.tar.gz` contains the application, configuration templates,
 and scripts that stage, relocate, and package the runtimes. Extract it and see
 CONTRIBUTING.md for platform build instructions. `scripts/prepare_runtime.py`
-describes the only Fairway changes to the native binaries: staging and macOS
-library load-path relocation, followed by ad-hoc signing. Windows uses the
+describes staging and macOS library load-path relocation, followed by ad-hoc
+signing, and the stable Nginx source build. Windows uses the
 unmodified upstream executables and DLLs. No MySQL or PHP source patches are
 applied by Fairway; upstream Homebrew patches are recorded in the recipes.
 
