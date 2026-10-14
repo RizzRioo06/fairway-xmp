@@ -43,6 +43,29 @@ def main(installer):
             call('ports', *map(str, ports))
             call('php', '-r', 'echo PHP_VERSION;')
             assert 'Composer version' in call('composer', '--version').stdout
+            # Q must queue shutdown while first-time initialization is still busy.
+            master, slave = pty.openpty()
+            original = termios.tcgetattr(slave)
+            proc = subprocess.Popen([str(cli)], env=env, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+            import select
+            rendered = b''
+            deadline = time.monotonic() + 15
+            while b'phpMyAdmin:' not in rendered and time.monotonic() < deadline:
+                if select.select([master], [], [], .2)[0]: rendered += os.read(master, 65536)
+            assert b'Fairway XMP' in rendered, rendered
+            os.write(master, b'a')
+            deadline = time.monotonic() + 15
+            while b'Working' not in rendered and time.monotonic() < deadline:
+                if select.select([master], [], [], .2)[0]: rendered += os.read(master, 65536)
+            assert b'Working' in rendered, rendered
+            os.write(master, b'Q')
+            deadline = time.monotonic() + 120
+            while proc.poll() is None and time.monotonic() < deadline:
+                if select.select([master], [], [], .2)[0]: rendered += os.read(master, 65536)
+            assert proc.wait(timeout=5) == 0, rendered[-8192:]
+            assert termios.tcgetattr(slave) == original
+            os.close(master); os.close(slave)
+            assert all(not s['running'] for s in json.loads(call('status', '--json').stdout)['services'])
             call('start')
             status = json.loads(call('status', '--json').stdout)
             assert all(s['ready'] for s in status['services']), status
@@ -58,7 +81,7 @@ def main(installer):
             while b'phpMyAdmin:' not in rendered and time.monotonic() < deadline:
                 if select.select([master], [], [], .2)[0]: rendered += os.read(master, 65536)
             assert b'Fairway XMP' in rendered and b'Ready' in rendered, rendered
-            os.write(master, b'q')
+            os.write(master, b'jkq')
             assert proc.wait(timeout=15) == 0
             assert termios.tcgetattr(slave) == original
             os.close(master); os.close(slave)

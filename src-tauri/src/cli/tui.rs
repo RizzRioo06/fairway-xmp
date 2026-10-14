@@ -74,36 +74,42 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
         return Err("Use fairway status in a terminal without ANSI support.".into());
     }
     let terminal = Terminal::enter()?;
-    let (sender, receiver) = mpsc::channel::<Result<serde_json::Value>>();
+    let (sender, receiver) = mpsc::channel::<(bool, Result<serde_json::Value>)>();
     let mut snapshot: Option<Snapshot> = None;
     let mut selected = 0;
     let mut message =
         "q closes this dashboard and leaves services running. Q shuts everything down.".to_string();
     let mut log: Option<String> = None;
-    let mut busy = false;
+    let mut action_pending = false;
+    let mut suppress_action_reply = false;
+    let mut input = std::collections::VecDeque::new();
     let mut shutting_down = false;
     let mut refresh = Instant::now() - Duration::from_secs(3);
     while !EXIT.load(Ordering::Relaxed) {
-        if let Ok(result) = receiver.try_recv() {
-            busy = false;
-            match result {
-                Ok(value) => {
-                    if shutting_down {
+        if let Ok((shutdown_reply, result)) = receiver.try_recv() {
+            if shutdown_reply {
+                shutting_down = false;
+                match result {
+                    Ok(_) => {
+                        supervisor::wait_shutdown(layout)?;
                         return Ok(());
                     }
-                    if let Some(text) = value.as_str() {
-                        message = clean(text);
-                    } else {
-                        message = "Done.".into();
-                    }
+                    Err(error) => message = clean(&error),
                 }
-                Err(error) => {
-                    message = clean(&error);
-                    shutting_down = false;
+            } else {
+                action_pending = false;
+                if suppress_action_reply {
+                    suppress_action_reply = false;
+                } else if !shutting_down {
+                    message = match result {
+                        Ok(value) => clean(value.as_str().unwrap_or("Done.")),
+                        Err(error) => clean(&error),
+                    };
                 }
             }
             refresh = Instant::now() - Duration::from_secs(3);
         }
+        let busy = action_pending || shutting_down;
         if !busy && refresh.elapsed() >= Duration::from_secs(2) {
             match supervisor::call(layout, &Request::Status)
                 .and_then(|data| serde_json::from_value(data).map_err(|e| e.to_string()))
@@ -114,20 +120,13 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
             refresh = Instant::now();
         }
         draw(snapshot.as_ref(), selected, busy, &message, log.as_deref())?;
-        let mut descriptor = libc::pollfd {
-            fd: 0,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        if unsafe { libc::poll(&mut descriptor, 1, 200) } <= 0 {
+        let Some(key) = next_key(&mut input)? else {
             continue;
-        }
-        let mut input = [0_u8; 32];
-        let count = io::stdin().read(&mut input).map_err(|e| e.to_string())?;
-        if count == 0 {
+        };
+        if key.is_empty() {
             break;
         }
-        let key = &input[..count];
+        let key = key.as_slice();
         if matches!(key, b"q" | b"\x03") {
             break;
         }
@@ -137,6 +136,20 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
         }
         if matches!(key, b"\x1b[B" | b"j") {
             selected = (selected + 1).min(1);
+            continue;
+        }
+        if key == b"Q" {
+            if !shutting_down {
+                match spawn_command(layout, Request::Shutdown, &sender, true) {
+                    Ok(()) => {
+                        shutting_down = true;
+                        suppress_action_reply = action_pending;
+                        message =
+                            "Shutting down… Waiting for any current operation to finish.".into();
+                    }
+                    Err(error) => message = clean(&error),
+                }
+            }
             continue;
         }
         if busy {
@@ -154,10 +167,6 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
                 service: "all".into(),
             },
             b"b" => Request::Backup,
-            b"Q" => {
-                shutting_down = true;
-                Request::Shutdown
-            }
             b"l" | b"f" => {
                 let id = if key == b"f" { "php" } else { &service };
                 log = Some(
@@ -203,15 +212,71 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
             }
             _ => continue,
         };
-        let layout = layout.clone();
-        let sender = sender.clone();
-        thread::spawn(move || {
-            let _ = sender.send(supervisor::call(&layout, &request));
-        });
-        busy = true;
-        message = "Working… You can close the dashboard with q; the operation will finish in the background.".into();
+        match spawn_command(layout, request, &sender, false) {
+            Ok(()) => {
+                action_pending = true;
+                message = "Working… q closes the dashboard; Q queues graceful shutdown.".into();
+            }
+            Err(error) => message = clean(&error),
+        }
     }
     Ok(())
+}
+
+fn spawn_command(
+    layout: &Layout,
+    request: Request,
+    sender: &mpsc::Sender<(bool, Result<serde_json::Value>)>,
+    shutdown: bool,
+) -> Result<()> {
+    // Deliver the request before acknowledging the key. Closing the dashboard
+    // immediately afterwards must not cancel an accepted service action.
+    let stream = supervisor::send_request(layout, &request)?;
+    let layout = layout.clone();
+    let sender = sender.clone();
+    thread::spawn(move || {
+        let _ = sender.send((shutdown, supervisor::receive_response(&layout, &stream)));
+    });
+    Ok(())
+}
+
+fn read_input(pending: &mut std::collections::VecDeque<u8>, timeout: i32) -> Result<Option<bool>> {
+    let mut descriptor = libc::pollfd {
+        fd: 0,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    if unsafe { libc::poll(&mut descriptor, 1, timeout) } <= 0 {
+        return Ok(None);
+    }
+    let mut bytes = [0; 32];
+    let count = io::stdin().read(&mut bytes).map_err(|e| e.to_string())?;
+    pending.extend(&bytes[..count]);
+    Ok(Some(count != 0))
+}
+
+fn next_key(pending: &mut std::collections::VecDeque<u8>) -> Result<Option<Vec<u8>>> {
+    if pending.is_empty() {
+        match read_input(pending, 200)? {
+            None => return Ok(None),
+            Some(false) => return Ok(Some(Vec::new())),
+            Some(true) => (),
+        }
+    }
+    let first = pending.pop_front().unwrap();
+    if first != 27 {
+        return Ok(Some(vec![first]));
+    }
+    // Allow split ANSI arrow sequences, while retaining following ordinary keys.
+    if pending.len() < 2 {
+        let _ = read_input(pending, 50)?;
+    }
+    if pending.len() >= 2 && pending.front() == Some(&b'[') {
+        let middle = pending.pop_front().unwrap();
+        let last = pending.pop_front().unwrap();
+        return Ok(Some(vec![first, middle, last]));
+    }
+    Ok(Some(vec![first]))
 }
 
 fn draw(

@@ -73,7 +73,7 @@ pub(super) fn ensure(layout: &Layout) -> Result<()> {
     }
 }
 
-pub(super) fn call(layout: &Layout, request: &Request) -> Result<serde_json::Value> {
+pub(super) fn send_request(layout: &Layout, request: &Request) -> Result<UnixStream> {
     let mut socket = UnixStream::connect(layout.data.join("supervisor.sock"))
         .map_err(|e| format!("Cannot connect to supervisor: {e}"))?;
     socket
@@ -87,8 +87,12 @@ pub(super) fn call(layout: &Layout, request: &Request) -> Result<serde_json::Val
             .map_err(|e| e.to_string())?;
     bytes.push(b'\n');
     socket.write_all(&bytes).map_err(|e| e.to_string())?;
+    Ok(socket)
+}
+
+pub(super) fn receive_response(layout: &Layout, socket: &UnixStream) -> Result<serde_json::Value> {
     let response: Response =
-        serde_json::from_slice(&read_line(&socket, MAX_RESPONSE)?).map_err(|e| e.to_string())?;
+        serde_json::from_slice(&read_line(socket, MAX_RESPONSE)?).map_err(|e| e.to_string())?;
     if response.runtime != layout.runtime {
         return Err("Another Fairway installation owns the services. Shut it down using its original command before switching installations.".into());
     }
@@ -96,6 +100,24 @@ pub(super) fn call(layout: &Layout, request: &Request) -> Result<serde_json::Val
         Some(error) => Err(error),
         None => Ok(response.data),
     }
+}
+
+pub(super) fn call(layout: &Layout, request: &Request) -> Result<serde_json::Value> {
+    receive_response(layout, &send_request(layout, request)?)
+}
+
+pub(super) fn wait_shutdown(layout: &Layout) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while layout.data.join("supervisor.sock").exists() {
+        if Instant::now() >= deadline {
+            return Err(
+                "Shutdown completed but the supervisor socket has not closed. Check its log."
+                    .into(),
+            );
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    Ok(())
 }
 
 fn read_line(stream: &UnixStream, limit: u64) -> Result<Vec<u8>> {
