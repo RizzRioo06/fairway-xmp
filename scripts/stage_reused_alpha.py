@@ -32,7 +32,9 @@ def main():
     version = manifest['releaseVersion']
     tag = 'v' + version
     repo = os.environ['GH_REPO']
-    release = json.loads(run('gh', 'api', f'repos/{repo}/releases/tags/{tag}'))
+    # The release-by-tag endpoint excludes drafts; the authenticated list includes them.
+    releases = json.loads(run('gh', 'api', f'repos/{repo}/releases?per_page=100'))
+    release = next(item for item in releases if item['tag_name'] == tag)
     if not release['draft'] or not release['prerelease']:
         raise RuntimeError('Staging requires an existing draft prerelease')
     output = ROOT / 'artifacts' / ('alpha-' + version)
@@ -79,7 +81,8 @@ def main():
                      'runtime-sources.lock.json', 'runtime-manifest.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md'):
         shutil.copy2(ROOT / filename, output / filename)
     build_info = {'releaseVersion': version, 'embeddedAppVersion': manifest['embeddedVersion'],
-                  'releaseSourceCommit': run('git', 'rev-parse', 'HEAD'),
+                  'releaseSourceCommit': run('git', 'rev-parse', tag),
+                  'stagingSourceCommit': run('git', 'rev-parse', 'HEAD'),
                   'applicationRebuilt': False, 'macosInstallerRepackaged': True,
                   'macos': mac, **builds, 'reusedBundledToolSources': sources,
                   'runtime': json.loads((ROOT / 'runtime-manifest.json').read_text())}
