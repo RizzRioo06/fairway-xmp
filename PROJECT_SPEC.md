@@ -26,8 +26,6 @@ A detached user supervisor owns the service manager. A private Unix socket and l
 
 The offline `.run` and equivalent `.tar.gz` install under `~/.local/share/fairway-xmp` (custom dedicated prefix optional), with versioned release directories and a current symlink. Reinstallation backs up initialized student databases and gracefully shuts down before switching runtimes. Bash/Zsh integration exposes Fairway/PHP/Composer; other shells can invoke the absolute path. Uninstall always preserves coursework, databases and backups. Manual updates only; no desktop updater on Linux.
 
-README provides a complete Linux user guide for installation and checksums, first startup, TUI keys and detach/shutdown behavior, a first PHP project, CLI tools, database backups/restoration, port changes, file locations, updates/removal, optional archive/custom-prefix/SSH workflows, and troubleshooting. PHP-selection examples distinguish newer builds from the published alpha 3 installer.
-
 ## Files
 
 - Document root: the current user's lowercase `fairway/www` folder under their home directory.
