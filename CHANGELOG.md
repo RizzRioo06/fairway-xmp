@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Native macOS menu bar and Windows system tray controls for all services and individual Nginx/MySQL services, red/green status dots, reopening the panel, phpMyAdmin, and Quit.
+- PHP web workers are managed with Nginx; the PHP panel card shows status and logs without separate Start/Stop controls.
+- Closing the window keeps services running. Quit waits for pending work and graceful shutdown; failures reopen the panel with an error.
+
 ## 0.1.0-alpha.2 — 2026-10-14
 
 - PHP 8.5.11, MySQL 9.7.2 LTS, and stable Nginx 1.30.5.

@@ -9,7 +9,7 @@ import type { Ports, ServiceId, ServiceStatus, Snapshot, UpdateInfo } from './ty
 
 const meta = {
   nginx: { name: 'Nginx', description: 'Your local web server', icon: Globe, version: 'nginx', color: 'green' },
-  php: { name: 'PHP', description: 'Runs your PHP code', icon: Code2, version: 'php', color: 'purple' },
+  php: { name: 'PHP', description: 'Managed automatically with Nginx', icon: Code2, version: 'php', color: 'purple' },
   mysql: { name: 'MySQL', description: 'Your local database', icon: Database, version: 'mysql', color: 'blue' },
   phpmyadmin: { name: 'phpMyAdmin', description: 'Manage tables and data', icon: Database, version: 'phpmyadmin', color: 'orange' },
 } as const;
@@ -24,7 +24,9 @@ function message(error: unknown): string {
 export default function App() {
   const [data, setData] = useState<Snapshot>(preview);
   const [view, setView] = useState<View>('environment');
-  const [busy, setBusy] = useState<string | null>(null);
+  const [localBusy, setBusy] = useState<string | null>(null);
+  const [backendBusy, setBackendBusy] = useState<string | null>(null);
+  const busy = backendBusy ?? localBusy;
   const [notice, setNotice] = useState<Notice>(null);
   const [log, setLog] = useState<{ service: ServiceId; text: string } | null>(null);
   const [help, setHelp] = useState(false);
@@ -32,6 +34,7 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const operation = useRef(false);
+  const backendOperation = useRef(false);
   const versions = data.runtimeVersions;
   const allReady = data.services.every(service => service.ready);
   const anyRunning = data.services.some(service => service.running);
@@ -57,24 +60,32 @@ export default function App() {
       } finally { fetching = false; }
     };
     void poll();
-    const timer = window.setInterval(() => { void poll(); }, 2500);
     const unlisteners: (() => void)[] = [];
     void Promise.all([
+      listen('fairway-status', payload => setData(payload as Snapshot)),
+      listen('fairway-operation-started', payload => {
+        backendOperation.current = true; setBackendBusy(String(payload));
+      }),
+      listen('fairway-operation-finished', () => {
+        backendOperation.current = false; setBackendBusy(null);
+      }),
       listen('fairway-error', payload => {
         setBusy(null); operation.current = false;
         setNotice({ kind: 'error', text: String(payload) });
       }),
-      listen('fairway-shutdown', () => { operation.current = true; setBusy('Stopping services before closing…'); }),
+      listen('fairway-shutdown', () => {
+        backendOperation.current = true; setBackendBusy('Stopping services before quitting…');
+      }),
     ]).then(items => {
       if (disposed) items.forEach(fn => fn()); else unlisteners.push(...items);
     }).catch(error => { if (!disposed) setNotice({ kind: 'error', text: message(error) }); });
-    return () => { disposed = true; window.clearInterval(timer); unlisteners.forEach(fn => fn()); };
+    return () => { disposed = true; unlisteners.forEach(fn => fn()); };
   }, []);
 
   useEffect(() => { setPorts(data.ports); }, [data.ports.website, data.ports.phpmyadmin, data.ports.mysql, data.ports.php]);
 
   async function run(label: string, action: () => Promise<void>) {
-    if (operation.current) return;
+    if (operation.current || backendOperation.current) return;
     operation.current = true;
     setBusy(label); setNotice(null);
     try { await action(); }
@@ -189,7 +200,7 @@ export default function App() {
     </main>
 
     {log && <Modal title={`${meta[log.service].name} logs`} onClose={() => setLog(null)}><pre className="log-output">{log.text}</pre><button className="secondary" disabled={!!busy} onClick={() => showLog(log.service)}><RefreshCw size={15} />Refresh log</button></Modal>}
-    {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Quitting Fairway XMP stops its services. Minimize the window to keep working.</p></Modal>}
+    {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Closing this window keeps services running. Use the Fairway XMP menu bar or system tray icon to reopen the panel, control services, or quit. Quitting stops all services.</p></Modal>}
   </div>;
 }
 
@@ -206,7 +217,7 @@ function ServiceCard({ service, version, disabled, busy, onAction, onOpen, onLog
     <div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div><p>{item.description}</p>
     <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : browser || service.id === 'nginx' ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{(browser || service.id === 'nginx') && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(browser ? 'phpmyadmin' : 'website')}><ExternalLink size={14} /></button>}</div>
     {service.message && <div className="service-error" role="status">{service.message}</div>}
-    <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!isDesktop || busy} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>
+    <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!isDesktop || busy} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>
   </section>;
 }
 

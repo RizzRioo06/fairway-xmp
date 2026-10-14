@@ -32,6 +32,34 @@ Refreshing the lock trusts upstream HTTPS for inputs without independently publi
 
 For native UI testing without touching your real user folders, debug builds accept both `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA`; use absolute workspace paths. `FAIRWAY_RUNTIME_DIR` overrides the debug runtime directory. These folder overrides are disabled in release builds.
 
+## Build locally on Windows
+
+Use Windows 10 22H2 or Windows 11 x64. Install Git, Node.js 24, Python 3.12 or later (available as `python`), Rust stable with the MSVC toolchain, and Visual Studio Build Tools with **Desktop development with C++** and a Windows SDK. Install the Microsoft Edge WebView2 Runtime if it is missing. These are the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows).
+
+Open a new PowerShell window after installing the tools, then run:
+
+```powershell
+git clone https://github.com/eimg/fairway-xmp.git
+cd fairway-xmp
+rustup default stable-msvc
+rustup target add x86_64-pc-windows-msvc
+npm ci
+python scripts/prepare_runtime.py
+npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc
+```
+
+Runtime preparation downloads and verifies the pinned Windows PHP/Nginx/MySQL runtime and supporting files. Use the committed checksum lock; no `--refresh-lock` or separate PHP/MySQL installation is needed.
+
+The installer is under `src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\`, with a name ending in `-setup.exe`. Quit any running Fairway XMP instance using its tray menu before installing and testing the new build; closing its window leaves the app running.
+
+For faster iteration after staging the runtime, run the native development app:
+
+```powershell
+npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri dev
+```
+
+If PowerShell blocks `npm.ps1`, use `npm.cmd` in these commands. If `link.exe` is missing, add the C++ workload in Visual Studio Installer. If runtime verification reports a missing Visual C++ DLL, install the [latest Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) and rerun preparation.
+
 ## Verify
 
 ```sh

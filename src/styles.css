@@ -12,6 +12,7 @@
 .card-title h2{min-width:0;overflow-wrap:anywhere}
 .service-card{display:flex;flex-direction:column}
 .service-actions{margin-top:auto}
+.service-managed{flex:1;color:var(--muted);font-size:10px;line-height:1.5;padding:3px 0}
 .service-name{flex-wrap:wrap;gap:3px 9px}
 .notice>span{min-width:0}
 .notice>button{flex-shrink:0;align-self:flex-start}

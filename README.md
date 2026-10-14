@@ -38,7 +38,7 @@ The control panel provides service controls, port settings, logs, and database b
 
 4. Open [http://127.0.0.1:8800/hello/](http://127.0.0.1:8800/hello/) in your browser.
 
-Click **Stop all** or quit Fairway XMP when you finish. Minimize the window to keep services running.
+Closing or minimizing the window keeps Fairway XMP and its services running. Use its macOS menu bar or Windows system tray icon to reopen the panel, start/stop all services or individual Nginx/MySQL services, open phpMyAdmin, or **Quit**. Nginx automatically manages its PHP worker; PHP CLI works without starting services. Quit gracefully stops all services before exiting.
 
 ## PHP and Composer in your terminal
 
