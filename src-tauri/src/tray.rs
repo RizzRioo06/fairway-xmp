@@ -33,20 +33,12 @@ impl Status {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn service(ready: bool) -> Self {
         if ready {
             Self::Started
         } else {
             Self::Stopped
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn glyph(self) -> &'static str {
-        match self {
-            Self::Stopped => "🔴",
-            Self::Partial => "⚪",
-            Self::Started => "🟢",
         }
     }
 

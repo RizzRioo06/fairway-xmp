@@ -1,17 +1,17 @@
 use super::Status;
 use crate::{desktop, lifecycle::Lifecycle, manager::Snapshot};
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, SubmenuBuilder},
     tray::TrayIconBuilder,
     Manager as _,
 };
 
 struct ServiceMenu {
     id: &'static str,
-    name: &'static str,
     menu: Submenu<tauri::Wry>,
     start: MenuItem<tauri::Wry>,
     stop: MenuItem<tauri::Wry>,
+    ready: std::sync::atomic::AtomicBool,
 }
 
 pub(crate) struct NativeTray {
@@ -33,6 +33,35 @@ fn tray_icon(app: &tauri::AppHandle) -> tauri::Result<tauri::image::Image<'stati
     ))
 }
 
+fn status_icon(ready: bool) -> tauri::image::Image<'static> {
+    let color = if ready { [73, 160, 106] } else { [207, 83, 84] };
+    let mut rgba = vec![0; 16 * 16 * 4];
+    for y in 0..16 {
+        for x in 0..16 {
+            let mut coverage = 0;
+            for sy in 0..4 {
+                for sx in 0..4 {
+                    let dx = x as f32 + (sx as f32 + 0.5) / 4.0 - 8.0;
+                    let dy = y as f32 + (sy as f32 + 0.5) / 4.0 - 8.0;
+                    if dx * dx + dy * dy <= 12.25 {
+                        coverage += 1;
+                    }
+                }
+            }
+            let pixel = (y * 16 + x) * 4;
+            rgba[pixel..pixel + 4].copy_from_slice(&[
+                color[0],
+                color[1],
+                color[2],
+                (coverage * 255 / 16) as u8,
+            ]);
+        }
+    }
+    // Windows renders this RGBA image as a menu bitmap, independent of emoji
+    // font support. A 7-pixel dot fits inside the native 16-pixel icon gutter.
+    tauri::image::Image::new_owned(rgba, 16, 16)
+}
+
 impl NativeTray {
     pub fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
         let item = |id: &str, label: &str| MenuItem::with_id(app, id, label, true, None::<&str>);
@@ -43,13 +72,16 @@ impl NativeTray {
         for (id, name) in [("nginx", "Nginx"), ("mysql", "MySQL")] {
             let start = MenuItem::with_id(app, format!("start:{id}"), "Start", true, None::<&str>)?;
             let stop = MenuItem::with_id(app, format!("stop:{id}"), "Stop", true, None::<&str>)?;
-            let menu = Submenu::with_items(app, format!("{name} 🔴"), true, &[&start, &stop])?;
+            let menu = SubmenuBuilder::with_id(app, format!("service:{id}"), name)
+                .submenu_icon(status_icon(false))
+                .items(&[&start, &stop])
+                .build()?;
             services.push(ServiceMenu {
                 id,
-                name,
                 menu,
                 start,
                 stop,
+                ready: std::sync::atomic::AtomicBool::new(false),
             });
         }
         let admin = item("phpmyadmin", "Open phpMyAdmin")?;
@@ -124,11 +156,12 @@ impl NativeTray {
             .set_enabled(!matches!(overall, Status::Stopped))?;
         for service in &self.services {
             if let Some(status) = snapshot.services.iter().find(|s| s.id == service.id) {
-                service.menu.set_text(format!(
-                    "{} {}",
-                    service.name,
-                    Status::service(status.ready).glyph()
-                ))?;
+                if service.ready.load(std::sync::atomic::Ordering::Relaxed) != status.ready {
+                    service.menu.set_icon(Some(status_icon(status.ready)))?;
+                    service
+                        .ready
+                        .store(status.ready, std::sync::atomic::Ordering::Relaxed);
+                }
                 service
                     .start
                     .set_enabled(snapshot.runtime_ready && !status.running)?;
