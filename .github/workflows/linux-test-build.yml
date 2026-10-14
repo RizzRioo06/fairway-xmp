@@ -55,7 +55,7 @@ jobs:
       - name: Build terminal binary
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
       - name: Exercise service manager and database recovery
-        run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- .runtime-work/linux-smoke
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/linux-smoke"
       - name: Package offline installer and corresponding sources
         run: python scripts/package_linux.py
       - name: Test installed CLI, supervisor and terminal dashboard
