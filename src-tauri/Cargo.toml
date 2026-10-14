@@ -17,8 +17,14 @@ name = "fairway"
 path = "src/main.rs"
 required-features = ["desktop"]
 
+[[bin]]
+name = "fairway-cli"
+path = "src/cli_main.rs"
+required-features = ["cli"]
+
 [features]
 default = ["desktop"]
+cli = []
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater", "dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 
 [build-dependencies]

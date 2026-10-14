@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceStatus {
     pub id: String,
@@ -23,7 +23,7 @@ pub struct ServiceStatus {
     pub message: Option<String>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub ports: Ports,
@@ -56,6 +56,18 @@ impl Manager {
             processes: BTreeMap::new(),
             errors: BTreeMap::new(),
         };
+        #[cfg(target_os = "linux")]
+        for id in ["php", "nginx"] {
+            if let Ok(pid) = fs::read_to_string(manager.layout.data.join(format!("{id}.pid"))) {
+                if let Ok(pid) = pid.trim().parse::<u32>() {
+                    if process::matches_web(pid, id, &manager.layout) {
+                        manager
+                            .processes
+                            .insert(id.into(), OwnedProcess::adopt_database(pid));
+                    }
+                }
+            }
+        }
         let pid_file = manager.layout.data.join("mysql.pid");
         if let Ok(text) = fs::read_to_string(&pid_file) {
             if let Ok(pid) = text.trim().parse::<u32>() {

@@ -2,17 +2,27 @@
 
 ## Product
 
-Display name: **Fairway XMP** on Windows and macOS. The green application mark is shared by the app, Windows installer, and uninstaller. The macOS bundle is `/Applications/Fairway XMP.app`; installer hooks and removal target only that bundle.
+Display name: **Fairway XMP** on Windows, macOS and Linux. The green application mark is shared by the app, Windows installer, and uninstaller. The macOS bundle is `/Applications/Fairway XMP.app`; installer hooks and removal target only that bundle.
 
-A classroom PHP development environment with one consistent desktop control panel.
-Supported release targets: Windows 10 22H2 / Windows 11 x64, and macOS 15+ Apple Silicon.
-No Docker, WSL, Linux packages, Intel Mac packages, Node/npm bundle, or Laravel-specific project management.
+A classroom PHP development environment with a desktop control panel on Windows/macOS and a terminal dashboard on Linux.
+Supported targets: Windows 10 22H2 / Windows 11 x64, macOS 15+ Apple Silicon, and Linux x86_64 with glibc 2.35+. Linux builds are development artifacts pending release-owner testing.
+No Docker/WSL requirement, distro-specific Linux packages, ARM Linux or musl support, Intel Mac packages, Node/npm bundle, or Laravel-specific project management.
 
 ## Application and runtimes
 
 Tauri 2, Rust service manager, React/TypeScript UI. Exact versions and required PHP extensions are recorded in `runtime-manifest.json`. Download inputs are pinned by SHA256 in `runtime-downloads.lock.json` once prepared and reviewed. Runtime preparation never installs Homebrew or system services.
 
 The alpha 2 runtime uses PHP 8.5.11 CLI/FastCGI, stable Nginx 1.30.5, MySQL 9.7.2 LTS, phpMyAdmin 5.2.3, Composer 2.10.3, CA trust roots, native runtime libraries and upstream notices. Mac Nginx is compiled from its pinned upstream source using pinned PCRE2/OpenSSL bottles and the macOS SDK's zlib. No system installation or Homebrew service is required. Windows inputs are official x64 ZIP distributions with checked SHA256 pins.
+
+Linux uses a separate `cli` Cargo feature, without Tauri, WebView or GUI dependencies. Runtime inputs are SHA256-pinned in `runtime-linux-downloads.lock.json`; PHP and Nginx are compiled on the glibc 2.35 baseline. MySQL uses the official generic x86_64 archive. Each component bundles its native library closure with relative RUNPATHs; MySQL and PHP OpenSSL versions remain isolated. Build validation rejects newer glibc symbol requirements. Corresponding source archives include the exact app commit, PHP/Nginx/MySQL sources and Ubuntu sources/patches for copied libraries.
+
+## Linux terminal edition
+
+`fairway` opens the ANSI terminal dashboard; CLI commands provide status (including JSON), Start/Stop/Restart all or Nginx/MySQL, logs, ports, backup, bundled PHP/Composer/MySQL tools, a shell and managed PATH integration. PHP-FPM follows Nginx; PHP CLI does not require starting web services. phpMyAdmin uses the displayed browser URL.
+
+A detached user supervisor owns the service manager. A private Unix socket and lifetime advisory lock coordinate multiple clients; mutations run sequentially. Requests identify the installation before performing actions. No root execution, systemd dependency or automatic service startup. `q`/Ctrl+C close the TUI while services persist; `Q`/`fairway shutdown` gracefully stop services and the supervisor. Failed shutdown leaves the controller available. Linux process recovery verifies `/proc` executable and exact service configuration before adopting MySQL/Nginx/PHP-FPM.
+
+The offline `.run` and equivalent `.tar.gz` install under `~/.local/share/fairway-xmp` (custom dedicated prefix optional), with versioned release directories and a current symlink. Reinstallation backs up initialized student databases and gracefully shuts down before switching runtimes. Bash/Zsh integration exposes Fairway/PHP/Composer; other shells can invoke the absolute path. Uninstall always preserves coursework, databases and backups. Manual updates only; no desktop updater on Linux.
 
 ## Files
 
@@ -70,3 +80,5 @@ Installer upgrades must also preserve data and coursework. Release testing must 
 ## Verification
 
 Core tests cover port validation/conflicts, path quoting, and idempotent PATH-block removal. Packaging tests reject archive traversal and bad checksums. The runtime smoke example verifies actual browser → Nginx → PHP → MySQL → response, phpMyAdmin rendering, database backup, graceful shutdown, settings persistence, and removal of isolated CLI integration without deleting coursework.
+
+Linux CI exercises offline installation, concurrent first clients, real terminal rendering and detach, PHP/Composer, HTTP/PDO queries, backup, crash recovery, safe port changes, reinstall and uninstall with isolated paths containing spaces, apostrophes and non-ASCII characters. Clean distro containers verify bundled runtimes on Ubuntu 22.04/24.04, Debian, Fedora and Arch without installing runtime dependencies. Docker is used only for CI verification.

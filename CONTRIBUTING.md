@@ -118,3 +118,19 @@ The dedicated repository is [eimg/fairway-xmp](https://github.com/eimg/fairway-x
 Keep the updater private key outside the repository. The public key used by installed clients must match the key signing update artifacts. Build the macOS app with the release overlay, then run the packaging script to produce its installer. Unsigned alpha prereleases omit updater artifacts and `latest.json`; users install updates manually. Include both installers, SHA-256 checksums, pinned runtime metadata, and the bundled-tool source archive. Use `--prerelease --latest=false` when publishing an alpha with `gh release create`.
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md) for behavior and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for component licenses.
+
+## Linux terminal builds
+
+Linux terminal builds use the existing core through `--no-default-features --features cli`; Node, Tauri and desktop development libraries are not required. Build on Ubuntu 22.04 x86_64 to preserve the glibc 2.35 baseline. The **Linux terminal installer** workflow installs build dependencies, stages the reviewed runtime, tests the services, produces `.run`/`.tar.gz` installers and corresponding sources, and checks clean Ubuntu, Debian, Fedora and Arch containers. It uploads artifacts without creating a release.
+
+```sh
+gh workflow run linux-test-build.yml --ref main
+# On the Ubuntu 22.04 builder with the workflow's build dependencies and deb-src enabled:
+python3 scripts/prepare_runtime.py --lockfile runtime-linux-downloads.lock.json
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
+cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
+python3 scripts/package_linux.py
+python3 tests/linux_cli_smoke.py artifacts/linux-installer/Fairway-XMP-0.1.0-alpha.2-linux-x86_64.run
+```
+
+Keep `fairway-linux-x86_64-sources` beside the tested binary artifact when publishing. Sources include Ubuntu distribution patches for every copied system library and upstream sources pinned separately from Mac/Windows runtime downloads. No runtime libraries are installed on target machines. Linux services bind only to loopback and run as the current user. Use an isolated `HOME` and `XDG_DATA_HOME` when testing release binaries; the provided smoke script does so automatically.

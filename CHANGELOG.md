@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Linux x86_64 terminal dashboard and CLI, with a detached user supervisor and offline `.run`/`.tar.gz` installers for glibc 2.35+ systems.
+- Linux bundled runtime libraries, crash recovery, database backups before installer upgrades, and uninstall that preserves projects/data.
+
 - Native macOS menu bar and Windows system tray controls for all services and individual Nginx/MySQL services, red/green status dots, reopening the panel, phpMyAdmin, and Quit.
 - PHP web workers are managed with Nginx; the PHP panel card shows status and logs without separate Start/Stop controls.
 - Closing the window keeps services running. Quit waits for pending work and graceful shutdown; failures reopen the panel with an error.

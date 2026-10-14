@@ -109,7 +109,7 @@ pub fn ensure_port(port: u16, label: &str, excluded: &[u16]) -> Result<()> {
 }
 
 fn port_owner(port: u16) -> String {
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     {
         let mut cmd = command("/usr/sbin/lsof");
         cmd.args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-F", "pc"]);
@@ -120,6 +120,16 @@ fn port_owner(port: u16) -> String {
                 .collect();
             if !names.is_empty() {
                 return format!("Used by: {}.", names.join(", "));
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut cmd = command("ss");
+        cmd.args(["-ltnp", &format!("sport = :{port}")]);
+        if let Ok(out) = output(cmd) {
+            if let Some(line) = out.lines().find(|line| line.contains("users:")) {
+                return format!("Used by: {line}.");
             }
         }
     }
@@ -294,6 +304,16 @@ pub fn matches_database(pid: u32, executable: &Path, config: &Path) -> bool {
     if !pid_alive(pid) {
         return false;
     }
+    #[cfg(target_os = "linux")]
+    {
+        if linux_executable_matches(pid, executable) {
+            if let Ok(bytes) = std::fs::read(format!("/proc/{pid}/cmdline")) {
+                return bytes
+                    .split(|b| *b == 0)
+                    .any(|arg| arg == format!("--defaults-file={}", config.display()).as_bytes());
+            }
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         let mut cmd = command("/bin/ps");
@@ -322,6 +342,47 @@ pub fn matches_database(pid: u32, executable: &Path, config: &Path) -> bool {
         }
     }
     false
+}
+
+#[cfg(target_os = "linux")]
+fn linux_executable_matches(pid: u32, expected: &Path) -> bool {
+    match (
+        std::fs::read_link(format!("/proc/{pid}/exe")),
+        std::fs::canonicalize(expected),
+    ) {
+        (Ok(actual), Ok(expected)) => actual == expected,
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn matches_web(pid: u32, id: &str, layout: &crate::config::Layout) -> bool {
+    let exe = layout.exe(id, if id == "php" { "php-fpm" } else { "nginx" });
+    if !pid_alive(pid) || !linux_executable_matches(pid, &exe) {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+        return false;
+    };
+    let title = String::from_utf8_lossy(&bytes)
+        .trim_end_matches('\0')
+        .to_owned();
+    if id == "php" {
+        title
+            == format!(
+                "php-fpm: master process ({})",
+                layout.data.join("config/php-fpm.conf").display()
+            )
+    } else {
+        title
+            == format!(
+                "nginx: master process {} -e {} -p {} -c {} -g daemon off;",
+                exe.display(),
+                layout.data.join("logs/nginx.log").display(),
+                layout.data.display(),
+                layout.data.join("config/nginx.conf").display()
+            )
+    }
 }
 
 #[cfg(windows)]

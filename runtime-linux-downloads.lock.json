@@ -1,0 +1,38 @@
+{
+  "composer": {
+    "sha256": "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6",
+    "url": "https://getcomposer.org/download/2.10.3/composer.phar"
+  },
+  "phpmyadmin": {
+    "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",
+    "url": "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip"
+  },
+  "ca-certificates": {
+    "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+    "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl"
+  },
+  "php-linux-source": {
+    "url": "https://www.php.net/distributions/php-8.5.11.tar.xz",
+    "sha256": "d9be75c08e8c316f4c8f4194d8fbe1750a15f6a6d9d4e3fe72082abeeb800360"
+  },
+  "nginx-linux-source": {
+    "url": "https://nginx.org/download/nginx-1.30.5.tar.gz",
+    "sha256": "6c20565aa2325cb82216ae804f4a4ff1875179014759a381c42ddc8e11c4906d"
+  },
+  "mysql-linux-source": {
+    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2.tar.gz",
+    "sha256": "e5a676c7cb73738dc6ea33db2093806ebd512b629a139b897fcab68fcd81aaa4"
+  },
+  "mysql-linux-x86_64": {
+    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2-linux-glibc2.28-x86_64-minimal.tar.xz",
+    "sha256": "6fe0baf13792e56afa3d93d6a174b4d5700901db1c8d09665225423dc094d0bb"
+  },
+  "composer-linux-source": {
+    "url": "https://codeload.github.com/composer/composer/tar.gz/refs/tags/2.10.3",
+    "sha256": "803a3de1c096cc6ba4b568de3859c6debcfd95a09b80404ee2fb6a19ddd22680"
+  },
+  "ca-certificates-linux-source": {
+    "url": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz",
+    "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55"
+  }
+}

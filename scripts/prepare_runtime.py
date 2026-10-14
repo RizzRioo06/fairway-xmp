@@ -413,7 +413,10 @@ def main():
         common(work, lock, refresh)
         if platform.system() == 'Darwin': macos(work, lock, refresh)
         elif platform.system() == 'Windows': windows(work, lock, refresh)
-        else: raise RuntimeError('Runtime packages are supported only on Windows and Apple Silicon macOS')
+        elif platform.system() == 'Linux':
+            from prepare_linux_runtime import linux
+            linux(work, lock, refresh)
+        else: raise RuntimeError('Runtime packages are supported only on Windows, Apple Silicon macOS and Linux x86_64')
         (work / 'manifest.json').write_text(json.dumps(MANIFEST, indent=2) + '\n')
         copy(ROOT / 'THIRD_PARTY_NOTICES.md', work / 'THIRD_PARTY_NOTICES.md')
         verify(work)

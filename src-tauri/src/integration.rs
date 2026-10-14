@@ -43,6 +43,33 @@ pub fn installed(layout: &Layout) -> bool {
             .is_file()
 }
 
+#[cfg(unix)]
+pub fn write_unix_launchers(layout: &Layout) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let base = format!(
+            "#!/bin/sh\nexport PHP_INI_SCAN_DIR=''\nexport MIBS=''\nexport PHPRC={}\nexport COMPOSER_HOME={}\n",
+            shell_quote(&layout.data.join("config/php.ini").to_string_lossy()),
+            shell_quote(&layout.data.join("composer").to_string_lossy())
+        );
+    let php = shell_quote(&layout.exe("php", "php").to_string_lossy());
+    let scripts = [
+        ("php", format!("{base}exec {php} \"$@\"\n")),
+        (
+            "composer",
+            format!(
+                "{base}exec {php} {} \"$@\"\n",
+                shell_quote(&layout.runtime.join("composer.phar").to_string_lossy())
+            ),
+        ),
+    ];
+    for (name, text) in scripts {
+        let path = layout.bin.join(name);
+        atomic_write(&path, text.as_bytes())?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn install(layout: &Layout) -> Result<()> {
     if !layout.exe("php", "php").is_file() || !layout.runtime.join("composer.phar").is_file() {
         return Err("Install the complete runtime before enabling command-line tools.".into());
@@ -51,29 +78,7 @@ pub fn install(layout: &Layout) -> Result<()> {
     layout.write_configs(&layout.ports()?)?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let base = format!(
-            "#!/bin/sh\nexport PHP_INI_SCAN_DIR=''\nexport MIBS=''\nexport PHPRC={}\nexport COMPOSER_HOME={}\n",
-            shell_quote(&layout.data.join("config/php.ini").to_string_lossy()),
-            shell_quote(&layout.data.join("composer").to_string_lossy())
-        );
-        let php = shell_quote(&layout.exe("php", "php").to_string_lossy());
-        let scripts = [
-            ("php", format!("{base}exec {php} \"$@\"\n")),
-            (
-                "composer",
-                format!(
-                    "{base}exec {php} {} \"$@\"\n",
-                    shell_quote(&layout.runtime.join("composer.phar").to_string_lossy())
-                ),
-            ),
-        ];
-        for (name, text) in scripts {
-            let path = layout.bin.join(name);
-            atomic_write(&path, text.as_bytes())?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o755))
-                .map_err(|e| e.to_string())?;
-        }
+        write_unix_launchers(layout)?;
         let block = format!(
             "{BEGIN}\nexport PATH={}:\"$PATH\"\n{END}",
             shell_quote(&layout.bin.to_string_lossy())

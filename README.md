@@ -1,6 +1,6 @@
 # Fairway XMP
 
-A PHP development environment for Windows and Apple Silicon Macs. Run your web server and database from one control panel, write code in your preferred editor, and manage your data in phpMyAdmin.
+A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. Run your web server and database from one control panel, write code in your preferred editor, and manage your data in phpMyAdmin.
 
 ![Fairway XMP control panel with PHP, Nginx, MySQL, and phpMyAdmin running](docs/images/control-panel.png)
 
@@ -14,6 +14,32 @@ Current release: **[v0.1.0-alpha.2](https://github.com/eimg/fairway-xmp/releases
 | Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-alpha.2/Fairway-XMP-0.1.0-alpha.2-macos-arm64-unsigned.pkg) |
 
 Download the installer for your computer and follow its prompts. The installers are unsigned, so Windows may show an unknown-publisher warning. If macOS blocks the installer or app, follow [Apple’s instructions for opening an app from an unidentified developer](https://support.apple.com/en-us/102445).
+
+## Linux terminal edition
+
+Linux builds are available as artifacts from the [Linux terminal installer workflow](https://github.com/eimg/fairway-xmp/actions/workflows/linux-test-build.yml). Download the `fairway-linux-x86_64` ZIP and extract it. Linux requires x86_64 and glibc 2.35 or newer; Alpine/musl and ARM are not supported. No desktop, root access, distro packages, Docker or systemd service is required.
+
+```sh
+sh Fairway-XMP-0.1.0-alpha.2-linux-x86_64.run
+# Reopen your shell after installation:
+fairway                      # terminal dashboard
+fairway start                # start all services
+fairway status
+fairway stop nginx           # also stops its PHP-FPM worker
+fairway php --version
+fairway composer --version
+fairway mysql fairway         # connect with the local teaching account
+fairway backup               # requires running MySQL
+fairway shutdown             # stop services and the supervisor
+```
+
+In the dashboard, use ↑/↓ to select Nginx or MySQL, `s` to start, `x` to stop, `r` to restart, `a` to start all, `z` to stop all, `l` for logs, `f` for PHP logs, `p` for ports and `b` for a database backup. **`q` closes the dashboard and leaves services running; `Q` shuts everything down.** Run `fairway --help` for CLI commands. phpMyAdmin remains a browser interface at the displayed URL.
+
+The installer defaults to `~/.local/share/fairway-xmp`; use `--prefix /absolute/path` for another dedicated directory. It enables Fairway, PHP and Composer through managed Bash/Zsh profile blocks. `fairway remove-cli` removes that integration. `fairway shell` opens a shell with bundled PHP/Composer available without editing profiles. Fish users can invoke the displayed absolute Fairway path or add it to their shell’s PATH themselves.
+
+Alternatively, extract the `.tar.gz` and run `./fairway-xmp/bin/fairway`; `./fairway-xmp/install.sh` installs that extracted bundle. Programs use libraries bundled with their component. Projects remain in `~/fairway/www`; data and backups use `${XDG_DATA_HOME:-~/.local/share}/dev.fairway.environment`.
+
+Re-running the installer backs up an existing student database and stops services before switching versions. `fairway uninstall` removes the installed program and managed shell integration while preserving projects, databases and backups. The separate `fairway-linux-x86_64-sources` artifact includes corresponding runtime sources and distribution patches. This terminal edition uses manual installer updates.
 
 ## What’s included
 

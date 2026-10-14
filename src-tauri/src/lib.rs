@@ -4,6 +4,9 @@ pub mod integration;
 pub mod manager;
 pub mod process;
 
+#[cfg(all(feature = "cli", unix))]
+pub mod cli;
+
 #[cfg(any(feature = "desktop", test))]
 mod lifecycle;
 
