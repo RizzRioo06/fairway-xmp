@@ -23,9 +23,14 @@ pub(crate) struct NativeTray {
 }
 
 fn tray_icon(app: &tauri::AppHandle) -> tauri::Result<tauri::image::Image<'static>> {
-    app.default_window_icon()
-        .cloned()
-        .ok_or_else(|| tauri::Error::Io(std::io::Error::other("The tray icon is missing.")))
+    let icon = app
+        .default_window_icon()
+        .ok_or_else(|| tauri::Error::Io(std::io::Error::other("The tray icon is missing.")))?;
+    Ok(tauri::image::Image::new_owned(
+        icon.rgba().to_vec(),
+        icon.width(),
+        icon.height(),
+    ))
 }
 
 impl NativeTray {
