@@ -337,6 +337,9 @@ pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<(
                     .spawn()
                     .map_err(|e| e.to_string())?;
             }
+            #[cfg(target_os = "linux")]
+            return Err("Run fairway shell to open a terminal with the bundled tools.".into());
+            #[cfg(not(target_os = "linux"))]
             return Ok(());
         }
         _ => return Err("Unknown destination.".into()),
@@ -352,6 +355,13 @@ pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<(
         // Explorer handles folders and URLs without cmd.exe metacharacter interpretation.
         let mut cmd = process::command("explorer.exe");
         cmd.arg(path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut cmd = process::command("xdg-open");
+        cmd.arg(&path)
+            .spawn()
+            .map_err(|e| format!("Open {path} manually ({e})."))?;
     }
     Ok(())
 }

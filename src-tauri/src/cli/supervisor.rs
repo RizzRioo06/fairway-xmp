@@ -14,7 +14,8 @@ use std::{
         process::CommandExt,
     },
     process::{Command, Stdio},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+    sync::{Arc, Mutex, TryLockError},
     thread,
     time::{Duration, Instant},
 };
@@ -137,7 +138,10 @@ pub(super) fn serve(layout: &Layout) -> Result<()> {
         Err(e) => return Err(e.to_string()),
     }
     // Initialize before publishing the socket, so readiness means commands can run.
-    let mut manager = Manager::new(layout.clone())?;
+    let manager = Arc::new(Mutex::new(Manager::new(layout.clone())?));
+    let quitting = Arc::new(AtomicBool::new(false));
+    let finished = Arc::new(AtomicBool::new(false));
+    let active = Arc::new(AtomicUsize::new(0));
     let listener = UnixListener::bind(&socket_path).map_err(|e| {
         format!("Cannot create supervisor socket (the data path may be too long): {e}")
     })?;
@@ -152,54 +156,42 @@ pub(super) fn serve(layout: &Layout) -> Result<()> {
         libc::sigaction(libc::SIGTERM, &action, std::ptr::null_mut());
         libc::sigaction(libc::SIGINT, &action, std::ptr::null_mut());
     }
-    loop {
+    while !finished.load(Ordering::Acquire) {
         if STOP.swap(false, Ordering::Relaxed) {
-            match manager.stop_all() {
+            quitting.store(true, Ordering::Release);
+            match manager
+                .lock()
+                .map_err(|_| "Service manager failed.")?
+                .stop_all()
+            {
                 Ok(()) => return Ok(()),
-                Err(error) => eprintln!("Shutdown failed; supervisor remains available: {error}"),
+                Err(error) => {
+                    quitting.store(false, Ordering::Release);
+                    eprintln!("Shutdown failed; supervisor remains available: {error}");
+                }
             }
         }
         match listener.accept() {
-            Ok((mut stream, _)) => {
-                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-                let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-                let request = read_line(&stream, MAX_REQUEST).and_then(|bytes| {
-                    serde_json::from_slice::<Envelope>(&bytes).map_err(|e| e.to_string())
-                });
-                let mut quit = false;
-                let result = request.and_then(|envelope| {
-                    if envelope.runtime != layout.runtime { return Err("Another Fairway installation owns the services. Shut it down before switching installations.".into()); }
-                    let request = envelope.request;
-                    if matches!(request, Request::Shutdown | Request::PrepareUpdate) {
-                        if matches!(request, Request::PrepareUpdate) && manager.layout.data.join("mysql/mysql").is_dir() {
-                            manager.start("mysql")?;
-                            println!("Update backup: {}", manager.backup()?);
-                        }
-                        manager.stop_all()?;
-                        quit = true;
-                        return Ok(serde_json::json!("Stopped"));
-                    }
-                    execute(&mut manager, request)
-                });
-                let response = match result {
-                    Ok(data) => Response {
-                        data,
-                        error: None,
-                        runtime: layout.runtime.clone(),
-                    },
-                    Err(error) => Response {
-                        data: serde_json::Value::Null,
-                        error: Some(error),
-                        runtime: layout.runtime.clone(),
-                    },
-                };
-                if let Ok(mut bytes) = serde_json::to_vec(&response) {
-                    bytes.push(b'\n');
-                    let _ = stream.write_all(&bytes);
+            Ok((stream, _)) => {
+                if active.load(Ordering::Acquire) >= 16 {
+                    let mut stream = stream;
+                    send_response(
+                        &mut stream,
+                        layout,
+                        Err("Too many concurrent clients. Retry shortly.".into()),
+                    );
+                    continue;
                 }
-                if quit {
-                    return Ok(());
-                }
+                active.fetch_add(1, Ordering::AcqRel);
+                let active = active.clone();
+                let manager = manager.clone();
+                let quitting = quitting.clone();
+                let finished = finished.clone();
+                let layout = layout.clone();
+                thread::spawn(move || {
+                    handle_connection(stream, &layout, &manager, &quitting, &finished);
+                    active.fetch_sub(1, Ordering::AcqRel);
+                });
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(50))
@@ -210,6 +202,77 @@ pub(super) fn serve(layout: &Layout) -> Result<()> {
                 thread::sleep(Duration::from_millis(100));
             }
         }
+    }
+    Ok(())
+}
+
+fn send_response(stream: &mut UnixStream, layout: &Layout, result: Result<serde_json::Value>) {
+    let response = match result {
+        Ok(data) => Response {
+            data,
+            error: None,
+            runtime: layout.runtime.clone(),
+        },
+        Err(error) => Response {
+            data: serde_json::Value::Null,
+            error: Some(error),
+            runtime: layout.runtime.clone(),
+        },
+    };
+    if let Ok(mut bytes) = serde_json::to_vec(&response) {
+        bytes.push(b'\n');
+        let _ = stream.write_all(&bytes);
+    }
+}
+
+fn handle_connection(
+    mut stream: UnixStream,
+    layout: &Layout,
+    manager: &Mutex<Manager>,
+    quitting: &AtomicBool,
+    finished: &AtomicBool,
+) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    let request = read_line(&stream, MAX_REQUEST)
+        .and_then(|bytes| serde_json::from_slice::<Envelope>(&bytes).map_err(|e| e.to_string()));
+    let mut quit = false;
+    let result = request.and_then(|envelope| {
+        if envelope.runtime != layout.runtime {
+            return Err("Another Fairway installation owns the services. Shut it down before switching installations.".into());
+        }
+        let request = envelope.request;
+        // Read-only clients must not freeze a dashboard behind a long startup/backup.
+        let mut manager = if matches!(request, Request::Status | Request::Log { .. }) {
+            let deadline = Instant::now() + Duration::from_millis(250);
+            loop {
+                match manager.try_lock() {
+                    Ok(guard) => break guard,
+                    Err(TryLockError::WouldBlock) if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+                    Err(TryLockError::WouldBlock) => return Err("A service operation is in progress. Retry shortly.".into()),
+                    Err(_) => return Err("Service manager failed.".into()),
+                }
+            }
+        } else { manager.lock().map_err(|_| "Service manager failed.")? };
+        if quitting.load(Ordering::Acquire) { return Err("Fairway is shutting down. Retry after it stops.".into()); }
+        if matches!(request, Request::Shutdown | Request::PrepareUpdate) {
+            quitting.store(true, Ordering::Release);
+            let shutdown = (|| -> Result<()> {
+                if matches!(request, Request::PrepareUpdate) && manager.layout.data.join("mysql/mysql").is_dir() {
+                    manager.start("mysql")?;
+                    println!("Update backup: {}", manager.backup()?);
+                }
+                manager.stop_all()
+            })();
+            if let Err(error) = shutdown { quitting.store(false, Ordering::Release); return Err(error); }
+            quit = true;
+            return Ok(serde_json::json!("Stopped"));
+        }
+        execute(&mut manager, request)
+    });
+    send_response(&mut stream, layout, result);
+    if quit {
+        finished.store(true, Ordering::Release);
     }
 }
 
@@ -282,6 +345,45 @@ fn service_action(manager: &mut Manager, service: &str, start: bool) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn status_does_not_wait_for_an_active_operation() {
+        let root = std::env::temp_dir().join(format!(
+            "fairway-busy-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let manager = Arc::new(Mutex::new(Manager::new(layout.clone()).unwrap()));
+        let guard = manager.lock().unwrap();
+        let (mut client, server) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let manager_clone = manager.clone();
+        let layout_clone = layout.clone();
+        let worker = thread::spawn(move || {
+            handle_connection(
+                server,
+                &layout_clone,
+                &manager_clone,
+                &AtomicBool::new(false),
+                &AtomicBool::new(false),
+            )
+        });
+        let bytes = serde_json::to_vec(
+            &serde_json::json!({"runtime": layout.runtime, "request": {"command": "status"}}),
+        )
+        .unwrap();
+        client.write_all(&bytes).unwrap();
+        client.write_all(b"\n").unwrap();
+        let response: Response =
+            serde_json::from_slice(&read_line(&client, MAX_RESPONSE).unwrap()).unwrap();
+        assert!(response.error.unwrap().contains("operation is in progress"));
+        worker.join().unwrap();
+        drop(guard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn protocol_rejects_unterminated_and_oversized_messages() {
         for message in [b"{}".as_slice(), b"01234567890123456789\n".as_slice()] {

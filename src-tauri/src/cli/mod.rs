@@ -90,6 +90,16 @@ pub fn run() -> Result<()> {
                 Request::PrepareUpdate
             },
         )?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while layout.data.join("supervisor.sock").exists() {
+            if std::time::Instant::now() >= deadline {
+                return Err(
+                    "Shutdown completed but the supervisor socket has not closed. Check its log."
+                        .into(),
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         println!("Services and supervisor stopped.");
         return Ok(());
     }

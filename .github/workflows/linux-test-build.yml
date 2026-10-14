@@ -33,8 +33,25 @@ jobs:
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
           cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
           cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
+      - uses: actions/cache/restore@v4
+        id: runtime-cache
+        with:
+          path: |
+            src-tauri/resources/runtime
+            .runtime-work/linux-sources
+          key: linux-glibc235-${{ hashFiles('runtime-linux-downloads.lock.json', 'runtime-manifest.json', 'scripts/prepare_runtime.py', 'scripts/prepare_linux_runtime.py') }}
       - name: Prepare portable Linux runtime
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
         run: python scripts/prepare_runtime.py --lockfile runtime-linux-downloads.lock.json
+      - name: Verify staged runtime
+        run: python scripts/prepare_runtime.py --verify-only
+      - uses: actions/cache/save@v4
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            src-tauri/resources/runtime
+            .runtime-work/linux-sources
+          key: ${{ steps.runtime-cache.outputs.cache-primary-key }}
       - name: Build terminal binary
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
       - name: Exercise service manager and database recovery

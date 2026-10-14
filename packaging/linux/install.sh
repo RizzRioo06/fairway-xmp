@@ -23,6 +23,7 @@ fi
 SOURCE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BUILD=$(cat "$SOURCE/BUILD")
 case "$BUILD" in *[!a-zA-Z0-9._-]*|'') echo 'Invalid build identifier.' >&2; exit 1 ;; esac
+OLD_CURRENT=$(readlink "$PREFIX/current" 2>/dev/null || true)
 if [ -x "$PREFIX/current/bin/fairway" ]; then
   # Back up existing student databases before switching runtime files. Failure aborts the upgrade.
   "$PREFIX/current/bin/fairway" __prepare-update
@@ -38,5 +39,13 @@ fi
 ln -s "releases/$BUILD" "$PREFIX/.current-$$"
 mv -Tf "$PREFIX/.current-$$" "$PREFIX/current"
 printf '%s\n' 'Fairway XMP user installation' > "$PREFIX/.fairway-installation"
-"$PREFIX/current/bin/fairway" install-cli
+if ! "$PREFIX/current/bin/fairway" install-cli; then
+  if [ -n "$OLD_CURRENT" ]; then
+    ln -s "$OLD_CURRENT" "$PREFIX/.rollback-$$"
+    mv -Tf "$PREFIX/.rollback-$$" "$PREFIX/current"
+    "$PREFIX/current/bin/fairway" install-cli || true
+  fi
+  echo 'Installation setup failed; existing data is preserved.' >&2
+  exit 1
+fi
 printf '\nInstalled Fairway XMP in %s\nReopen your shell, then run: fairway\nOr run now: "%s/current/bin/fairway"\nServices remain stopped until you start them.\n' "$PREFIX" "$PREFIX"

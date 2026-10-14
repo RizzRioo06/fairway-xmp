@@ -108,7 +108,7 @@ def linux(target, lock, refresh):
         source, = [path for path in source.iterdir() if path.is_dir()]
         if name == 'php':
             prefix = work / 'php-install'
-            run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
+            run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
             run(['make', '-j' + jobs], cwd=source)
             run(['make', 'install'], cwd=source)
             copy(prefix / 'bin/php', target / 'php/bin/php')
