@@ -108,6 +108,8 @@ On the Mac builder, after staging the locked runtime, run `python3 scripts/packa
 
 The PHP 8.0 and 8.1 Windows ZIPs predate the official embedded SBOM. `scripts/windows_legacy_sources.json` records version-matched source commits for their Windows dependency packages; the source archive includes these trees and the distribution notices. The older ZIPs do not identify the exact dependency build commits, so review the mapping and any package-specific patches before publishing a Windows installer containing those versions.
 
+Track this remaining source verification, the release owner's Mac visual test, and publication of the PHP-selection feature in [Release follow-ups](docs/release-follow-ups.md). The source archive hashes are pinned; the old Windows binary/source build and patch mapping is still open.
+
 GPL binary releases must provide the corresponding source code, including packaging patches and required dependency sources, beside the installers. An upstream project link alone does not replace that source distribution. `runtime-downloads.lock.json` and `runtime-sources.lock.json` record the exact inputs.
 
 The dedicated repository is [eimg/fairway-xmp](https://github.com/eimg/fairway-xmp). A stable GitHub release should include:
