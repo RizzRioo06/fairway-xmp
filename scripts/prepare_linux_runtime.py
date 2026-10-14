@@ -39,13 +39,18 @@ def bundle_component_libraries(target):
     queue = [file for file in target.rglob('*') if file.is_file() and not file.is_symlink() and elf(file)]
     processed = set()
     packages = set()
+    # Prefer the component's own libraries for every transitive dependency.
+    # Oracle ships newer Kerberos/OpenSSL than the build distro; mixing providers
+    # with the same SONAME is unsafe even when they appear to link successfully.
+    local_dirs = sorted({str(binary.parent) for binary in queue}, key=lambda path: (0 if path.endswith('/lib/private') else 1, path))
+    loader_env = {**os.environ, 'LC_ALL': 'C', 'LD_LIBRARY_PATH': ':'.join(local_dirs)}
     while queue:
         binary = queue.pop()
         if binary in processed: continue
         processed.add(binary)
         versions = subprocess.check_output(['readelf', '--version-info', str(binary)], text=True)
         validate_glibc(versions)
-        output = subprocess.run(['ldd', str(binary)], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        output = subprocess.run(['ldd', str(binary)], env=loader_env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if 'not found' in output.stdout: raise RuntimeError(f'Missing libraries for {binary}:\n{output.stdout}')
         for line in output.stdout.splitlines():
             match = re.search(r'=> (/[^ ]+) \(', line)
@@ -55,7 +60,7 @@ def bundle_component_libraries(target):
             destination = library_dir / source.name
             if destination.exists():
                 if hashlib.sha256(destination.read_bytes()).digest() != hashlib.sha256(source.read_bytes()).digest():
-                    raise RuntimeError(f'Conflicting native library: {source.name}')
+                    raise RuntimeError(f'Conflicting native library: {source} and {destination}')
                 continue
             copy(source, destination)
             queue.append(destination)
@@ -108,7 +113,7 @@ def linux(target, lock, refresh):
         source, = [path for path in source.iterdir() if path.is_dir()]
         if name == 'php':
             prefix = work / 'php-install'
-            run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
+            run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
             run(['make', '-j' + jobs], cwd=source)
             run(['make', 'install'], cwd=source)
             copy(prefix / 'bin/php', target / 'php/bin/php')

@@ -150,6 +150,8 @@ fn port_owner(port: u16) -> String {
 pub struct OwnedProcess {
     child: Option<Child>,
     pid: u32,
+    #[cfg(target_os = "linux")]
+    start_time: Option<u64>,
     #[cfg(windows)]
     job: isize,
 }
@@ -207,6 +209,8 @@ impl OwnedProcess {
             Ok(Self {
                 child: Some(child),
                 pid,
+                #[cfg(target_os = "linux")]
+                start_time: linux_start_time(pid),
             })
         }
     }
@@ -214,7 +218,13 @@ impl OwnedProcess {
     pub fn alive(&mut self) -> bool {
         match &mut self.child {
             Some(child) => matches!(child.try_wait(), Ok(None)),
-            None => pid_alive(self.pid),
+            None => {
+                #[cfg(target_os = "linux")]
+                if self.start_time.is_none() || linux_start_time(self.pid) != self.start_time {
+                    return false;
+                }
+                pid_alive(self.pid)
+            }
         }
     }
 
@@ -226,6 +236,8 @@ impl OwnedProcess {
         Self {
             child: None,
             pid,
+            #[cfg(target_os = "linux")]
+            start_time: linux_start_time(pid),
             #[cfg(windows)]
             job: 0,
         }
@@ -281,6 +293,15 @@ pub fn pid_alive(pid: u32) -> bool {
         let mut status = 0;
         if unsafe { libc::waitpid(pid as i32, &mut status, libc::WNOHANG) } == pid as i32 {
             return false;
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            if stat
+                .rsplit_once(')')
+                .is_some_and(|(_, tail)| matches!(tail.split_whitespace().next(), Some("Z" | "X")))
+            {
+                return false;
+            }
         }
         unsafe { libc::kill(pid as i32, 0) == 0 }
     }
@@ -342,6 +363,17 @@ pub fn matches_database(pid: u32, executable: &Path, config: &Path) -> bool {
         }
     }
     false
+}
+
+#[cfg(target_os = "linux")]
+fn linux_start_time(pid: u32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(19)?
+        .parse()
+        .ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -429,6 +461,15 @@ pub fn tail(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adopted_process_does_not_accept_a_reused_pid() {
+        let mut owned = OwnedProcess::adopt_database(std::process::id());
+        assert!(owned.alive());
+        owned.start_time = owned.start_time.map(|stamp| stamp + 1);
+        assert!(!owned.alive());
+    }
+
     #[cfg(windows)]
     #[test]
     fn database_executable_identity_accepts_normalized_windows_paths() {

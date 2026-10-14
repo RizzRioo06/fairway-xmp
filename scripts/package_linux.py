@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tarfile
+from prepare_linux_runtime import bundle_component_libraries
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,6 +23,10 @@ def package():
     (stage / 'bin').mkdir()
     shutil.copy2(ROOT / 'src-tauri/target/release/fairway-cli', stage / 'bin/fairway')
     shutil.copytree(ROOT / 'src-tauri/resources/runtime', stage / 'runtime', symlinks=False)
+    cli_packages = bundle_component_libraries(stage / 'bin')
+    library_sources = json.loads((stage / 'runtime/linux-library-sources.json').read_text())
+    if not cli_packages.issubset({entry['package'] for entry in library_sources}):
+        raise RuntimeError('The CLI needs additional native-library sources; include them before packaging')
     for file in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md'):
         shutil.copy2(ROOT / file, stage / file)
     for file in ('install.sh', 'uninstall.sh'):
