@@ -11,6 +11,9 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 90
+    env:
+      # Current bottles contain Mach-O metadata unsupported by Xcode 16's tools.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -30,6 +33,7 @@ jobs:
         id: metadata
         run: |
           test "$(uname -m)" = arm64
+          xcodebuild -version
           version=$(python scripts/release_candidate.py version)
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: npm ci --no-audit --no-fund
