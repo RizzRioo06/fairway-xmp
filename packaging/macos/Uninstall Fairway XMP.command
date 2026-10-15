@@ -22,7 +22,13 @@ if [ "$KEEP_ALL" = yes ]; then
   "$EXE" --remove-cli
   mkdir -p "$HOME/.Trash"
   TRASH_ROOT=$(mktemp -d "$HOME/.Trash/Fairway-XMP-removed.XXXXXX")
-  mv "$APP" "$TRASH_ROOT/Fairway XMP.app"
+  if [ -w /Applications ]; then
+    /bin/mv "$APP" "$TRASH_ROOT/Fairway XMP.app"
+  else
+    # Package installs can leave /Applications writable only by an administrator.
+    # Keep profile cleanup in the student's account; elevate only the app move.
+    /usr/bin/sudo /bin/mv "$APP" "$TRASH_ROOT/Fairway XMP.app"
+  fi
   echo 'Fairway XMP moved to Trash. Projects, databases and backups have been kept.'
   exit 0
 fi
