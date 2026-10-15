@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta.1 — 2026-10-15
 
 - Full backup restore verification against a fresh database, unique export filenames, and cleanup after export errors.
 - Shareable diagnostic reports with embedded build identity and no filesystem paths, logs, or credentials.
