@@ -24,23 +24,37 @@ def archive_git_tree(archive):
         return hashlib.sha1(kind + b' ' + str(len(body)).encode() + b'\0' + body).digest()
 
     root = {}
+    directories = []
     with tarfile.open(archive) as bundle:
         for member in bundle:
-            if member.isdir(): continue
             path = PurePosixPath(member.name)
-            if path.is_absolute() or '..' in path.parts:
+            if path.is_absolute() or '..' in path.parts or '\\' in member.name or ':' in member.name:
                 raise RuntimeError('Unsafe source archive path')
+            permissions = member.mode & 0o7777
+            if member.isdir():
+                if permissions != 0o755: raise RuntimeError('Unsafe source archive directory mode')
+                directories.append(path)
+                continue
             parent = root
             for part in path.parts[:-1]: parent = parent.setdefault(part, {})
             if member.isfile():
+                if permissions not in (0o644, 0o755): raise RuntimeError('Unsafe source archive file mode')
                 body = bundle.extractfile(member).read()
                 mode = b'100755' if member.mode & 0o111 else b'100644'
             elif member.issym():
+                if permissions != 0o777: raise RuntimeError('Unsafe source archive symlink mode')
                 body, mode = member.linkname.encode(), b'120000'
             else:
                 raise RuntimeError('Unexpected source archive member')
             if path.name in parent: raise RuntimeError('Duplicate source archive path')
             parent[path.name] = (mode, object_hash(b'blob', body))
+    for path in directories:
+        folder = root
+        for part in path.parts:
+            if not isinstance(folder, dict) or part not in folder:
+                raise RuntimeError('Source archive directory is outside its Git tree')
+            folder = folder[part]
+        if not isinstance(folder, dict): raise RuntimeError('Source archive directory conflicts with a file')
 
     def tree(folder):
         body = b''

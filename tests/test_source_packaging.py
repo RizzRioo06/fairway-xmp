@@ -77,5 +77,18 @@ class SourceTreeTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError):
                         archive_git_tree(self.archive(root, 'unsafe.tar.gz', names=names))
 
+    def test_source_tree_rejects_unpinned_directories_and_special_permissions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ('../outside', '/outside', '..\\outside', 'C:/outside', 'extra-empty-directory'):
+                archive = root / 'directory.tar.gz'
+                with tarfile.open(archive, 'w:gz') as bundle:
+                    member = tarfile.TarInfo(name); member.type = tarfile.DIRTYPE; member.mode = 0o755
+                    bundle.addfile(member)
+                with self.assertRaises(RuntimeError): archive_git_tree(archive)
+            for mode in (0o4755, 0o666):
+                with self.assertRaisesRegex(RuntimeError, 'Unsafe source archive file mode'):
+                    archive_git_tree(self.archive(root, 'unsafe-mode.tar.gz', mode=mode))
+
 
 if __name__ == '__main__': unittest.main()
