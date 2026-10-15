@@ -9,6 +9,8 @@
 - Mac keep-data uninstall handles protected application moves; source collection verifies repacked Gitiles archives against their committed source trees.
 - The Mac installer quits a running Fairway XMP and stops its services before replacing the app.
 
+This release is built as `0.1.0-beta.1` and published from candidate run 38699450419 without rebuilding. The installers are unsigned and updates are manual. PHP 8.0 and 8.1 are legacy options; their Windows dependency provenance remains unverified.
+
 ## 0.1.0-alpha.3 — 2026-10-14
 
 - Linux x86_64 terminal dashboard and CLI, with a detached user supervisor and offline `.run`/`.tar.gz` installers for glibc 2.35+ systems.
