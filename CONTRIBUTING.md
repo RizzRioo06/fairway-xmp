@@ -4,7 +4,7 @@ The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on 
 
 ## Development
 
-Install Node 24, Rust stable (at least 1.90), and the platform Tauri development prerequisites. Windows builders need Microsoft's C++ Build Tools; Mac builders need Xcode 26.3 or newer command-line tools to relocate the current runtime bottles. The macOS candidate workflow explicitly selects Xcode 26.3 instead of the runner's older default. Students do not need these build tools.
+Install Node 24, Rust stable (at least 1.90), and the platform Tauri development prerequisites. Windows builders need Microsoft's C++ Build Tools; Mac builders need Xcode Command Line Tools. Students do not need these build tools.
 
 ```sh
 npm ci
