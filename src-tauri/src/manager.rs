@@ -35,6 +35,8 @@ pub struct Snapshot {
     pub php_version: String,
     pub php_versions: BTreeMap<String, String>,
     pub path_installed: bool,
+    pub cli_php: Option<String>,
+    pub cli_composer: Option<String>,
     pub path_php: Option<String>,
     pub path_composer: Option<String>,
     pub version: String,
@@ -167,6 +169,8 @@ impl Manager {
                 .filter_map(|(minor, full)| full.as_str().map(|version| (minor, version.into())))
                 .collect(),
             path_installed: crate::integration::installed(&self.layout),
+            cli_php: crate::integration::launcher(&self.layout, "php"),
+            cli_composer: crate::integration::launcher(&self.layout, "composer"),
             path_php: crate::integration::resolve("php"),
             path_composer: crate::integration::resolve("composer"),
             version: env!("CARGO_PKG_VERSION").into(),

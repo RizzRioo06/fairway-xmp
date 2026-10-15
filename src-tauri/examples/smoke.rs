@@ -71,6 +71,16 @@ fn main() -> Result<(), String> {
     manager.save_ports(chosen.clone())?;
     integration::install(&manager.layout)?;
     let result = (|| -> Result<(), String> {
+        let snapshot = manager.snapshot();
+        assert!(snapshot.path_installed);
+        assert_eq!(
+            snapshot.cli_php,
+            integration::launcher(&manager.layout, "php")
+        );
+        assert_eq!(
+            snapshot.cli_composer,
+            integration::launcher(&manager.layout, "composer")
+        );
         let mut php = process::command(manager.layout.bin.join(if cfg!(windows) {
             "php.cmd"
         } else {
@@ -209,6 +219,9 @@ fn main() -> Result<(), String> {
         // Settings survive restart; coursework survives removal of PATH integration.
         assert_eq!(manager.layout.ports()?, chosen);
         integration::remove(&manager.layout)?;
+        let snapshot = manager.snapshot();
+        assert!(!snapshot.path_installed);
+        assert!(snapshot.cli_php.is_none() && snapshot.cli_composer.is_none());
         assert!(probe.exists());
         assert!(!manager
             .layout

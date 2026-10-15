@@ -63,7 +63,7 @@ Before the first supported MySQL 8.4 → 9.7 startup, preserve the stopped physi
 
 Persistent user-level integration provides PHP and Composer launchers. Composer explicitly runs under bundled PHP and uses an app-owned Composer home.
 
-Windows: add/remove only the app's exact entry in HKCU Environment Path and notify the shell. macOS: managed blocks in zsh/bash profiles with recorded locations, removed precisely while preserving unrelated edits. The UI displays inherited command resolution and explains reopening existing terminals/VS Code. Open terminal places the bundled launchers first for that session.
+Windows: add/remove only the app's exact entry in HKCU Environment Path and notify the shell. macOS: managed blocks in zsh/bash profiles with recorded locations, removed precisely while preserving unrelated edits. Installed status requires the integration marker and both PHP/Composer launchers. The snapshot reports the app-owned launcher paths separately from inherited PATH resolution. The UI labels configuration as Added to PATH, shows the installed commands, and explains checking them in a new terminal. Inherited command resolution is in expandable detection details; missing commands there do not imply the installed launchers are missing. Open terminal places the bundled launchers first for that session.
 
 ## Installation and removal
 
@@ -80,6 +80,10 @@ Updates actions share equal-height buttons in a wrapping row. Long version label
 Installer upgrades must also preserve data and coursework. Release testing must verify clean-machine operation without Homebrew, OS signing/notarization, Windows prerequisites, non-ASCII/space-containing user paths, uninstall, update recovery, and database compatibility. A successful compile is not proof of these checks.
 
 ## Verification
+
+Normal UI review can use `npm run dev:ui`: the same React screens with an explicitly labeled, development-only simulated backend. A toolbar selects stopped/running/partial/conflict/missing-runtime/update and CLI detection/disabled scenarios, with example Windows/macOS paths. Paths default to the browser host platform; Windows launchers use backslashes and `.cmd`, while macOS uses Unix paths. Installed commands remain distinct from missing or other inherited commands in CLI fixtures. Service actions, settings, logs, backups, and update responses are in-memory simulations with visible pending states; native open actions only show a message. Reset/reload clears the simulation. Ordinary browser previews remain disabled and production builds cannot activate this mode.
+
+Playwright runs Chromium and WebKit at 1080×760 and 820×650, checks UI interactions and overflow, and attaches scenario screenshots to an HTML report. Failures retain traces, videos, and screenshots. The `ui-review` CI job uploads the report for human visual review on pushes/PRs. Screenshots are review evidence, without approved pixel-diff baselines. Browser review and native service CI must use the same source commit; they do not replace targeted native checks of installers, tray menus, OS integration, native WebView differences, or the Linux terminal dashboard.
 
 Core tests cover port validation/conflicts, path quoting, and idempotent PATH-block removal. Packaging tests reject archive traversal and bad checksums. The runtime smoke example verifies actual browser → Nginx → PHP → MySQL → response, phpMyAdmin rendering, database backup, graceful shutdown, settings persistence, and removal of isolated CLI integration without deleting coursework.
 
