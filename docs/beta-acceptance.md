@@ -19,7 +19,7 @@ The final job runs only when every called workflow passes, including Linux's cle
 - `candidate-manifest.json`: source commit, application/runtime versions, artifact names, exact file SHA256/size, installed lifecycle results, signing status, and known limitations.
 - `acceptance-template.json`: checks still requiring a person, bound to each exact installer's hash. All checks start false.
 
-Installers remain in their platform artifacts in the same workflow run. Mac's artifact also contains the combined Mac/Windows bundled-tool source archive. Linux's corresponding sources are in `fairway-linux-x86_64-sources`; download that artifact alongside the Linux installer artifact when verifying its file inventory.
+Installers remain in their platform artifacts in the same workflow run. Mac's artifact also contains the combined Mac/Windows bundled-tool source archive. Linux's corresponding sources are in `fairway-xmp-linux-x86_64-VERSION-sources`; download that artifact alongside the Linux installer artifact when verifying its file inventory.
 
 ## Review the candidate
 

@@ -73,7 +73,7 @@ def record(target, directory, artifact, lifecycle, output):
     if evidence.get('installer') != installers[0] or evidence.get('installerSha256') != files[installers[0]]['sha256']:
         raise ValueError('Candidate installer differs from the file used by the lifecycle test')
     data = {'schema': 1, 'target': target, 'version': version, 'commit': commit, 'signed': False,
-            'artifact': artifact, 'relatedArtifacts': ['fairway-linux-x86_64-sources'] if target == 'linux-x86_64' else [], 'installer': installers[0], 'files': files, 'runtime': runtime, 'lifecycle': evidence,
+            'artifact': artifact, 'relatedArtifacts': [f'fairway-xmp-linux-x86_64-{version}-sources'] if target == 'linux-x86_64' else [], 'installer': installers[0], 'files': files, 'runtime': runtime, 'lifecycle': evidence,
             'run': f"{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"}
     write(output, data)
     write(Path(directory) / 'candidate-info.json', data)

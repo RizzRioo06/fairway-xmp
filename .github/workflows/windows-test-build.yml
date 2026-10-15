@@ -89,12 +89,12 @@ jobs:
           $installers = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe')
           if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
           $version = '${{ steps.metadata.outputs.version }}'
-          $filename = "Fairway-XMP-$version-windows-x64-setup.exe"
+          $filename = "fairway-xmp-$version-windows-x64-setup.exe"
           Copy-Item $installers[0].FullName (Join-Path $output $filename)
           Copy-Item runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
           $hash = Get-FileHash $installers[0].FullName -Algorithm SHA256
           "$($hash.Hash.ToLower())  $filename" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
-          git archive --format=tar.gz --output="$output/fairway-xmp-build-source.tar.gz" HEAD
+          git archive --format=tar.gz --output="$output/fairway-xmp-$version-build-source.tar.gz" HEAD
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           @{
             version = $version
@@ -118,7 +118,7 @@ jobs:
           $installer = (Get-ChildItem 'artifacts/windows-installer/*-setup.exe').FullName
           python tests/installer_lifecycle.py --installer $installer --baseline .runtime-work/baseline-windows.exe --probe src-tauri/target/x86_64-pc-windows-msvc/release/examples/installer_probe.exe --output .runtime-work/windows-lifecycle --allow-user-profile-changes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/release_candidate.py record --target windows-x64 --directory artifacts/windows-installer --artifact fairway-windows-x64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
+          python scripts/release_candidate.py record --target windows-x64 --directory artifacts/windows-installer --artifact fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v6
         if: inputs.record_runtime_checksums != true
@@ -129,7 +129,7 @@ jobs:
           retention-days: 90
       - uses: actions/upload-artifact@v6
         with:
-          name: fairway-windows-x64-${{ steps.metadata.outputs.version }}
+          name: fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }}
           path: artifacts/windows-installer/
           if-no-files-found: error
           retention-days: 90

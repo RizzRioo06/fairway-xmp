@@ -7,6 +7,7 @@
 - PHP 8.0/8.1 labeled as unsupported legacy options.
 - An unsigned release-candidate workflow tying platform installers, installed upgrade/removal/reinstall checks, browser reports, and human acceptance to one commit and exact file hashes. Signing remains deferred.
 - Mac keep-data uninstall handles protected application moves; source collection verifies repacked Gitiles archives against their committed source trees.
+- The Mac installer quits a running Fairway XMP and stops its services before replacing the app.
 
 ## 0.1.0-alpha.3 — 2026-10-14
 

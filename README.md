@@ -115,7 +115,7 @@ If a port is already in use, Fairway XMP shows the conflict. Stop all services, 
 
 ## Updates and removal
 
-Open **Updates → View downloads** to get a newer installer. Stop all services and quit Fairway XMP before installing it. Your projects and database data are kept.
+Open **Updates → View downloads** to get a newer installer. On a Mac, the installer quits a running Fairway XMP and stops its services before replacing the app. On Windows, quit Fairway XMP from the system tray before installing. Your projects and database data are kept.
 
 To uninstall:
 
