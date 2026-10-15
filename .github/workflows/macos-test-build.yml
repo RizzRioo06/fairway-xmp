@@ -36,13 +36,15 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm run test:scripts
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Stage verified macOS runtimes
         run: python scripts/prepare_runtime.py
       - name: Exercise real services, backup restoration and PHP versions
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/macos-smoke"
+      - name: Exercise native data browser and SQL export/import
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- "$PWD/.runtime-work/data-browser-smoke"
       - name: Build unsigned app and installer
         run: |
           npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app

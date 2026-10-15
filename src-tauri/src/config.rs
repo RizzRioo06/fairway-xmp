@@ -249,6 +249,10 @@ impl Layout {
             php_string(&self.data.join("tmp").to_string_lossy()), ports.phpmyadmin);
         // A writable overlay keeps generated configuration outside the signed app bundle.
         atomic_write(&conf.join("config.inc.php"), phpmyadmin_config.as_bytes())?;
+        #[cfg(feature = "terminal")]
+        if self.data.join("terminal-bin").is_dir() {
+            crate::terminal::prepare_tools(self)?;
+        }
         Ok(())
     }
 

@@ -78,6 +78,8 @@ composer --version
 
 Manage this integration under **Settings → Command-line tools**. You can also use **Open terminal** in the control panel.
 
+The beta 2 candidate adds an embedded **Terminal** page on macOS and Windows. It opens in your coursework folder with PHP and Composer ready, even when persistent command-line integration is disabled. The session stays open while switching pages or hiding the window; quitting Fairway ends it. Use **Restart** or **End session** to close its running commands. macOS also adds a **Data browser** beside phpMyAdmin. Neither feature is in the published beta 1 installers.
+
 Beta 1 includes PHP 8.0 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.0` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. PHP 8.0 and 8.1 are end of life; use newer versions for internet-facing projects.
 
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.

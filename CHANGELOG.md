@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.2 — 2026-10-15
+
+- Embedded Terminal on macOS and Windows: one local shell in the coursework folder, with PHP and Composer available for that session even when persistent command-line integration is off.
+- macOS data browser beside phpMyAdmin, with database and table management, row editing, and a SQL editor. Windows data browser UI and Linux changes are not in this build.
+- macOS command-line tools include `fairway db` for SQL export and import.
+
+This build reports `0.1.0-beta.2`. Installers are unsigned and updates are manual. It is the beta 2 candidate and is not a published release.
+
 ## 0.1.0-beta.1 — 2026-10-15
 
 - Full backup restore verification against a fresh database, unique export filenames, and cleanup after export errors.

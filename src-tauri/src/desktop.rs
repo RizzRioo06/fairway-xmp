@@ -108,6 +108,8 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
                 "The service manager is unavailable. Restart Fairway XMP.".to_string()
             })?;
             manager.stop_all()?;
+            // Terminal processes are owned separately from managed services.
+            // A hidden window keeps them alive; explicit Quit closes them.
             remove_app_marker(&manager)
         })
         .await
@@ -115,6 +117,7 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
         .and_then(|result| result);
         match result {
             Ok(()) => {
+                app.state::<crate::terminal::Terminals>().close_all();
                 lifecycle.allow_exit();
                 app.exit(0);
             }
@@ -171,6 +174,97 @@ async fn access<T: Send + 'static>(
 #[tauri::command]
 async fn snapshot(state: State<'_, Shared>) -> Result<Snapshot> {
     access(state.inner().clone(), |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn terminal_start(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<crate::terminal::TerminalInfo> {
+    let _operation = begin_operation(&app, "Opening terminal…")?;
+    let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::terminal::Terminals>()
+            .start(&layout, id, cols, rows)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn terminal_read(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<crate::terminal::TerminalOutput> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::terminal::Terminals>().read(&id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn terminal_write(app: tauri::AppHandle, id: String, data: String) -> Result<()> {
+    if app.state::<DesktopControl>().lifecycle.quitting() {
+        return Err("Fairway XMP is quitting.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::terminal::Terminals>().write(&id, &data)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn terminal_resize(app: tauri::AppHandle, id: String, cols: u16, rows: u16) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::terminal::Terminals>()
+            .resize(&id, cols, rows)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn terminal_close(app: tauri::AppHandle, id: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::terminal::Terminals>().close(&id)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn data_browser(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    request: serde_json::Value,
+    id: String,
+) -> Result<serde_json::Value> {
+    let _operation = begin_operation(&app, "Working with database…")?;
+    let jobs = app.state::<crate::data_browser::Jobs>();
+    let cancel = jobs.register(&id)?;
+    let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await;
+    let result = match layout {
+        Ok(layout) => tauri::async_runtime::spawn_blocking(move || {
+            crate::data_browser::execute(&layout, request, cancel)
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r),
+        Err(error) => Err(error),
+    };
+    jobs.finish(&id);
+    result
+}
+
+#[tauri::command]
+async fn cancel_data_browser(app: tauri::AppHandle, id: String) -> Result<()> {
+    app.state::<crate::data_browser::Jobs>().cancel(&id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -336,6 +430,7 @@ async fn install_update(app: tauri::AppHandle, state: State<'_, Shared>) -> Resu
         m.stop_all()
     })
     .await?;
+    app.state::<crate::terminal::Terminals>().close_all();
     update
         .download_and_install(|_, _| {}, || {})
         .await
@@ -362,6 +457,17 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     let Some(action) = args.get(1) else {
         return Ok(false);
     };
+    #[cfg(target_os = "macos")]
+    if action == "db" {
+        #[cfg(debug_assertions)]
+        let runtime = std::env::var_os("FAIRWAY_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime"));
+        #[cfg(not(debug_assertions))]
+        let runtime = runtime_location(&std::env::current_exe().map_err(|e| e.to_string())?)?;
+        crate::data_browser::cli(&Layout::new(runtime)?, &args[2..])?;
+        return Ok(true);
+    }
     if action == "--build-info" {
         println!("{}", crate::diagnostics::build_identity());
         return Ok(true);
@@ -461,6 +567,8 @@ pub fn run() {
             .map_err(std::io::Error::other)?;
             app.manage(Arc::new(Mutex::new(manager)));
             app.manage(DesktopControl::default());
+            app.manage(crate::data_browser::Jobs::default());
+            app.manage(crate::terminal::Terminals::default());
             // Fail initialization if the tray cannot be created; otherwise a
             // hidden window could leave users without a way to control the app.
             NativeTray::install(app.handle())?;
@@ -485,7 +593,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             snapshot,
+            terminal_start,
+            terminal_read,
+            terminal_write,
+            terminal_resize,
+            terminal_close,
             diagnostic_report,
+            data_browser,
+            cancel_data_browser,
             service_action,
             save_settings,
             open_target,
@@ -515,6 +630,7 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => show_window(app),
         tauri::RunEvent::Exit => {
+            app.state::<crate::terminal::Terminals>().close_all();
             app.state::<DesktopControl>()
                 .monitor_stopped
                 .store(true, Ordering::SeqCst);
