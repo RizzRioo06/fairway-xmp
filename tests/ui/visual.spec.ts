@@ -17,6 +17,36 @@ test('production browser preview cannot enable simulated services', async ({ pag
   await expect(page.getByRole('region', { name: 'UI test controls' })).toHaveCount(0);
 });
 
+test('support report is reviewable and excludes private paths; old PHP versions are legacy', async ({ page }, info) => {
+  await page.goto('/');
+  await page.getByLabel('Example paths').selectOption('macOS');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Other PHP on PATH');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByText('Advanced settings', { exact: true }).click();
+  await expect(page.getByRole('option', { name: 'PHP 8.0 · Legacy', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('option', { name: 'PHP 8.1 · Legacy', exact: true })).toHaveCount(1);
+  await page.getByLabel('PHP version').selectOption('8.4');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Diagnostic report', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Diagnostic report', exact: true });
+  await expect(dialog).toBeVisible();
+  const data = JSON.parse(await dialog.locator('pre').innerText());
+  expect(data.commandLine.phpDetectedByApp).toBe('other-installation');
+  expect(data.selectedPhp).toBe('8.4');
+  expect(data.selectedPhpVersion).toMatch(/^8\.4\./);
+  expect(data.selectedPhpLegacy).toBe(false);
+  expect(data.system.os).toBe('macos');
+  expect(data.services).toHaveLength(4);
+  expect(JSON.stringify(data)).not.toContain('/Users/');
+  expect(JSON.stringify(data)).not.toContain('/opt/homebrew');
+  expect(data.excluded).toContain('credentials');
+  await expect(dialog.getByRole('button', { name: 'Copy diagnostic report', exact: true })).toBeEnabled();
+  await capture(page, info, 'diagnostic-report');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});
+
 for (const scenario of scenarios) {
   test(`visual review: ${scenario}`, async ({ page }, info) => {
     const errors: string[] = [];

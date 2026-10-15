@@ -30,6 +30,7 @@ export default function App() {
   const [backendBusy, setBackendBusy] = useState<string | null>(null);
   const busy = backendBusy ?? localBusy;
   const [notice, setNotice] = useState<Notice>(null);
+  const [report, setReport] = useState<string | null>(null);
   const [log, setLog] = useState<{ service: ServiceId; text: string } | null>(null);
   const [help, setHelp] = useState(false);
   const [ports, setPorts] = useState<Ports>(preview.ports);
@@ -69,7 +70,7 @@ export default function App() {
       ...(isUiTest ? [listen('ui-test-reset', payload => {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
-        setNotice(null); setUpdate(null); setLog(null); setHelp(false); setCopied(null);
+        setNotice(null); setUpdate(null); setLog(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
       listen('fairway-status', payload => setData(payload as Snapshot)),
       listen('fairway-operation-started', payload => {
@@ -185,8 +186,9 @@ export default function App() {
             }); }}>
               <div className="port-fields">{([['website', 'Website', 'Nginx'], ['phpmyadmin', 'phpMyAdmin', 'Database browser'], ['mysql', 'MySQL', 'Database connection']] as const).map(([key, label, hint]) => <label key={key}><span>{label}<small>{hint}</small></span><input type="number" min="1024" max="65535" required value={ports[key]} disabled={anyRunning || !!busy} onChange={event => setPorts({ ...ports, [key]: Number(event.target.value) })} /></label>)}</div>
               <details className="advanced"><summary>Advanced settings</summary>
-                <label><span>PHP version<small>For websites, CLI PHP, and Composer. PHP 8.5 is the default.</small></span><select value={phpVersion} disabled={!canControl || !!busy || anyRunning || !data.runtimeReady} onChange={event => setPhpVersion(event.target.value)}>{Object.keys(data.phpVersions).sort().map(version => <option key={version} value={version}>PHP {version}</option>)}</select></label>
+                <label><span>PHP version<small>For websites, CLI PHP, and Composer. PHP 8.5 is the default.</small></span><select value={phpVersion} disabled={!canControl || !!busy || anyRunning || !data.runtimeReady} onChange={event => setPhpVersion(event.target.value)}>{Object.keys(data.phpVersions).sort().map(version => <option key={version} value={version}>PHP {version}{['8.0', '8.1'].includes(version) ? ' · Legacy' : ''}</option>)}</select></label>
                 <label><span>PHP FastCGI port<small>Internal connection between Nginx and PHP</small></span><input type="number" min="1024" max="65535" required value={ports.php} disabled={anyRunning || !!busy} onChange={event => setPorts({ ...ports, php: Number(event.target.value) })} /></label>
+                <p className="settings-hint">PHP 8.0 and 8.1 are unsupported legacy versions for older coursework. Use PHP 8.5 for new projects.</p>
               </details>
               {anyRunning && <p className="settings-hint">Services are running. Stop all from Environment to edit settings.</p>}
               <button className="primary" disabled={!canControl || anyRunning || !!busy || !data.runtimeReady} type="submit">Save</button>
@@ -207,6 +209,7 @@ export default function App() {
               <dl className="path-list"><div><dt>PHP detected by this app</dt><dd>{data.pathPhp ?? 'Not detected in the app’s PATH'}</dd></div><div><dt>Composer detected by this app</dt><dd>{data.pathComposer ?? 'Not detected in the app’s PATH'}</dd></div></dl>
             </details>
           </section>
+          <section className="settings-card"><h2>Help and diagnostics</h2><p>Create a support report with your app version, operating system, selected PHP, ports, service status, and command detection. It excludes passwords, database contents, project files, logs, and file paths.</p><button className="secondary" disabled={!canControl || !!busy} onClick={() => { void run('Preparing diagnostic report…', async () => setReport(await invoke<string>('diagnostic_report'))); }}>Diagnostic report<Clipboard size={14} /></button></section>
           <section className="settings-card"><h2>Your files</h2><dl className="path-list"><div><dt>Document root</dt><dd>{data.documentRoot}</dd></div><div><dt>Settings and database data</dt><dd>{data.dataDir}</dd></div></dl><div className="button-row"><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('logs')}><ScrollText size={15} />Open logs</button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('backups')}><FolderOpen size={15} />Open backups</button></div></section>
         </>}
 
@@ -226,6 +229,7 @@ export default function App() {
       {busy && <div className="operation-status" role="status"><LoaderCircle className="spin" size={16} />{busy}</div>}
     </main>
 
+    {report !== null && <Modal title="Diagnostic report" onClose={() => setReport(null)}><p>Copy this report when asking for help. You can review everything included below.</p><pre className="log-output">{report}</pre><button className="secondary" onClick={() => { void copy(report, 'diagnostics'); }}>{copied === 'diagnostics' ? <Check size={14} /> : <Clipboard size={14} />}{copied === 'diagnostics' ? 'Copied' : 'Copy diagnostic report'}</button></Modal>}
     {log && <Modal title={`${meta[log.service].name} logs`} onClose={() => setLog(null)}><pre className="log-output">{log.text}</pre><button className="secondary" disabled={!!busy} onClick={() => showLog(log.service)}><RefreshCw size={15} />Refresh log</button></Modal>}
     {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Closing this window keeps services running. Use the Fairway XMP menu bar or system tray icon to reopen the panel, control services, or quit. Quitting stops all services.</p></Modal>}
   </div>;

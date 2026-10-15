@@ -111,6 +111,15 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before making a backup.');
       result = joinPath(data.dataDir, 'backups', 'student-databases-ui-test.sql'); break;
     case 'read_log': result = `[UI TEST — simulated ${String(args.service)} log]\nService configuration loaded.\nReady for local connections.\nNo real services are running.`; break;
+    case 'diagnostic_report': result = JSON.stringify({
+      schema: 1, product: 'Fairway XMP', version: data.version, simulated: true,
+      build: { commit: 'ui-test', modifiedSources: false, debug: true },
+      system: { os: platform === 'Windows' ? 'windows' : 'macos', version: platform === 'Windows' ? 'Windows 11 (simulated)' : 'macOS 15 (simulated)', architecture: platform === 'Windows' ? 'x86_64' : 'aarch64' },
+      runtimeReady: data.runtimeReady, runtimeVersions: data.runtimeVersions, selectedPhp: data.phpVersion, selectedPhpVersion: data.phpVersions[data.phpVersion], selectedPhpLegacy: ['8.0', '8.1'].includes(data.phpVersion),
+      services: data.services.map(({ id, port, running, ready }) => ({ id, port, running, ready })),
+      commandLine: { installed: data.pathInstalled, phpDetectedByApp: data.pathPhp === null ? 'not-detected' : data.pathPhp === data.cliPhp ? 'fairway' : 'other-installation', composerDetectedByApp: data.pathComposer === null ? 'not-detected' : data.pathComposer === data.cliComposer ? 'fairway' : 'other-installation' },
+      excluded: ['credentials', 'database contents', 'project files', 'logs', 'filesystem paths'],
+    }, null, 2); break;
     case 'check_update': result = {
       configured: scenario === 'Update available' || scenario === 'Update failure',
       version: scenario.startsWith('Update ') ? '0.2.0-preview-with-a-long-version-label' : null,

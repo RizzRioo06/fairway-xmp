@@ -13,6 +13,7 @@ use std::{env, io::IsTerminal, path::PathBuf, process::Command};
 #[serde(tag = "command", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
     Status,
+    Diagnostics,
     Start { service: String },
     Stop { service: String },
     Restart { service: String },
@@ -43,11 +44,15 @@ pub(super) struct Response {
 
 pub fn run() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args == ["--build-info"] {
+        println!("{}", crate::diagnostics::build_identity());
+        return Ok(());
+    }
     if matches!(
         args.first().map(String::as_str),
         Some("help" | "--help" | "-h")
     ) {
-        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql]\nfairway logs nginx|mysql|php  Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP  Change ports while all services are stopped\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
+        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql]\nfairway logs nginx|mysql|php  Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP  Change ports while all services are stopped\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services (8.0/8.1 are legacy)\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
         return Ok(());
     }
     if matches!(args.first().map(String::as_str), Some("--version" | "-V")) {
@@ -233,6 +238,7 @@ fn parse(args: &[String]) -> Result<Request> {
             Ok(Request::Ports { ports })
         }
         "backup" if args.len() == 1 => Ok(Request::Backup),
+        "diagnostics" if args.len() == 1 => Ok(Request::Diagnostics),
         "php-version" if args.len() == 2 => Ok(Request::PhpVersion {
             version: args[1].clone(),
         }),
