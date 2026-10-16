@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -32,8 +33,17 @@ def request(url, headers=None):
 
 
 def read_json(url):
-    with request(url) as response:
-        return json.load(response)
+    for attempt in range(3):
+        try:
+            with request(url) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504): raise
+            if attempt == 2: raise
+        except (OSError, urllib.error.URLError, http.client.HTTPException):
+            if attempt == 2: raise
+        print(f'Retrying interrupted metadata request ({attempt + 1}/2)', flush=True)
+        time.sleep(2 * (attempt + 1))
 
 
 def download(url, expected=None, algorithm='sha256', headers=None):
