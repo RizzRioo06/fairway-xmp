@@ -3,6 +3,10 @@ import type { Page, TestInfo } from '@playwright/test';
 
 const scenarios = ['Stopped', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure'];
 
+async function openSites(page: Page) {
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+}
+
 async function capture(page: Page, info: TestInfo, name: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const path = info.outputPath(`${name}.png`);
@@ -22,28 +26,29 @@ test('production browser preview cannot enable simulated services', async ({ pag
 
 test('projects are added, edited, and removed explicitly', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByLabel('Scenario', { exact: true }).selectOption('No projects');
-  await expect(page.getByText('No projects yet.')).toBeVisible();
-  await page.getByRole('button', { name: 'Add project' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add project' });
+  await openSites(page);
+  await page.getByLabel('Scenario', { exact: true }).selectOption('No sites');
+  await expect(page.getByText('No sites yet.')).toBeVisible();
+  await page.getByRole('button', { name: 'Add site' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
   await dialog.getByLabel('Name').fill('Course Site');
   await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel('Domain')).toHaveValue('course-site');
-  await expect(dialog.getByRole('button', { name: 'Add project' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Add site' })).toBeDisabled();
   await dialog.getByLabel('Web root folder').click();
   await expect(dialog.getByLabel('Web root folder')).toHaveValue(/new-site.public$/);
   await expect(dialog).toContainText('course-site.test in your computer’s hosts file');
   await dialog.getByLabel('Route missing paths to index.php').check();
   await capture(page, info, 'add-project');
-  await dialog.getByRole('button', { name: 'Add project' }).click();
-  const table = page.getByRole('table', { name: 'Projects' });
+  await dialog.getByRole('button', { name: 'Add site' }).click();
+  const table = page.getByRole('table', { name: 'Sites' });
   await expect(table).toContainText('Course Site');
   await expect(table.getByText('course-site.test:8800', { exact: true })).toBeVisible();
 
   await expect(page.getByRole('button', { name: 'Open Course Site' })).toBeDisabled();
   await page.getByRole('button', { name: 'Edit Course Site' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit project' });
+  const edit = page.getByRole('dialog', { name: 'Edit site' });
   await edit.getByLabel('Name').fill('Course');
   await expect(edit.getByLabel('Domain')).toHaveValue('course-site');
   await edit.getByLabel('Domain').fill('course');
@@ -54,37 +59,40 @@ test('projects are added, edited, and removed explicitly', async ({ page }, info
   await page.getByRole('button', { name: 'Remove Course' }).click();
   const remove = page.getByRole('dialog', { name: 'Remove Course?' });
   await expect(remove).toContainText('its files are kept');
-  await remove.getByRole('button', { name: 'Remove project' }).click();
-  await expect(page.getByText('No projects yet.')).toBeVisible();
+  await remove.getByRole('button', { name: 'Remove site' }).click();
+  await expect(page.getByText('No sites yet.')).toBeVisible();
 });
 
 test('removing the last HTTPS project also removes certificate trust', async ({ page }) => {
   await page.goto('/');
+  await openSites(page);
   await page.getByRole('button', { name: 'Remove Blog' }).click();
   const blog = page.getByRole('dialog', { name: 'Remove Blog?' });
   await expect(blog).not.toContainText('certificate trust');
-  await blog.getByRole('button', { name: 'Remove project' }).click();
+  await blog.getByRole('button', { name: 'Remove site' }).click();
   await page.getByRole('button', { name: 'Remove My Shop' }).click();
   const shop = page.getByRole('dialog', { name: 'Remove My Shop?' });
   await expect(shop).toContainText('also removes its local certificate trust');
-  await shop.getByRole('button', { name: 'Remove project' }).click();
-  await expect(page.getByText('No projects yet.')).toBeVisible();
+  await shop.getByRole('button', { name: 'Remove site' }).click();
+  await expect(page.getByText('No sites yet.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove certificate trust' })).toHaveCount(0);
 });
 
 test('invalid project details stay in the form with an error', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add project' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add project' });
+  await openSites(page);
+  await page.getByRole('button', { name: 'Add site' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
   await dialog.getByLabel('Name').fill('Shop');
   await dialog.getByRole('button', { name: 'Choose…' }).click();
-  await dialog.getByRole('button', { name: 'Add project' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('shop.test is already used by another project.');
+  await dialog.getByRole('button', { name: 'Add site' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('shop.test is already used by another site.');
   await expect(dialog.getByLabel('Name')).toHaveValue('Shop');
 });
 
 test('HTTPS explains trust once and trust can be removed when unused', async ({ page }, info) => {
   await page.goto('/');
+  await openSites(page);
   const shop = page.getByRole('switch', { name: 'HTTPS for My Shop' });
   await expect(shop).toBeChecked();
   await shop.locator('..').click();
@@ -108,6 +116,7 @@ test('HTTPS explains trust once and trust can be removed when unused', async ({ 
 
 test('pending hosts updates and missing folders are shown with a recovery action', async ({ page }, info) => {
   await page.goto('/');
+  await openSites(page);
   await page.getByLabel('Scenario', { exact: true }).selectOption('Hosts update pending');
   await expect(page.getByText('Address not set up yet')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'HTTPS for Blog' })).toBeDisabled();
@@ -117,7 +126,7 @@ test('pending hosts updates and missing folders are shown with a recovery action
   await expect(page.getByRole('switch', { name: 'HTTPS for Blog' })).toBeEnabled();
   await page.getByLabel('Scenario', { exact: true }).selectOption('Missing web root');
   await expect(page.getByText('Unavailable: the web root folder is missing.', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'Collapse projects' }).click();
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await expect(page.getByText('Unavailable: the web root folder is missing.', { exact: false })).toBeHidden();
 });
 

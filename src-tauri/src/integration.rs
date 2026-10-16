@@ -377,9 +377,7 @@ pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<(
             .into_iter()
             .find(|project| project.domain == name[8..] && project.root.is_dir())
             .map(|project| project_url(&project, website))
-            .ok_or(
-                "This project's web root folder is missing. Edit the project to choose it again.",
-            )?,
+            .ok_or("This site's web root folder is missing. Edit the site to choose it again.")?,
         "coursework" => layout.www.to_string_lossy().into(),
         "logs" => layout.data.join("logs").to_string_lossy().into(),
         "backups" => layout.data.join("backups").to_string_lossy().into(),

@@ -335,7 +335,10 @@ fn draw(
             "  phpMyAdmin: http://127.0.0.1:{}/",
             snapshot.ports.phpmyadmin
         ));
-        lines.push(format!("  Projects:   {}", clean(&snapshot.document_root)));
+        lines.push(format!(
+            "  Document root: {}",
+            clean(&snapshot.document_root)
+        ));
         lines.push(format!("  Data:       {}", clean(&snapshot.data_dir)));
     }
     lines.push(String::new());

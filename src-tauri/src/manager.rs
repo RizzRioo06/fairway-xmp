@@ -227,7 +227,7 @@ impl Manager {
             .contains(&crate::tls::https_port())
         {
             return Err(format!(
-                "Port {} is reserved for project HTTPS. Choose another service port.",
+                "Port {} is reserved for site HTTPS. Choose another service port.",
                 crate::tls::https_port()
             ));
         }
@@ -275,7 +275,7 @@ impl Manager {
         });
         if let Err(error) = result {
             atomic_write(&config, &previous)?;
-            return Err(format!("Could not apply project changes: {error}"));
+            return Err(format!("Could not apply site changes: {error}"));
         }
         Ok(())
     }
@@ -291,7 +291,7 @@ impl Manager {
                 let slot = projects
                     .iter_mut()
                     .find(|p| p.domain == domain)
-                    .ok_or("This project is no longer registered.")?;
+                    .ok_or("This site is no longer registered.")?;
                 *slot = project;
             }
             None => projects.push(project),
@@ -304,7 +304,7 @@ impl Manager {
         let count = projects.len();
         projects.retain(|p| p.domain != domain);
         if projects.len() == count {
-            return Err("This project is no longer registered.".into());
+            return Err("This site is no longer registered.".into());
         }
         self.apply_projects(projects)
     }
@@ -314,7 +314,7 @@ impl Manager {
         let project = projects
             .iter_mut()
             .find(|p| p.domain == domain)
-            .ok_or("This project is no longer registered.")?;
+            .ok_or("This site is no longer registered.")?;
         if project.https == enabled {
             return Ok(());
         }

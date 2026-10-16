@@ -366,7 +366,7 @@ async fn save_project(
     previous: Option<String>,
     project: ProjectConfig,
 ) -> Result<Snapshot> {
-    let _operation = begin_operation(&app, "Saving project…")?;
+    let _operation = begin_operation(&app, "Saving site…")?;
     let state = state.inner().clone();
     access(state.clone(), move |m| {
         m.save_project(previous.as_deref(), project)
@@ -374,7 +374,7 @@ async fn save_project(
     .await?;
     sync_hosts(state.clone())
         .await
-        .map_err(|e| format!("The project was saved, but the hosts file was not updated: {e}"))?;
+        .map_err(|e| format!("The site was saved, but the hosts file was not updated: {e}"))?;
     access(state, |m| Ok(m.snapshot())).await
 }
 
@@ -384,7 +384,7 @@ async fn remove_project(
     state: State<'_, Shared>,
     domain: String,
 ) -> Result<Snapshot> {
-    let _operation = begin_operation(&app, "Removing project…")?;
+    let _operation = begin_operation(&app, "Removing site…")?;
     let state = state.inner().clone();
     let unused_trust = access(state.clone(), move |m| {
         m.remove_project(&domain)?;
@@ -393,13 +393,13 @@ async fn remove_project(
     .await?;
     sync_hosts(state.clone())
         .await
-        .map_err(|e| format!("The project was removed, but the hosts file was not updated: {e}"))?;
+        .map_err(|e| format!("The site was removed, but the hosts file was not updated: {e}"))?;
     if let Some(layout) = unused_trust {
         tauri::async_runtime::spawn_blocking(move || crate::tls::remove_trust(&layout))
             .await
             .map_err(|e| e.to_string())?
             .map_err(|e| {
-                format!("The project was removed, but certificate trust was not removed: {e}")
+                format!("The site was removed, but certificate trust was not removed: {e}")
             })?;
     }
     access(state, |m| Ok(m.snapshot())).await
@@ -420,14 +420,14 @@ async fn set_project_https(
     domain: String,
     enabled: bool,
 ) -> Result<Snapshot> {
-    let _operation = begin_operation(&app, "Updating project HTTPS…")?;
+    let _operation = begin_operation(&app, "Updating site HTTPS…")?;
     let shared = state.inner().clone();
     if enabled {
         let layout = access(shared.clone(), {
             let domain = domain.clone();
             move |m| {
                 if !m.domains()?.contains(&domain) {
-                    return Err("This project is no longer registered.".into());
+                    return Err("This site is no longer registered.".into());
                 }
                 Ok(m.layout.clone())
             }
@@ -450,9 +450,7 @@ async fn remove_https_trust(app: tauri::AppHandle, state: State<'_, Shared>) -> 
     let shared = state.inner().clone();
     let layout = access(shared.clone(), |m| {
         if m.layout.registered_projects()?.iter().any(|p| p.https) {
-            return Err(
-                "Turn off HTTPS for every project before removing certificate trust.".into(),
-            );
+            return Err("Turn off HTTPS for every site before removing certificate trust.".into());
         }
         Ok(m.layout.clone())
     })
