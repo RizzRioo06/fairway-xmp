@@ -28,6 +28,6 @@ security import "$CERTIFICATE" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATES_PASSWORD" 
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
 security find-identity -v -p codesigning "$KEYCHAIN"
 xcrun notarytool store-credentials fairway-release --key "$API_KEY" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --keychain "$KEYCHAIN"
-# notarytool searches the user keychain search list for this profile.
-printf 'APPLE_NOTARY_PROFILE=fairway-release\n' >> "$GITHUB_ENV"
+# Pass the temporary keychain explicitly when using the notarization profile.
+printf 'APPLE_NOTARY_PROFILE=fairway-release\nAPPLE_NOTARY_KEYCHAIN=%s\n' "$KEYCHAIN" >> "$GITHUB_ENV"
 rm -f "$CERTIFICATE" "$API_KEY"

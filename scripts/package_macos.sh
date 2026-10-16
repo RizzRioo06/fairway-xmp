@@ -7,6 +7,7 @@ STAGE="$ROOT/.runtime-work/pkg-root"
 COMPONENTS="$ROOT/.runtime-work/fairway-components.plist"
 [ -d "$APP" ] || { echo 'Build the Tauri application bundle first.' >&2; exit 1; }
 mkdir -p "$ARTIFACTS" "$ROOT/.runtime-work"
+chmod +x "$APP/Contents/Resources/Uninstall Fairway XMP.command"
 VERSION=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])).version)' "$ROOT/package.json")
 if [ "${FAIRWAY_SIGNED_RELEASE:-0}" = 1 ]; then
   : "${APPLE_SIGNING_IDENTITY:?Developer ID Application identity is required}"
@@ -14,6 +15,13 @@ if [ "${FAIRWAY_SIGNED_RELEASE:-0}" = 1 ]; then
   : "${APPLE_NOTARY_PROFILE:?A validated notarization profile is required}"
   : "${TAURI_SIGNING_PRIVATE_KEY:?Updater signing key is required}"
 fi
+notarize() {
+  if [ -n "${APPLE_NOTARY_KEYCHAIN:-}" ]; then
+    xcrun notarytool submit "$1" --keychain-profile "$APPLE_NOTARY_PROFILE" --keychain "$APPLE_NOTARY_KEYCHAIN" --wait --timeout 30m
+  else
+    xcrun notarytool submit "$1" --keychain-profile "$APPLE_NOTARY_PROFILE" --wait --timeout 30m
+  fi
+}
 # Sign/notarize the final app itself. Both the pkg and updater archive must
 # contain these exact stapled bytes; notarizing only the pkg is insufficient.
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
@@ -22,7 +30,7 @@ fi
 if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   ZIP="$ROOT/.runtime-work/notarize-app.zip"
   ditto -c -k --keepParent "$APP" "$ZIP"
-  xcrun notarytool submit "$ZIP" --keychain-profile "$APPLE_NOTARY_PROFILE" --wait --timeout 30m
+  notarize "$ZIP"
   xcrun stapler staple "$APP"
   xcrun stapler validate "$APP"
   codesign --verify --deep --strict "$APP"
@@ -45,7 +53,7 @@ if [ -n "${APPLE_INSTALLER_IDENTITY:-}" ]; then
   rm -f "$UNSIGNED"
 fi
 if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
-  xcrun notarytool submit "$PKG" --keychain-profile "$APPLE_NOTARY_PROFILE" --wait --timeout 30m
+  notarize "$PKG"
   xcrun stapler staple "$PKG"
   xcrun stapler validate "$PKG"
   spctl --assess --type install --verbose=2 "$PKG"
