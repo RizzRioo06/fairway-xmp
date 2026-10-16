@@ -18,6 +18,8 @@ Windows creates a normal current-user NSIS installer and its version-bound `.sig
 
 Review the exact candidate's acceptance template and UI report. Do not mark unperformed human checks complete. Mac and Windows acceptance includes Sites/HTTPS and a subsequent-version update/restart. The candidate records the installed binaries' commit/version and every installer/updater/signature hash. Rebuild after application changes; never reuse an old tag for changed bytes.
 
+The Mac hosted runner installs and upgrades the pkg in `/Applications`, then relocates that exact installed app to a writable directory for the native updater drill and returns the updated bundle before checking preservation, removal, and reinstallation. This avoids an unattended administrator-password dialog on the runner. The lifecycle record states this scope explicitly. A protected `/Applications` update, including approving or cancelling the macOS authorization prompt, still requires human acceptance; the automated drill does not approve that case.
+
 ## Publication and feed promotion
 
 Prepare/review release notes and create a version tag at the successful candidate's exact source commit. Dispatch **Publish tested beta** (`publish-beta-release.yml`) with its run ID, commit, and tag. This is an explicit publication action; building a candidate never publishes a release.

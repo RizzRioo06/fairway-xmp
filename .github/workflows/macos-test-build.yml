@@ -162,6 +162,6 @@ jobs:
           name: macos-build-diagnostics
           path: |
             .runtime-work/macos-smoke/student data/logs/*.log
-            .runtime-work/macos-lifecycle/lifecycle.json
+            .runtime-work/macos-lifecycle/*.json
           if-no-files-found: ignore
           retention-days: 7

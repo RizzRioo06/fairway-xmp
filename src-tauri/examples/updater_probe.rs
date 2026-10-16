@@ -13,6 +13,7 @@ use std::{
 use tauri_plugin_updater::UpdaterExt;
 
 async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
+    eprintln!("Updater drill: starting installed services");
     let executable = PathBuf::from(&args[0]);
     let runtime = fairway_core::desktop::runtime_location(&executable)?;
     let mut manager = Manager::new(Layout::new(runtime)?)?;
@@ -20,6 +21,7 @@ async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
     let report = PathBuf::from(&args[2]);
     let result = async {
         for feed in ["bad.json", "wrong-version.json"] {
+            eprintln!("Updater drill: rejecting {feed}");
             let update = app.updater_builder()
                 .executable_path(executable.clone())
                 .endpoints(vec![format!("{}/{feed}", args[1]).parse().map_err(|e| format!("{e}"))?]).map_err(|e| e.to_string())?
@@ -44,17 +46,21 @@ async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
             .check().await.map_err(|e| e.to_string())?.ok_or("Test update missing")?;
         update.timeout = Some(Duration::from_secs(600));
         let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+        eprintln!("Updater drill: valid download and version verified");
         assert!(manager.snapshot().services.iter().all(|s| s.ready));
         let backups = fs::read_dir(manager.layout.data.join("backups")).map_err(|e| e.to_string())?.count();
         updates::prepare(&mut manager)?;
+        eprintln!("Updater drill: databases backed up and services stopped");
         assert!(manager.snapshot().services.iter().all(|s| !s.running));
         assert!(fs::read_dir(manager.layout.data.join("backups")).map_err(|e| e.to_string())?.count() > backups);
         fs::remove_file(manager.layout.data.join("app.pid")).map_err(|e| e.to_string())?;
         fs::write(&report, serde_json::to_vec_pretty(&serde_json::json!({
             "status": "prepared", "checks": ["tampered-download-keeps-services-running", "signed-version-mismatch-rejected", "verified-download-keeps-services-running", "database-backup-before-shutdown", "services-stopped-and-markers-cleared-before-install"],
         })).unwrap()).map_err(|e| e.to_string())?;
+        eprintln!("Updater drill: installing the verified app");
         tauri::async_runtime::spawn_blocking(move || update.install(bytes)).await.map_err(|e| e.to_string())?
             .map_err(|e| e.to_string())?;
+        eprintln!("Updater drill: installation completed");
         Ok(())
     }.await;
     let stop = manager.stop_all();
@@ -97,7 +103,10 @@ fn main() {
             .unwrap();
             fs::write(layout.data.join("app.pid"), std::process::id().to_string()).unwrap();
             tauri::async_runtime::spawn(async move {
-                let result = exercise(app.clone(), args).await;
+                // An assertion panic must fail the process, rather than leave
+                // a windowless event loop running until the outer timeout.
+                let task = tauri::async_runtime::spawn(exercise(app.clone(), args));
+                let result = task.await.map_err(|e| e.to_string()).and_then(|r| r);
                 if let Err(error) = &result {
                     eprintln!("{error}");
                 }

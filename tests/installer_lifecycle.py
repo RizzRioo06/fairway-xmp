@@ -96,7 +96,31 @@ def main():
         if args.updater:
             if not args.update_probe: raise RuntimeError('The signed update drill requires --update-probe')
             from updater_lifecycle import exercise
-            update_evidence = exercise(args.update_probe, exe, args.updater, output)
+            if windows:
+                update_evidence = exercise(args.update_probe, exe, args.updater, output)
+            else:
+                # The pkg lifecycle uses /Applications. The hosted account
+                # cannot answer macOS's password prompt for a protected app.
+                # Exercise the real updater on this exact installed bundle in
+                # a writable location, then return the updated app for the
+                # remaining installed-data and removal/reinstall checks.
+                writable = output / 'user-applications' / installation.name
+                writable.parent.mkdir()
+                if writable.exists(): raise RuntimeError('Updater test location already exists')
+                permissions = {'protectedParentWritable': os.access(installation.parent, os.W_OK),
+                               'parentMode': oct(installation.parent.stat().st_mode & 0o7777),
+                               'parentUid': installation.parent.stat().st_uid,
+                               'parentGid': installation.parent.stat().st_gid}
+                print('Mac updater location: ' + json.dumps(permissions), flush=True)
+                run(['sudo', 'mv', str(installation), str(writable)])
+                try:
+                    update_evidence = exercise(args.update_probe, writable / 'Contents/MacOS/fairway', args.updater, output)
+                    update_evidence['installationScope'] = 'Exact pkg-installed bundle relocated to a writable app directory, updated, then returned to /Applications.'
+                    update_evidence['protectedInstallation'] = {**permissions, 'status': 'requires-human-authorization-prompt-check'}
+                    (output / 'updater.json').write_text(json.dumps(update_evidence, indent=2) + '\n')
+                finally:
+                    if writable.exists() and not installation.exists():
+                        run(['sudo', 'mv', str(writable), str(installation)])
             updated_build = json.loads(subprocess.check_output([str(exe), '--build-info'], text=True))
             if updated_build != build: raise RuntimeError('Updated app identity differs from the tested candidate')
             probe('verify'); completed.append('signed-update-preserves-database-settings-backup-coursework')
