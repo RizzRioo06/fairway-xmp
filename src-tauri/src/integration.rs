@@ -107,7 +107,8 @@ pub fn write_windows_launchers(layout: &Layout) -> Result<()> {
     {
         return Err("The installation path contains a percent sign, which Windows command launchers cannot support.".into());
     }
-    let base = format!("@echo off\r\nsetlocal\r\nset \"PHP_INI_SCAN_DIR=\"\r\nset \"PHPRC={}\"\r\nset \"COMPOSER_HOME={}\"\r\n",
+    // Batch sources are UTF-8 so Windows user/install paths can contain Unicode.
+    let base = format!("@echo off\r\nchcp 65001 >nul\r\nsetlocal\r\nset \"PHP_INI_SCAN_DIR=\"\r\nset \"PHPRC={}\"\r\nset \"COMPOSER_HOME={}\"\r\n",
         layout.data.join("config/php.ini").display(), layout.data.join("composer").display());
     atomic_write(
         &layout.bin.join("php.cmd"),
@@ -122,6 +123,23 @@ pub fn write_windows_launchers(layout: &Layout) -> Result<()> {
         )
         .as_bytes(),
     )?;
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    if executable
+        .file_name()
+        .is_some_and(|name| name == "fairway.exe")
+    {
+        if executable.to_string_lossy().contains('%') {
+            return Err("The application path contains a percent sign, which Windows command launchers cannot support.".into());
+        }
+        atomic_write(
+            &layout.bin.join("fairway.cmd"),
+            format!(
+                "@echo off\r\nchcp 65001 >nul\r\n\"{}\" %*\r\n",
+                executable.display()
+            )
+            .as_bytes(),
+        )?;
+    }
     Ok(())
 }
 

@@ -31,7 +31,7 @@ fn main() -> Result<(), String> {
         return Err("Use a fresh test directory.".into());
     }
     let layout = Layout::at(
-        root.join("Student May's home"),
+        root.join("Student May's home 日本"),
         root.join("data"),
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime"),
     );
@@ -189,6 +189,14 @@ fn main() -> Result<(), String> {
                 json!({"op":"rename_table","database":db,"table":"no_key","name":"notes"}),
             )?;
             let dump = data_browser::export(l, db, None, None, "all")?;
+            // Windows cannot unlink an export while its file handle is open.
+            assert!(std::fs::read_dir(l.data.join("backups"))
+                .unwrap()
+                .all(|entry| !entry
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "partial")));
             assert!(
                 data_browser::export(l, db, None, Some(&dump), "all").is_err(),
                 "Must never overwrite a dump"

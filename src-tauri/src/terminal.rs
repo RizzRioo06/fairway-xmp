@@ -1,13 +1,14 @@
-//! One local PTY, independent of the service manager. Output is drained in bounded
+//! Two local PTYs, independent of the service manager. Output is drained in bounded
 //! batches: a hidden/throttled WebView applies backpressure rather than growing
-//! an unbounded IPC event queue. No terminal contents are persisted to disk.
+//! an unbounded IPC event queue. Output is never persisted; macOS optionally
+//! saves bounded shell command history in an app-owned private file.
 use crate::config::{Layout, Result};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use std::time::Duration;
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     io::{Read, Write},
     sync::{Arc, Condvar, Mutex},
 };
@@ -17,7 +18,33 @@ const READ_LIMIT: usize = 32 * 1024;
 const INPUT_LIMIT: usize = 4096;
 
 #[derive(Default)]
-pub struct Terminals(Mutex<Option<Arc<Session>>>);
+pub struct Terminals(Mutex<Workspace>);
+
+#[derive(Default)]
+struct Workspace {
+    id: Option<String>,
+    sessions: [Option<Arc<Session>>; 2],
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StartRequest {
+    pub id: String,
+    pub workspace: String,
+    pub slot: usize,
+    pub cols: u16,
+    pub rows: u16,
+    pub folder: Option<String>,
+    #[serde(default)]
+    pub remember_history: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalContext {
+    folders: Vec<String>,
+    history_supported: bool,
+}
 
 struct Session {
     id: String,
@@ -84,7 +111,73 @@ pub fn prepare_tools(layout: &Layout) -> Result<std::path::PathBuf> {
     Ok(tools.bin)
 }
 
-fn shell(layout: &Layout) -> Result<CommandBuilder> {
+fn directory(layout: &Layout, folder: Option<&str>) -> Result<std::path::PathBuf> {
+    use std::path::{Component, Path};
+    let root = std::fs::canonicalize(&layout.www).map_err(|e| e.to_string())?;
+    let Some(folder) = folder else {
+        return Ok(root);
+    };
+    let mut parts = Path::new(folder).components();
+    if !matches!(parts.next(), Some(Component::Normal(_))) || parts.next().is_some() {
+        return Err("Choose a folder directly inside your coursework folder.".into());
+    }
+    let path = std::fs::canonicalize(root.join(folder))
+        .map_err(|_| "This folder is no longer available. Refresh the folder list.".to_string())?;
+    if !path.starts_with(&root) || !path.is_dir() {
+        return Err("Choose a folder inside your coursework folder.".into());
+    }
+    Ok(path)
+}
+
+pub fn context(layout: &Layout) -> Result<TerminalContext> {
+    let mut folders = Vec::new();
+    for entry in std::fs::read_dir(&layout.www).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if let Some(name) = entry.file_name().to_str() {
+            if directory(layout, Some(name)).is_ok() {
+                folders.push(name.to_string());
+            }
+        }
+    }
+    folders.sort();
+    Ok(TerminalContext {
+        folders,
+        history_supported: cfg!(target_os = "macos"),
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn prepare_history(layout: &Layout, remember: bool) -> Result<std::path::PathBuf> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let root = layout.data.join("terminal-shell");
+    let config = root.join(if remember { "history" } else { "private" });
+    std::fs::create_dir_all(&config).map_err(|e| e.to_string())?;
+    for path in [&root, &config] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| e.to_string())?;
+    }
+    let history = root.join("commands");
+    if remember {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(&history)
+            .map_err(|e| e.to_string())?;
+        crate::config::private_file(&history)?;
+    }
+    let settings = if remember {
+        format!("HISTFILE={}\nHISTSIZE=1000\nSAVEHIST=1000\nsetopt HIST_IGNORE_SPACE HIST_SAVE_NO_DUPS SHARE_HISTORY HIST_FCNTL_LOCK\n",
+            crate::integration::shell_quote(&history.to_string_lossy()))
+    } else {
+        "HISTFILE=''\nHISTSIZE=1000\nSAVEHIST=0\n".into()
+    };
+    crate::config::atomic_write(&config.join(".zshrc"), settings.as_bytes())?;
+    crate::config::private_file(&config.join(".zshrc"))?;
+    Ok(config)
+}
+
+fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
     if !layout.php_exe("php")?.is_file() || !layout.runtime.join("composer.phar").is_file() {
         return Err(
             "Runtime files are missing. Reinstall Fairway XMP to restore PHP and Composer.".into(),
@@ -94,7 +187,12 @@ fn shell(layout: &Layout) -> Result<CommandBuilder> {
     #[cfg(target_os = "macos")]
     let mut command = {
         let mut c = CommandBuilder::new("/bin/zsh");
-        c.args(["-f", "-i"]);
+        // Only Fairway's private startup file is read, never the user's profiles.
+        c.args(["-d", "-i"]);
+        c.env(
+            "ZDOTDIR",
+            prepare_history(layout, request.remember_history)?,
+        );
         c
     };
     #[cfg(windows)]
@@ -104,7 +202,7 @@ fn shell(layout: &Layout) -> Result<CommandBuilder> {
             .unwrap_or_else(|| "C:\\Windows".into())
             .join("System32/cmd.exe");
         let mut c = CommandBuilder::new(executable);
-        c.args(["/D", "/Q"]);
+        c.args(["/D", "/Q", "/K", "chcp 65001 >nul"]);
         c
     };
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -113,12 +211,24 @@ fn shell(layout: &Layout) -> Result<CommandBuilder> {
         c.arg("-i");
         c
     };
-    let mut paths = vec![bin];
+    let mut paths = vec![bin, layout.data.join("composer/vendor/bin")];
     if let Some(path) = std::env::var_os("PATH") {
         paths.extend(std::env::split_paths(&path));
     }
     #[cfg(unix)]
-    paths.extend(["/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(Into::into));
+    paths.extend([
+        layout.home.join(".local/bin"),
+        "/opt/homebrew/bin".into(),
+        "/opt/homebrew/sbin".into(),
+        "/usr/local/bin".into(),
+        "/usr/local/sbin".into(),
+        "/usr/bin".into(),
+        "/bin".into(),
+        "/usr/sbin".into(),
+        "/sbin".into(),
+    ]);
+    let mut seen = HashSet::new();
+    paths.retain(|path| !path.as_os_str().is_empty() && seen.insert(path.clone()));
     command.env(
         "PATH",
         std::env::join_paths(paths).map_err(|e| e.to_string())?,
@@ -129,27 +239,47 @@ fn shell(layout: &Layout) -> Result<CommandBuilder> {
     // A clean interactive shell preserves the app's tool ordering. User startup
     // scripts must not replace PATH or run unrelated commands on terminal open.
     #[cfg(unix)]
-    command.env_remove("ENV");
-    command.cwd(&layout.www);
+    {
+        command.env_remove("ENV");
+        command.env("HOME", &layout.home);
+    }
+    command.cwd(directory(layout, request.folder.as_deref())?);
     Ok(command)
 }
 
 impl Terminals {
-    pub fn start(&self, layout: &Layout, id: String, cols: u16, rows: u16) -> Result<TerminalInfo> {
-        if id.is_empty()
-            || id.len() > 80
-            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-        {
+    pub fn start(&self, layout: &Layout, request: StartRequest) -> Result<TerminalInfo> {
+        let valid_id = |id: &str| {
+            !id.is_empty()
+                && id.len() <= 80
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        };
+        if !valid_id(&request.id) || !valid_id(&request.workspace) || request.slot >= 2 {
             return Err("Invalid terminal session.".into());
         }
-        let dimensions = size(cols, rows)?;
-        let mut slot = self.0.lock().map_err(|_| "Terminal is unavailable.")?;
-        // A reload replaces the old session. Stale close/read/write requests
-        // carry their old id and cannot affect the replacement.
-        if let Some(previous) = slot.take() {
+        let dimensions = size(request.cols, request.rows)?;
+        let starting_directory = directory(layout, request.folder.as_deref())?;
+        let command = shell(layout, &request)?;
+        let mut workspace = self.0.lock().map_err(|_| "Terminal is unavailable.")?;
+        // A renderer reload replaces its old workspace. Tabs share an owner;
+        // stale per-session requests can never close a replacement tab.
+        if workspace.id.as_deref() != Some(&request.workspace) {
+            for previous in workspace.sessions.iter_mut().filter_map(Option::take) {
+                previous.stop();
+            }
+            workspace.id = Some(request.workspace.clone());
+        }
+        if workspace
+            .sessions
+            .iter()
+            .flatten()
+            .any(|s| s.id == request.id)
+        {
+            return Err("This terminal session already exists.".into());
+        }
+        if let Some(previous) = workspace.sessions[request.slot].take() {
             previous.stop();
         }
-        let command = shell(layout)?;
         let pair = native_pty_system()
             .openpty(dimensions)
             .map_err(|e| e.to_string())?;
@@ -186,7 +316,7 @@ impl Terminals {
         #[cfg(not(windows))]
         let _ = &mut child;
         let session = Arc::new(Session {
-            id,
+            id: request.id,
             master: Mutex::new(pair.master),
             writer: Mutex::new(writer),
             child: Mutex::new(Some(child)),
@@ -201,7 +331,7 @@ impl Terminals {
             session.stop();
             return Err(error.to_string());
         }
-        *slot = Some(session);
+        workspace.sessions[request.slot] = Some(session);
         Ok(TerminalInfo {
             shell: if cfg!(windows) {
                 "Command Prompt"
@@ -210,7 +340,7 @@ impl Terminals {
             } else {
                 "sh"
             },
-            directory: layout.www.to_string_lossy().into(),
+            directory: starting_directory.to_string_lossy().into(),
         })
     }
 
@@ -218,8 +348,10 @@ impl Terminals {
         self.0
             .lock()
             .map_err(|_| "Terminal is unavailable.")?
-            .as_ref()
-            .filter(|s| s.id == id)
+            .sessions
+            .iter()
+            .flatten()
+            .find(|s| s.id == id)
             .cloned()
             .ok_or_else(|| "Terminal session has ended. Start a new session.".into())
     }
@@ -276,20 +408,23 @@ impl Terminals {
     }
 
     pub fn close(&self, id: &str) {
-        if let Ok(mut slot) = self.0.lock() {
-            if slot.as_ref().is_some_and(|s| s.id == id) {
-                if let Some(session) = slot.take() {
-                    session.stop();
+        if let Ok(mut workspace) = self.0.lock() {
+            for slot in &mut workspace.sessions {
+                if slot.as_ref().is_some_and(|s| s.id == id) {
+                    if let Some(session) = slot.take() {
+                        session.stop();
+                    }
                 }
             }
         }
     }
 
     pub fn close_all(&self) {
-        if let Ok(mut slot) = self.0.lock() {
-            if let Some(session) = slot.take() {
+        if let Ok(mut workspace) = self.0.lock() {
+            for session in workspace.sessions.iter_mut().filter_map(Option::take) {
                 session.stop();
             }
+            workspace.id = None;
         }
     }
 }
@@ -530,8 +665,19 @@ mod tests {
         }
         fn start(&self, id: &str) {
             self.terminals
-                .start(&self.layout, id.into(), 80, 24)
+                .start(&self.layout, Self::request(id))
                 .unwrap();
+        }
+        fn request(id: &str) -> StartRequest {
+            StartRequest {
+                id: id.into(),
+                workspace: "test-workspace".into(),
+                slot: 0,
+                cols: 80,
+                rows: 24,
+                folder: None,
+                remember_history: true,
+            }
         }
         fn until(&self, id: &str, expected: &str) -> String {
             let deadline = Instant::now() + std::time::Duration::from_secs(8);
@@ -562,11 +708,17 @@ mod tests {
         let fixture = Fixture::new();
         assert!(fixture
             .terminals
-            .start(&fixture.layout, "bad/id".into(), 80, 24)
+            .start(&fixture.layout, Fixture::request("bad/id"))
             .is_err());
         assert!(fixture
             .terminals
-            .start(&fixture.layout, "valid".into(), 0, 24)
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    cols: 0,
+                    ..Fixture::request("valid")
+                }
+            )
             .is_err());
         fixture.start("first");
         assert!(fixture
@@ -584,9 +736,224 @@ mod tests {
         fs::remove_file(fixture.layout.runtime.join("composer.phar")).unwrap();
         assert!(fixture
             .terminals
-            .start(&fixture.layout, "missing".into(), 80, 24)
+            .start(&fixture.layout, Fixture::request("missing"))
             .unwrap_err()
             .contains("Runtime files are missing"));
+    }
+
+    #[test]
+    fn two_tabs_are_isolated_and_a_renderer_reload_cleans_up_both() {
+        let fixture = Fixture::new();
+        fixture.start("server");
+        fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    ..Fixture::request("commands")
+                },
+            )
+            .unwrap();
+        assert!(fixture.terminals.read("server").is_ok());
+        assert!(fixture.terminals.read("commands").is_ok());
+        assert!(fixture
+            .terminals
+            .session("server")
+            .unwrap()
+            .child
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .try_wait()
+            .unwrap()
+            .is_none());
+        assert!(fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 2,
+                    ..Fixture::request("third")
+                }
+            )
+            .is_err());
+        assert!(fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    ..Fixture::request("server")
+                }
+            )
+            .is_err());
+        fixture.terminals.close("commands");
+        assert!(fixture.terminals.read("server").is_ok());
+        fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    ..Fixture::request("replacement")
+                },
+            )
+            .unwrap();
+        fixture.terminals.close("commands");
+        assert!(fixture.terminals.read("replacement").is_ok());
+        fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    workspace: "reloaded-page".into(),
+                    ..Fixture::request("fresh")
+                },
+            )
+            .unwrap();
+        assert!(fixture.terminals.read("server").is_err());
+        assert!(fixture.terminals.read("replacement").is_err());
+        fixture.terminals.close("server");
+        fixture.terminals.close("replacement");
+        assert!(fixture.terminals.read("fresh").is_ok());
+    }
+
+    #[test]
+    fn folder_picker_rejects_missing_paths_and_escape_without_replacing_a_session() {
+        let fixture = Fixture::new();
+        let name = "Student's project 日本";
+        fs::create_dir_all(fixture.layout.www.join(name)).unwrap();
+        fs::write(fixture.layout.www.join("file.txt"), "").unwrap();
+        let folders = context(&fixture.layout).unwrap().folders;
+        assert!(folders.contains(&name.to_string()));
+        assert!(!folders.contains(&"file.txt".to_string()));
+        fixture.start("existing");
+        for folder in ["..", "../outside", "missing", "file.txt"] {
+            assert!(fixture
+                .terminals
+                .start(
+                    &fixture.layout,
+                    StartRequest {
+                        folder: Some(folder.into()),
+                        ..Fixture::request("bad-folder")
+                    }
+                )
+                .is_err());
+            assert!(fixture.terminals.read("existing").is_ok());
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&fixture.root, fixture.layout.www.join("outside-link"))
+                .unwrap();
+            assert!(!context(&fixture.layout)
+                .unwrap()
+                .folders
+                .contains(&"outside-link".to_string()));
+        }
+        let info = fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    folder: Some(name.into()),
+                    ..Fixture::request("project")
+                },
+            )
+            .unwrap();
+        assert!(info.directory.ends_with(name));
+        #[cfg(unix)]
+        {
+            fixture.terminals.write("project", "pwd\r").unwrap();
+            fixture.until("project", name);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installed_user_tools_are_available_and_bundled_php_stays_first() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        for (folder, name, marker) in [
+            (
+                fixture.layout.home.join(".local/bin"),
+                "fairway-user-tool",
+                "USER_TOOL_OK",
+            ),
+            (
+                fixture.layout.data.join("composer/vendor/bin"),
+                "fairway-global-tool",
+                "COMPOSER_TOOL_OK",
+            ),
+        ] {
+            fs::create_dir_all(&folder).unwrap();
+            fs::write(folder.join(name), format!("#!/bin/sh\necho {marker}\n")).unwrap();
+            fs::set_permissions(folder.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fixture.start("paths");
+        fixture
+            .terminals
+            .write(
+                "paths",
+                "fairway-user-tool; fairway-global-tool; command -v php\r",
+            )
+            .unwrap();
+        let text = fixture.until("paths", "COMPOSER_TOOL_OK");
+        assert!(text.contains("USER_TOOL_OK"));
+        fixture
+            .terminals
+            .write("paths", "command -v php\r")
+            .unwrap();
+        fixture.until("paths", "terminal-bin/php");
+        assert!(!fixture.layout.home.join(".zshrc").exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn command_history_is_private_survives_restart_and_supports_opt_out() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        // The app must not execute the student's personal shell startup file.
+        fs::write(
+            fixture.layout.home.join(".zshrc"),
+            "print USER_PROFILE_EXECUTED\n",
+        )
+        .unwrap();
+        fixture.start("history");
+        fixture.terminals.write("history", "echo history-kept\r echo history-omitted\rprintf '\\110\\111\\123\\124\\117\\122\\131\\137\\122\\105\\101\\104\\131\\n'\r").unwrap();
+        let output = fixture.until("history", "HISTORY_READY");
+        assert!(!output.contains("USER_PROFILE_EXECUTED"));
+        let history = fixture.layout.data.join("terminal-shell/commands");
+        let saved = fs::read_to_string(&history).unwrap();
+        assert!(saved.contains("echo history-kept"), "{saved}");
+        assert!(!saved.contains("history-omitted"), "{saved}");
+        assert_eq!(
+            fs::metadata(&history).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fixture.terminals.close("history");
+        fixture.start("restarted");
+        fixture.terminals.write("restarted", "fc -l 1\r").unwrap();
+        fixture.until("restarted", "echo history-kept");
+        fixture.terminals.close("restarted");
+        fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    remember_history: false,
+                    ..Fixture::request("private")
+                },
+            )
+            .unwrap();
+        fixture.terminals.write("private", "echo private-history-command\rprintf '\\120\\122\\111\\126\\101\\124\\105\\137\\122\\105\\101\\104\\131\\n'\r").unwrap();
+        fixture.until("private", "PRIVATE_READY");
+        fixture.terminals.close("private");
+        assert!(!fs::read_to_string(&history)
+            .unwrap()
+            .contains("private-history-command"));
     }
 
     #[cfg(unix)]

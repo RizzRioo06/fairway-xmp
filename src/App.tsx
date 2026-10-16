@@ -11,7 +11,7 @@ import DataBrowser from './data/DataBrowser';
 
 const UiTestToolbar = isUiTest ? lazy(() => import('./ui-test/Toolbar')) : null;
 const TerminalPage = lazy(() => import('./TerminalPage'));
-const dataBrowserAvailable = isUiTest || (isDesktop && navigator.platform.startsWith('Mac'));
+const dataBrowserAvailable = isUiTest || isDesktop;
 
 const meta = {
   nginx: { name: 'Nginx', description: 'Your local web server', icon: Globe, version: 'nginx', color: 'green' },
@@ -31,6 +31,7 @@ export default function App() {
   const [data, setData] = useState<Snapshot>(preview);
   const [view, setView] = useState<View>('environment');
   const [terminalOpened, setTerminalOpened] = useState(false);
+  const [terminalFocus, setTerminalFocus] = useState(0);
   const [localBusy, setBusy] = useState<string | null>(null);
   const [backendBusy, setBackendBusy] = useState<string | null>(null);
   const busy = backendBusy ?? localBusy;
@@ -50,8 +51,20 @@ export default function App() {
   const allReady = data.services.every(service => service.ready);
   const anyRunning = data.services.some(service => service.running);
   const usable = canControl && data.runtimeReady && !busy;
-  const databaseCliAvailable = isDesktop ? navigator.platform.startsWith('Mac') : isUiTest && data.documentRoot.startsWith('/');
+  const databaseCliAvailable = isDesktop || isUiTest;
   const cliTools = databaseCliAvailable ? 'PHP, Composer, and database commands' : 'PHP and Composer commands';
+
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.code !== 'Backquote') return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault(); event.stopPropagation();
+      if (busy && !terminalOpened) return;
+      setTerminalOpened(true); setView('terminal'); setTerminalFocus(value => value + 1);
+    };
+    document.addEventListener('keydown', key, true);
+    return () => document.removeEventListener('keydown', key, true);
+  }, [busy, terminalOpened]);
 
   const refresh = useCallback(async () => {
     if (!canControl || operation.current) return;
@@ -122,7 +135,7 @@ export default function App() {
   }
 
   function open(target: string) {
-    if (target === 'terminal') { setTerminalOpened(true); setView('terminal'); return; }
+    if (target === 'terminal') { setTerminalOpened(true); setView('terminal'); setTerminalFocus(value => value + 1); return; }
     void run('Opening…', () => invoke<void>('open_target', { target }));
   }
 
@@ -147,7 +160,7 @@ export default function App() {
       <nav aria-label="Main navigation">
         <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
         {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Data browser</button>}
-        <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} disabled={!!busy} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
+        <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
         <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
         <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} onClick={() => setView('updates')}><ArrowDownToLine size={18} />Updates</button>
       </nav>
@@ -163,7 +176,7 @@ export default function App() {
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
         {notice && <div className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
-        {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} /></Suspense></div>}
+        {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} /></Suspense></div>}
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
 
         {view === 'environment' && <>

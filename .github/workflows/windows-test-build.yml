@@ -59,6 +59,23 @@ jobs:
           } else {
             python scripts/prepare_runtime.py
           }
+      - name: Build native terminal test bridge
+        run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
+      - run: npx playwright install chromium
+      - name: Exercise native terminal and data browser through browser input
+        env:
+          FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
+        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts --project chromium --workers=1
+      - name: Save native desktop browser report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-desktop-windows-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Check Windows bundle size
         run: |
           $runtimeFiles = @(Get-ChildItem 'src-tauri/resources/runtime' -File -Recurse)
@@ -71,6 +88,8 @@ jobs:
           $root = Join-Path (Get-Location) '.runtime-work/windows-smoke'
           cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- $root
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Exercise native data browser and SQL export/import
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- .runtime-work/data-browser-smoke
       - name: Verify MySQL upgrade from alpha 1
         run: |
           $legacy = Join-Path (Get-Location) '.runtime-work/alpha1-runtime'

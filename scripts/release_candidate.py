@@ -12,8 +12,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = ('windows-x64', 'macos-arm64', 'linux-x86_64')
 MANUAL_CHECKS = {
-    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review'],
-    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review'],
+    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup'],
+    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup'],
     'linux-x86_64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'dashboard-detach-and-shutdown'],
 }
 

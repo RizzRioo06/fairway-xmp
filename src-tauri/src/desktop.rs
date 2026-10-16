@@ -180,18 +180,24 @@ async fn snapshot(state: State<'_, Shared>) -> Result<Snapshot> {
 async fn terminal_start(
     app: tauri::AppHandle,
     state: State<'_, Shared>,
-    id: String,
-    cols: u16,
-    rows: u16,
+    request: crate::terminal::StartRequest,
 ) -> Result<crate::terminal::TerminalInfo> {
     let _operation = begin_operation(&app, "Opening terminal…")?;
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<crate::terminal::Terminals>()
-            .start(&layout, id, cols, rows)
+            .start(&layout, request)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn terminal_context(state: State<'_, Shared>) -> Result<crate::terminal::TerminalContext> {
+    access(state.inner().clone(), |m| {
+        crate::terminal::context(&m.layout)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -457,7 +463,6 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     let Some(action) = args.get(1) else {
         return Ok(false);
     };
-    #[cfg(target_os = "macos")]
     if action == "db" {
         #[cfg(debug_assertions)]
         let runtime = std::env::var_os("FAIRWAY_RUNTIME_DIR")
@@ -532,7 +537,27 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
 }
 
 pub fn run() {
-    match maintenance(&std::env::args().collect::<Vec<_>>()) {
+    let args = std::env::args().collect::<Vec<_>>();
+    #[cfg(windows)]
+    if args
+        .get(1)
+        .is_some_and(|arg| arg == "db" || arg == "--build-info")
+    {
+        use windows_sys::Win32::{Foundation::INVALID_HANDLE_VALUE, System::Console::*};
+        // A GUI executable has no console when launched from cmd. Attach for
+        // command-line use, preserving any pipes supplied by the caller.
+        unsafe {
+            let handles = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
+                .map(|kind| (kind, GetStdHandle(kind)));
+            AttachConsole(ATTACH_PARENT_PROCESS);
+            for (kind, handle) in handles {
+                if !handle.is_null() && handle != INVALID_HANDLE_VALUE {
+                    SetStdHandle(kind, handle);
+                }
+            }
+        }
+    }
+    match maintenance(&args) {
         Ok(true) => return,
         Err(error) => {
             eprintln!("{error}");
@@ -594,6 +619,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             terminal_start,
+            terminal_context,
             terminal_read,
             terminal_write,
             terminal_resize,

@@ -56,14 +56,14 @@ Refreshing the lock trusts upstream HTTPS for inputs without independently publi
 
 For native UI testing without touching your real user folders, debug builds accept both `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA`; use absolute workspace paths. `FAIRWAY_RUNTIME_DIR` overrides the debug runtime directory. These folder overrides are disabled in release builds.
 
-Terminal unit tests run with `cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked`. They exercise real PTYs, input, sizing, interrupts, cleanup, bounded output and session-only tools. For a React → Rust → real packaged PHP/Composer check, build the test-only stdio bridge and opt into the native browser test:
+Terminal unit tests run in routine Windows/macOS CI with `cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked`. They exercise real PTYs, two-tab isolation and reload cleanup, folder validation, input, sizing, interrupts, bounded output, tool ordering, and private macOS history with opt-out. Installer workflows also run the React → Rust → real packaged PHP/Composer check after preparing runtimes. To run it locally, build the test-only stdio bridge and opt into the native browser test:
 
 ```sh
 cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
 FAIRWAY_TEST_RUNTIME=/absolute/path/to/runtime npx playwright test tests/ui/terminal-native.spec.ts --workers=1
 ```
 
-The bridge creates isolated folders under the Playwright output directory and reads the runtime without modifying it. It opens no network listener and does not start services. Ordinary browser review uses the explicitly labeled simulated terminal; native browser tests are skipped unless `FAIRWAY_TEST_RUNTIME` is set. Native WebView and Windows ConPTY checks still belong in desktop acceptance testing.
+The bridge creates isolated folders and command history under the Playwright output directory and reads the runtime without modifying it. The native browser check keeps a command running in one tab while a second tab runs bundled tools in a project folder with spaces and Unicode. It opens no network listener and does not start services. Ordinary browser review uses the explicitly labeled simulated terminal; native browser tests are skipped unless `FAIRWAY_TEST_RUNTIME` is set. Native WebView and Windows ConPTY checks still belong in desktop acceptance testing.
 
 ## Build locally on Windows
 

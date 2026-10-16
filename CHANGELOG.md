@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.1.0-beta.2 — 2026-10-15
+## 0.1.0-beta.2 — candidate
 
-- Embedded Terminal on macOS and Windows: one local shell in the coursework folder, with PHP and Composer available for that session even when persistent command-line integration is off.
-- macOS data browser beside phpMyAdmin, with database and table management, row editing, and a SQL editor. Windows data browser UI and Linux changes are not in this build.
-- macOS command-line tools include `fairway db` for SQL export and import.
+- Embedded Terminal on macOS and Windows: up to two local shells in coursework or project folders, with PHP and Composer available for that session even when persistent command-line integration is off.
+- Independent terminal tabs, project-folder selection, Ctrl+backtick access, private optional macOS command history, and discovery of common installed tool locations.
+- Terminal output search, saved text size, expanded view, recoverable resizing, and access to existing sessions during service operations. Routine CI now includes terminal tests; installer workflows exercise the native browser-to-PTY flow.
+- macOS and Windows data browser beside phpMyAdmin, with database and table management, row editing, and a SQL editor. Linux is unchanged.
+- Desktop command-line tools include `fairway db` for SQL export and import.
+- Both desktop candidate builds exercise real database CRUD, SQL export/import and cancellation, and browser input through native database/terminal bridges. Windows database workers and export cleanup handle native process and file semantics.
 
 This build reports `0.1.0-beta.2`. Installers are unsigned and updates are manual. It is the beta 2 candidate and is not a published release.
 

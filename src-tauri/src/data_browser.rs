@@ -1,4 +1,4 @@
-//! Local database operations shared by desktop IPC and the Mac command line.
+//! Local database operations shared by desktop IPC and desktop command-line tools.
 use crate::{
     config::{Layout, Result},
     process,
@@ -53,6 +53,12 @@ impl Jobs {
 }
 
 fn php(layout: &Layout) -> Result<Command> {
+    // Keep the worker off the command line: Windows process argument limits
+    // and quoting must not depend on the size or contents of this PHP source.
+    let script = layout.data.join("config/data-browser-worker.php");
+    if fs::read(&script).ok().as_deref() != Some(WORKER.as_bytes()) {
+        crate::config::atomic_write(&script, WORKER.as_bytes())?;
+    }
     let mut command = Command::new(layout.php_exe("php")?);
     #[cfg(windows)]
     {
@@ -69,9 +75,9 @@ fn php(layout: &Layout) -> Result<Command> {
             "display_errors=stderr",
             "-d",
             "memory_limit=128M",
-            "-r",
-            WORKER.trim_start_matches("<?php"),
-        ]);
+            "-f",
+        ])
+        .arg(script);
     Ok(command)
 }
 fn name(value: &Value) -> Result<&str> {
@@ -324,6 +330,7 @@ pub fn export(
             .map_err(|e| format!("Cannot publish export (existing files are kept): {e}"))?;
         Ok(path)
     })();
+    drop(file);
     let _ = fs::remove_file(&partial);
     result
 }
@@ -358,7 +365,7 @@ pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
 
 pub fn cli(layout: &Layout, args: &[String]) -> Result<()> {
     if args.is_empty() || args[0] == "--help" {
-        println!("Fairway database tools (Mac preview)\n\nfairway db list\nfairway db tables DATABASE\nfairway db create DATABASE\nfairway db rename DATABASE NEW_NAME --yes\nfairway db drop DATABASE --yes\nfairway db query DATABASE SQL\nfairway db export DATABASE [--table TABLE] [--mode all|structure|data] [--output FILE]\nfairway db import DATABASE FILE --yes\n\nResults are JSON. MySQL must already be running. Exports never overwrite files.\nImports back up the target database first; SQL files can change other schemas.\nDatabase rename currently supports empty databases only.");
+        println!("Fairway database tools\n\nfairway db list\nfairway db tables DATABASE\nfairway db create DATABASE\nfairway db rename DATABASE NEW_NAME --yes\nfairway db drop DATABASE --yes\nfairway db query DATABASE SQL\nfairway db export DATABASE [--table TABLE] [--mode all|structure|data] [--output FILE]\nfairway db import DATABASE FILE --yes\n\nResults are JSON. MySQL must already be running. Exports never overwrite files.\nImports back up the target database first; SQL files can change other schemas.\nDatabase rename currently supports empty databases only.");
         return Ok(());
     }
     let get = |n| {
