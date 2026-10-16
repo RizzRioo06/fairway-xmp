@@ -197,6 +197,7 @@ jobs:
             runtime-downloads.lock.json
             .runtime-work/windows-smoke/student data/logs/*.log
             .runtime-work/windows-upgrade/student data/logs/*.log
+            .runtime-work/windows-lifecycle/*.json
           if-no-files-found: ignore
           retention-days: 7
 

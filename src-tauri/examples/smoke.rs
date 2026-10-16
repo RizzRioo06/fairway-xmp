@@ -280,20 +280,33 @@ fn main() -> Result<(), String> {
             ));
         }
         manager.set_project_https("plain-project", true)?;
-        for _ in 0..20 {
-            if https(&manager.layout, "plain-project.test")
+        let mut both_ready = false;
+        let mut last_responses = (Ok(String::new()), Ok(String::new()));
+        // Reload is asynchronous. Retain the observed successful generation
+        // instead of making a redundant request after the readiness loop.
+        for _ in 0..100 {
+            last_responses = (
+                https(&manager.layout, "plain-project.test"),
+                https(&manager.layout, "new-project.test"),
+            );
+            if last_responses
+                .0
+                .as_ref()
                 .is_ok_and(|body| body.contains("plain project"))
-                && https(&manager.layout, "new-project.test")
+                && last_responses
+                    .1
+                    .as_ref()
                     .is_ok_and(|body| body.contains("refreshed project"))
             {
+                both_ready = true;
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        if !https(&manager.layout, "plain-project.test")
-            .is_ok_and(|body| body.contains("plain project"))
-        {
-            return Err("The second HTTPS project did not receive a valid certificate".into());
+        if !both_ready {
+            return Err(format!(
+                "HTTPS reload did not serve both projects: {last_responses:?}"
+            ));
         }
         manager.set_project_https("new-project", false)?;
         manager.set_project_https("plain-project", false)?;

@@ -46,5 +46,21 @@ fn main() {
         .is_some_and(|value| !value.is_empty());
     println!("cargo:rustc-env=FAIRWAY_BUILD_DIRTY={dirty}");
     #[cfg(feature = "desktop")]
-    tauri_build::build();
+    {
+        tauri_build::build();
+        if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+            && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+        {
+            // Tauri embeds its resource in application binaries, but Cargo
+            // examples need their own Common Controls v6 activation manifest.
+            // Without it Windows cannot load TaskDialogIndirect in the probe.
+            let manifest = root.join("packaging/windows/probe.manifest");
+            println!("cargo:rerun-if-changed={}", manifest.display());
+            println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
+            println!(
+                "cargo:rustc-link-arg-examples=/MANIFESTINPUT:{}",
+                manifest.display()
+            );
+        }
+    }
 }

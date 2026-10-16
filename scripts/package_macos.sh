@@ -32,8 +32,7 @@ if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   ZIP="$ROOT/.runtime-work/notarize-app.zip"
   ditto -c -k --keepParent "$APP" "$ZIP"
   notarize "$ZIP"
-  xcrun stapler staple "$APP"
-  xcrun stapler validate "$APP"
+  python3 "$ROOT/scripts/staple_macos.py" "$APP"
   codesign --verify --deep --strict "$APP"
   spctl --assess --type execute --verbose=2 "$APP"
   rm -f "$ZIP"
@@ -55,8 +54,7 @@ if [ -n "${APPLE_INSTALLER_IDENTITY:-}" ]; then
 fi
 if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   notarize "$PKG"
-  xcrun stapler staple "$PKG"
-  xcrun stapler validate "$PKG"
+  python3 "$ROOT/scripts/staple_macos.py" "$PKG"
   spctl --assess --type install --verbose=2 "$PKG"
 fi
 if [ "${FAIRWAY_SIGNED_RELEASE:-0}" = 1 ]; then
