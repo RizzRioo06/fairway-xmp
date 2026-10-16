@@ -48,7 +48,7 @@ pub struct TerminalContext {
 
 struct Session {
     id: String,
-    master: Mutex<Box<dyn MasterPty + Send>>,
+    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
     writer: Mutex<Box<dyn Write + Send>>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     output: Arc<Output>,
@@ -351,7 +351,7 @@ impl Terminals {
         let _ = &mut child;
         let session = Arc::new(Session {
             id: request.id,
-            master: Mutex::new(pair.master),
+            master: Mutex::new(Some(pair.master)),
             writer: Mutex::new(writer),
             child: Mutex::new(Some(child)),
             output: output.clone(),
@@ -392,14 +392,6 @@ impl Terminals {
 
     pub fn read(&self, id: &str) -> Result<TerminalOutput> {
         let session = self.session(id)?;
-        let mut output = session
-            .output
-            .state
-            .lock()
-            .map_err(|_| "Terminal output is unavailable.")?;
-        let count = output.bytes.len().min(READ_LIMIT);
-        let data = output.bytes.drain(..count).collect();
-        session.output.drained.notify_all();
         let status = session
             .child
             .lock()
@@ -408,6 +400,18 @@ impl Terminals {
             .ok_or("Terminal process has ended.")?
             .try_wait()
             .map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        if status.is_some() {
+            session.finish_console();
+        }
+        let mut output = session
+            .output
+            .state
+            .lock()
+            .map_err(|_| "Terminal output is unavailable.")?;
+        let count = output.bytes.len().min(READ_LIMIT);
+        let data = output.bytes.drain(..count).collect();
+        session.output.drained.notify_all();
         Ok(TerminalOutput {
             data,
             exited: output.eof && output.bytes.is_empty() && status.is_some(),
@@ -437,6 +441,8 @@ impl Terminals {
             .master
             .lock()
             .map_err(|_| "Terminal is unavailable.")?
+            .as_ref()
+            .ok_or("Terminal session has ended.")?
             .resize(dimensions)
             .map_err(|e| e.to_string())
     }
@@ -470,6 +476,19 @@ impl Drop for Terminals {
 }
 
 impl Session {
+    #[cfg(windows)]
+    fn finish_console(&self) {
+        if let Ok(mut master) = self.master.lock() {
+            if let Some(master) = master.take() {
+                self.job.terminate();
+                // ConPTY keeps stdout open after cmd exits. Closing it flushes
+                // final output and produces EOF. ClosePseudoConsole can block
+                // while output drains, so keep it off the IPC/UI thread.
+                std::thread::spawn(move || drop(master));
+            }
+        }
+    }
+
     fn stop(&self) {
         if let Ok(mut output) = self.output.state.lock() {
             output.stopped = true;
@@ -485,19 +504,21 @@ impl Session {
                 .ok()
                 .and_then(|child| child.as_ref().and_then(|child| child.process_id()));
             if let Ok(master) = self.master.lock() {
-                if let Some(group) = master.process_group_leader() {
-                    unsafe {
-                        libc::kill(-group, libc::SIGHUP);
-                    }
-                    if Some(group as u32) != shell_pid {
-                        // Keep the shell/session leader alive until its attached
-                        // foreground job is gone. Once the leader exits, the OS
-                        // can detach the PTY before we can identify that group.
-                        std::thread::sleep(Duration::from_millis(50));
-                        if let Some(group) = master.process_group_leader() {
-                            if Some(group as u32) != shell_pid {
-                                unsafe {
-                                    libc::kill(-group, libc::SIGKILL);
+                if let Some(master) = master.as_ref() {
+                    if let Some(group) = master.process_group_leader() {
+                        unsafe {
+                            libc::kill(-group, libc::SIGHUP);
+                        }
+                        if Some(group as u32) != shell_pid {
+                            // Keep the shell/session leader alive until its attached
+                            // foreground job is gone. Once the leader exits, the OS
+                            // can detach the PTY before we can identify that group.
+                            std::thread::sleep(Duration::from_millis(50));
+                            if let Some(group) = master.process_group_leader() {
+                                if Some(group as u32) != shell_pid {
+                                    unsafe {
+                                        libc::kill(-group, libc::SIGKILL);
+                                    }
                                 }
                             }
                         }
@@ -506,7 +527,7 @@ impl Session {
             }
         }
         #[cfg(windows)]
-        self.job.terminate();
+        self.finish_console();
         if let Ok(mut child) = self.child.lock() {
             if let Some(child) = child.as_mut() {
                 if child.try_wait().ok().flatten().is_none() {
@@ -599,6 +620,11 @@ fn read_output(mut reader: Box<dyn Read + Send>, output: Arc<Output>) {
                     })
                     .unwrap();
                 if state.stopped {
+                    // Keep draining Windows' pipe until ClosePseudoConsole
+                    // completes; otherwise shutdown can deadlock on output.
+                    #[cfg(windows)]
+                    continue;
+                    #[cfg(not(windows))]
                     break;
                 }
                 state.bytes.extend(&bytes[..count]);
@@ -1150,12 +1176,23 @@ mod tests {
             )
             .unwrap();
         fixture.until("windows", "CWD_Fairway XMP");
-        fixture.terminals.write("windows", "exit 7\r").unwrap();
+        fixture
+            .terminals
+            .write("windows", "echo FINAL_%TERM_PROGRAM% & exit 7\r")
+            .unwrap();
+        let mut final_output = Vec::new();
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         loop {
             let output = fixture.terminals.read("windows").unwrap();
+            final_output.extend(output.data);
             if output.exited {
                 assert_eq!(output.exit_code, Some(7));
+                assert!(
+                    output.error.is_none(),
+                    "Normal exit reported an error: {:?}",
+                    output.error
+                );
+                assert!(String::from_utf8_lossy(&final_output).contains("FINAL_Fairway XMP"));
                 break;
             }
             assert!(Instant::now() < deadline, "Windows shell did not exit");

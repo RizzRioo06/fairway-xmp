@@ -7,7 +7,7 @@
 - Terminal output search, saved text size, expanded view, recoverable resizing, and access to existing sessions during service operations. Routine CI now includes terminal tests; installer workflows exercise the native browser-to-PTY flow.
 - macOS and Windows data browser beside phpMyAdmin, with database and table management, row editing, and a SQL editor. Linux is unchanged.
 - Desktop command-line tools include `fairway db` for SQL export and import.
-- Both desktop candidate builds exercise real database CRUD, SQL export/import and cancellation, and browser input through native database/terminal bridges. Windows database workers and export cleanup handle native process and file semantics.
+- Both desktop candidate builds exercise real database CRUD, SQL export/import and cancellation, and browser input through native database/terminal bridges. Windows database workers and export cleanup handle native process and file semantics. Windows terminals normalize local drive paths and close ConPTY after shell exit while preserving final output.
 
 This build reports `0.1.0-beta.2`. Installers are unsigned and updates are manual. It is the beta 2 candidate and is not a published release.
 
