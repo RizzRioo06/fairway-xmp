@@ -78,7 +78,9 @@ impl Manager {
                 if process::matches_database(
                     pid,
                     &manager.layout.exe("mysql", "mysqld"),
-                    &crate::config::mysql_path(&manager.layout.data.join("config/mysql.cnf")),
+                    &crate::config::windows_ansi_path(
+                        &manager.layout.data.join("config/mysql.cnf"),
+                    ),
                 ) {
                     manager
                         .processes
@@ -370,7 +372,10 @@ impl Manager {
     fn php_environment(&self, cmd: &mut std::process::Command) {
         cmd.env("MIBS", "")
             .env("PHP_INI_SCAN_DIR", "")
-            .env("PHPRC", self.layout.data.join("config/php.ini"))
+            .env(
+                "PHPRC",
+                crate::config::windows_ansi_path(&self.layout.data.join("config/php.ini")),
+            )
             .env("COMPOSER_HOME", self.layout.data.join("composer"));
     }
 
@@ -382,7 +387,9 @@ impl Manager {
                 } else {
                     "php-fpm"
                 })?);
-                cmd.arg("-c").arg(self.layout.data.join("config/php.ini"));
+                cmd.arg("-c").arg(crate::config::windows_ansi_path(
+                    &self.layout.data.join("config/php.ini"),
+                ));
                 #[cfg(windows)]
                 cmd.args(["-b", &format!("127.0.0.1:{}", self.ports.php)])
                     .env("PHP_FCGI_MAX_REQUESTS", "0");
@@ -416,10 +423,13 @@ impl Manager {
                 cmd
             }
             "mysql" => {
-                let mut cmd = process::command(self.layout.exe("mysql", "mysqld"));
+                let mut cmd = process::command(crate::config::windows_ansi_path(
+                    &self.layout.exe("mysql", "mysqld"),
+                ));
                 cmd.arg(format!(
                     "--defaults-file={}",
-                    crate::config::mysql_path(&self.layout.data.join("config/mysql.cnf")).display()
+                    crate::config::windows_ansi_path(&self.layout.data.join("config/mysql.cnf"))
+                        .display()
                 ));
                 #[cfg(windows)]
                 cmd.arg("--console");
@@ -430,7 +440,7 @@ impl Manager {
         // MySQL's Windows runtime also resolves files relative to its working
         // directory through ANSI APIs, even when all configured paths are aliases.
         cmd.current_dir(if id == "mysql" {
-            crate::config::mysql_path(&self.layout.data)
+            crate::config::windows_ansi_path(&self.layout.data)
         } else {
             self.layout.data.clone()
         });
@@ -489,10 +499,12 @@ impl Manager {
         {
             return Err("The database folder contains an incomplete initialization. It has been preserved; inspect the MySQL log before retrying.".into());
         }
-        let mut cmd = process::command(self.layout.exe("mysql", "mysqld"));
+        let mut cmd = process::command(crate::config::windows_ansi_path(
+            &self.layout.exe("mysql", "mysqld"),
+        ));
         cmd.arg(format!(
             "--defaults-file={}",
-            crate::config::mysql_path(&self.layout.data.join("config/mysql.cnf")).display()
+            crate::config::windows_ansi_path(&self.layout.data.join("config/mysql.cnf")).display()
         ))
         .arg("--initialize-insecure");
         process::output(cmd)?;
@@ -503,11 +515,14 @@ impl Manager {
     }
 
     fn database_command(&self, executable: &str, secure: bool) -> std::process::Command {
-        let mut cmd = process::command(self.layout.exe("mysql", executable));
+        let mut cmd = process::command(crate::config::windows_ansi_path(
+            &self.layout.exe("mysql", executable),
+        ));
         if secure {
             cmd.arg(format!(
                 "--defaults-file={}",
-                crate::config::mysql_path(&self.layout.data.join("config/admin.cnf")).display()
+                crate::config::windows_ansi_path(&self.layout.data.join("config/admin.cnf"))
+                    .display()
             ));
         } else {
             cmd.arg("--no-defaults").args([
