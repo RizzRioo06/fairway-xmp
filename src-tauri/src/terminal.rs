@@ -115,7 +115,7 @@ fn directory(layout: &Layout, folder: Option<&str>) -> Result<std::path::PathBuf
     use std::path::{Component, Path};
     let root = std::fs::canonicalize(&layout.www).map_err(|e| e.to_string())?;
     let Some(folder) = folder else {
-        return Ok(root);
+        return shell_directory(root);
     };
     let mut parts = Path::new(folder).components();
     if !matches!(parts.next(), Some(Component::Normal(_))) || parts.next().is_some() {
@@ -125,6 +125,37 @@ fn directory(layout: &Layout, folder: Option<&str>) -> Result<std::path::PathBuf
         .map_err(|_| "This folder is no longer available. Refresh the folder list.".to_string())?;
     if !path.starts_with(&root) || !path.is_dir() {
         return Err("Choose a folder inside your coursework folder.".into());
+    }
+    shell_directory(path)
+}
+
+fn shell_directory(path: std::path::PathBuf) -> Result<std::path::PathBuf> {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+        let mut components = path.components();
+        if let Some(Component::Prefix(prefix)) = components.next() {
+            match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => {
+                    // canonicalize returns \\?\ drive paths. cmd interprets
+                    // these as UNC and silently falls back to C:\Windows.
+                    let mut local = std::path::PathBuf::from(format!("{}:\\", drive as char));
+                    for component in components {
+                        if !matches!(component, Component::RootDir) {
+                            local.push(component.as_os_str());
+                        }
+                    }
+                    return Ok(local);
+                }
+                Prefix::UNC(..)
+                | Prefix::VerbatimUNC(..)
+                | Prefix::DeviceNS(..)
+                | Prefix::Verbatim(..) => {
+                    return Err("Windows Command Prompt requires a folder on a local drive.".into());
+                }
+                _ => (),
+            }
+        }
     }
     Ok(path)
 }
@@ -202,7 +233,9 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
             .unwrap_or_else(|| "C:\\Windows".into())
             .join("System32/cmd.exe");
         let mut c = CommandBuilder::new(executable);
-        c.args(["/D", "/Q", "/K", "chcp 65001 >nul"]);
+        // Keep the fixed command as separate words: CommandBuilder quotes
+        // arguments with spaces using CRT rules, which differ from cmd /K.
+        c.args(["/D", "/Q", "/K", "chcp", "65001>nul"]);
         c
     };
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -1100,6 +1133,8 @@ mod tests {
             .write("windows", "echo %TERM_PROGRAM%\r")
             .unwrap();
         fixture.until("windows", "Fairway XMP");
+        fixture.terminals.write("windows", "cd\r").unwrap();
+        fixture.until("windows", &fixture.layout.www.to_string_lossy());
         fixture.terminals.write("windows", "exit 7\r").unwrap();
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         loop {
