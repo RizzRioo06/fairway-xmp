@@ -59,3 +59,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke \
 Use a fresh scratch directory for each run. It starts its own MySQL on free ports and shuts it down afterward. Both desktop installer workflows also run this example. Browser fixtures do not establish native correctness, and neither replaces a human check in the native WebViews before release.
 
 Both desktop candidate workflows run this real-database example and browser input through the native stdio test bridge. The latter starts isolated bundled MySQL and checks database/table creation, Unicode row insertion/editing, and exact SQL results. The bridge is test-only and opens no HTTP database endpoint. Native WebView and installer acceptance still require the checks in [beta acceptance](beta-acceptance.md).
+
+## Windows filesystem paths
+
+MySQL Server on Windows restricts file paths to the current ANSI code page ([upstream restriction](https://dev.mysql.com/doc/refman/9.7/en/windows-restrictions.html)). Fairway uses existing NTFS short-name aliases for MySQL configuration, data and log paths when available, without moving or renaming student data. PHP, the terminal folder picker and project paths retain their Unicode paths. When aliases are unavailable and the paths cannot be represented in the active code page, MySQL startup reports the limitation and keeps existing data intact. A filesystem with short-name aliases or paths compatible with the Windows locale is required in that case.

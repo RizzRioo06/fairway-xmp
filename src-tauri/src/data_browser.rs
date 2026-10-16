@@ -189,7 +189,7 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
                 let mut kill = process::command(layout.exe("mysql", "mysql"));
                 kill.arg(format!(
                     "--defaults-file={}",
-                    layout.data.join("config/admin.cnf").display()
+                    crate::config::mysql_path(&layout.data.join("config/admin.cnf")).display()
                 ))
                 .args(["--connect-timeout=2", "--execute"])
                 .arg(format!("KILL QUERY {id}"));
@@ -234,7 +234,7 @@ fn mysql(layout: &Layout, executable: &str) -> Command {
     let mut command = process::command(layout.exe("mysql", executable));
     command.arg(format!(
         "--defaults-file={}",
-        layout.data.join("config/admin.cnf").display()
+        crate::config::mysql_path(&layout.data.join("config/admin.cnf")).display()
     ));
     if executable == "mysql" {
         command.arg("--connect-timeout=3");

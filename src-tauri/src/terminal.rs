@@ -527,7 +527,16 @@ impl Session {
             }
         }
         #[cfg(windows)]
-        self.finish_console();
+        {
+            // Older ConPTY versions can deadlock on teardown while waiting
+            // for their initial cursor query. Ending a session must complete
+            // that handshake even if its renderer never attached.
+            if let Ok(mut writer) = self.writer.lock() {
+                let _ = writer.write_all(b"\x1b[1;1R");
+                let _ = writer.flush();
+            }
+            self.finish_console();
+        }
         if let Ok(mut child) = self.child.lock() {
             if let Some(child) = child.as_mut() {
                 if child.try_wait().ok().flatten().is_none() {
@@ -1196,6 +1205,35 @@ mod tests {
                 break;
             }
             assert!(Instant::now() < deadline, "Windows shell did not exit");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn closing_before_cursor_handshake_releases_the_reader() {
+        let fixture = Fixture::new();
+        fixture.start("unattached");
+        let session = fixture.terminals.session("unattached").unwrap();
+        let reader = Arc::downgrade(&session.output);
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        let mut bytes = Vec::new();
+        while !bytes.windows(4).any(|part| part == b"\x1b[6n") {
+            bytes.extend(fixture.terminals.read("unattached").unwrap().data);
+            assert!(
+                Instant::now() < deadline,
+                "ConPTY did not send its cursor query"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        fixture.terminals.close("unattached");
+        drop(session);
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        while reader.upgrade().is_some() {
+            assert!(
+                Instant::now() < deadline,
+                "ConPTY reader survived closing before startup"
+            );
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }

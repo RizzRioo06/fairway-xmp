@@ -17,10 +17,13 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
     const rows = page.locator('.terminal-tab-panel:not([hidden]) .terminal-host .xterm-rows');
     const enter = async (command: string) => { await input.focus(); await input.pressSequentially(command); await input.press('Enter'); };
+    if (process.platform === 'win32') await expect(rows).toContainText('>', { timeout: 15000 });
     await enter('php --version'); await expect(rows).toContainText(/PHP 8\.5\./);
     await enter('composer --version'); await expect(rows).toContainText('Composer version');
     await enter(process.platform === 'win32' ? 'cd' : 'pwd');
-    await expect(rows).toContainText(join('Student May\'s home 日本', 'fairway', 'www'));
+    await expect(rows).toContainText(process.platform === 'win32' ? "Student May's home" : join('Student May\'s home 日本', 'fairway', 'www'));
+    await enter('php -r "echo file_get_contents(\'.fairway-terminal-location\');"');
+    await expect(rows).toContainText('COURSEWORK_FOLDER_VERIFIED');
     await page.getByRole('button', { name: 'Environment', exact: true }).click();
     await page.getByRole('button', { name: 'Terminal', exact: true }).click();
     await expect(rows).toContainText('Composer version');
@@ -34,7 +37,9 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     await page.getByRole('button', { name: 'New terminal', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
     await enter(process.platform === 'win32' ? 'cd' : 'pwd');
-    await expect(rows).toContainText('Project with spaces 日本');
+    await expect(rows).toContainText(process.platform === 'win32' ? 'Project with spaces' : 'Project with spaces 日本');
+    await enter('php -r "echo file_get_contents(\'.fairway-terminal-location\');"');
+    await expect(rows).toContainText('PROJECT_FOLDER_VERIFIED');
     await enter('php -r "echo \'SECOND_SHELL_READY\';"');
     await expect(rows).toContainText('SECOND_SHELL_READY');
     await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();

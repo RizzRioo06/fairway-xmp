@@ -43,7 +43,7 @@ jobs:
         run: python scripts/prepare_runtime.py
       - name: Build native terminal test bridge
         run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
-      - run: npx playwright install chromium
+      - run: npx playwright install --only-shell chromium
       - name: Exercise native terminal and data browser through browser input
         env:
           FAIRWAY_NATIVE_ONLY: '1'
