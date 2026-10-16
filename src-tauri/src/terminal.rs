@@ -1126,6 +1126,11 @@ mod tests {
     #[test]
     fn native_windows_shell_accepts_input_resizes_and_exits() {
         let fixture = Fixture::new();
+        fs::write(
+            fixture.layout.www.join("fairway-cwd-check.txt"),
+            b"isolated coursework",
+        )
+        .unwrap();
         fixture.start("windows");
         fixture.until("windows", ">");
         fixture.terminals.resize("windows", 100, 32).unwrap();
@@ -1134,11 +1139,17 @@ mod tests {
             .write("windows", "echo %TERM_PROGRAM%\r")
             .unwrap();
         fixture.until("windows", "Fairway XMP");
-        fixture.terminals.write("windows", "cd\r").unwrap();
-        fixture.until(
-            "windows",
-            &fixture.layout.www.to_string_lossy().replace('/', "\\"),
-        );
+        // Check cwd by resolving a file unique to this isolated coursework
+        // folder. ConPTY wraps long paths and Windows expands 8.3 aliases, so
+        // comparing its raw VT output with the input path is not reliable.
+        fixture
+            .terminals
+            .write(
+                "windows",
+                "if exist fairway-cwd-check.txt echo CWD_%TERM_PROGRAM%\r",
+            )
+            .unwrap();
+        fixture.until("windows", "CWD_Fairway XMP");
         fixture.terminals.write("windows", "exit 7\r").unwrap();
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         loop {
