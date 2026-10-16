@@ -156,6 +156,17 @@ jobs:
       - name: Remove temporary signing credentials
         if: ${{ always() && inputs.signed_release }}
         run: bash scripts/cleanup_apple_credentials.sh
+      - name: Preserve signed files for investigating a failed lifecycle
+        if: ${{ failure() && inputs.signed_release }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-signed-build-for-investigation-${{ github.sha }}
+          path: |
+            artifacts/macos-installer/*.pkg
+            artifacts/macos-installer/*.app.tar.gz
+            artifacts/macos-installer/*.sig
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
@@ -163,5 +174,6 @@ jobs:
           path: |
             .runtime-work/macos-smoke/student data/logs/*.log
             .runtime-work/macos-lifecycle/*.json
+            .runtime-work/macos-lifecycle/*.txt
           if-no-files-found: ignore
           retention-days: 7

@@ -9,6 +9,24 @@ import threading
 import time
 
 
+def run_probe(command, output):
+    """Fail a stalled native installer with its stack, preserving the cause."""
+    timeout = 900 if os.name == 'nt' else 120
+    with subprocess.Popen(command, env={**os.environ, 'FAIRWAY_INSTALLER_TEST': '1'}) as process:
+        try:
+            code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            if os.name != 'nt':
+                try:
+                    subprocess.run(['sample', str(process.pid), '3', '-file', str(output / 'updater-process-sample.txt')], check=False, timeout=15)
+                except (OSError, subprocess.SubprocessError) as error:
+                    print(f'Could not capture updater stack: {error}', flush=True)
+            process.kill(); process.wait()
+            raise
+        if code:
+            raise subprocess.CalledProcessError(code, command)
+
+
 def exercise(probe, executable, artifact, output):
     artifact = artifact.resolve()
     signature = artifact.with_name(artifact.name + '.sig').read_text().strip()
@@ -29,7 +47,7 @@ def exercise(probe, executable, artifact, output):
     report = output / 'updater.json'
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     try:
-        subprocess.run([str(probe.resolve()), str(executable), base, str(report), str(Path('packaging/updater.pub').resolve())], check=True, timeout=900, env={**os.environ, 'FAIRWAY_INSTALLER_TEST': '1'})
+        run_probe([str(probe.resolve()), str(executable), base, str(report), str(Path('packaging/updater.pub').resolve())], output)
         result = json.loads(report.read_text())
         if result['status'] != 'prepared': raise RuntimeError('Updater preparation did not complete')
         # NSIS is launched asynchronously by the plugin; it exits the probe.

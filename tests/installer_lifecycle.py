@@ -110,12 +110,20 @@ def main():
                 permissions = {'protectedParentWritable': os.access(installation.parent, os.W_OK),
                                'parentMode': oct(installation.parent.stat().st_mode & 0o7777),
                                'parentUid': installation.parent.stat().st_uid,
-                               'parentGid': installation.parent.stat().st_gid}
+                               'parentGid': installation.parent.stat().st_gid,
+                               'installedAppUid': installation.stat().st_uid}
                 print('Mac updater location: ' + json.dumps(permissions), flush=True)
                 run(['sudo', 'mv', str(installation), str(writable)])
                 try:
+                    # Moving a pkg-installed bundle retains root ownership.
+                    # Match a normal per-user app installation, including its
+                    # contents, before exercising replacement without a prompt.
+                    run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(writable)])
+                    if writable.stat().st_uid != os.getuid():
+                        raise RuntimeError('Updater test app is not owned by the test account')
+                    run(['codesign', '--verify', '--deep', '--strict', str(writable)])
                     update_evidence = exercise(args.update_probe, writable / 'Contents/MacOS/fairway', args.updater, output)
-                    update_evidence['installationScope'] = 'Exact pkg-installed bundle relocated to a writable app directory, updated, then returned to /Applications.'
+                    update_evidence['installationScope'] = 'Exact pkg-installed code relocated to a per-user app directory with per-user ownership, signature verified, updated, then returned to /Applications.'
                     update_evidence['protectedInstallation'] = {**permissions, 'status': 'requires-human-authorization-prompt-check'}
                     (output / 'updater.json').write_text(json.dumps(update_evidence, indent=2) + '\n')
                 finally:
