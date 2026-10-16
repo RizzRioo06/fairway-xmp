@@ -1,5 +1,11 @@
 # Follow-up work after PHP version selection
 
+## Beta 2 publication
+
+The release owner authorized publishing `v0.1.0-beta.2` on 2026-10-16 from successful candidate run [38848919567](https://github.com/eimg/fairway-xmp/actions/runs/38848919567), source commit `764bccae0287af74cca0382359ab3de7853c5f48`. Publication reuses the tested binaries and source archives without rebuilding. The tag identifies that candidate commit; the subsequent publication commit only updates documentation and the publishing workflow.
+
+All automated platform, native feature, service/backup, installed lifecycle, and Linux distro checks passed. Individual human acceptance checks have not been recorded and remain pending in the candidate evidence. Signing, manual updates, the Windows MySQL path restriction, and the legacy PHP provenance limitations remain disclosed in the beta 2 notes.
+
 PR #1 was merged as `2114689`. The simpler Advanced settings dropdown, selected-runtime Linux recovery, Windows ZIP configuration, settings rollback, and regression tests are implemented. Repository Mac/Windows checks passed; native Windows/Linux validation exercised all six PHP versions, including Linux recovery and shutdown.
 
 Beta 1 is published. The Windows PHP 8.0/8.1 provenance work below remains open and is disclosed with that release. It does not require changing the published beta 1 files.

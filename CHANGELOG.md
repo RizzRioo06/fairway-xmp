@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-beta.2 — candidate
+## 0.1.0-beta.2 — 2026-10-16
 
 - Embedded Terminal on macOS and Windows: up to two local shells in coursework or project folders, with PHP and Composer available for that session even when persistent command-line integration is off.
 - Independent terminal tabs, project-folder selection, Ctrl+backtick access, private optional macOS command history, and discovery of common installed tool locations.
@@ -9,7 +9,7 @@
 - Desktop command-line tools include `fairway db` for SQL export and import.
 - Both desktop candidate builds exercise real database CRUD, SQL export/import and cancellation, and browser input through native database/terminal bridges. Windows database workers and export cleanup handle native process and file semantics. Windows terminals normalize local drive paths, complete the cursor handshake during early shutdown, and close ConPTY after shell exit while preserving final output. Windows MySQL uses existing short-name aliases for non-ANSI paths without moving data.
 
-This build reports `0.1.0-beta.2`. Installers are unsigned and updates are manual. It is the beta 2 candidate and is not a published release.
+This release reports `0.1.0-beta.2` and reuses the tested installers from candidate run 38848919567, commit `764bccae0287af74cca0382359ab3de7853c5f48`, without rebuilding. Installers are unsigned and updates are manual. The release owner authorized publication; individual human acceptance checks remain unrecorded.
 
 ## 0.1.0-beta.1 — 2026-10-15
 

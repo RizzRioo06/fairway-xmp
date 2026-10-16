@@ -1,4 +1,4 @@
-name: Publish unsigned beta 1
+name: Publish unsigned beta 2
 
 on:
   workflow_dispatch:
@@ -22,7 +22,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          FAIRWAY_RUN_ID: '38699450419'
-          FAIRWAY_TAG: v0.1.0-beta.1
-          FAIRWAY_SHA: f3cf84da6270038274590860db00c58eda2f1df6
+          FAIRWAY_RUN_ID: '38848919567'
+          FAIRWAY_TAG: v0.1.0-beta.2
+          FAIRWAY_SHA: 764bccae0287af74cca0382359ab3de7853c5f48
+          FAIRWAY_NOTES: releases/beta2-notes.md
         run: python scripts/publish_unsigned_release.py
