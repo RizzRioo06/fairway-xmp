@@ -1,5 +1,5 @@
 use crate::{
-    config::{atomic_write, Layout, Ports, Result},
+    config::{atomic_write, Layout, Ports, Project, ProjectConfig, Result},
     process::{self, OwnedProcess},
 };
 use serde::Serialize;
@@ -29,6 +29,11 @@ pub struct Snapshot {
     pub ports: Ports,
     pub services: Vec<ServiceStatus>,
     pub document_root: String,
+    pub projects: Vec<Project>,
+    /// The hosts file does not match the registered domains yet.
+    pub domains_pending: bool,
+    pub https_trusted: bool,
+    pub os: String,
     pub data_dir: String,
     pub runtime_ready: bool,
     pub runtime_versions: serde_json::Value,
@@ -152,10 +157,28 @@ impl Manager {
             }
         })
         .collect();
+        let registered = self.layout.registered_projects().unwrap_or_default();
+        let managed = crate::hosts::managed_names().unwrap_or_default();
+        let domains = registered
+            .iter()
+            .map(|project| project.domain.clone())
+            .collect::<Vec<_>>();
+        let projects = registered
+            .into_iter()
+            .map(|config| Project {
+                available: config.root.is_dir(),
+                domain_ready: managed.contains(&config.domain),
+                config,
+            })
+            .collect();
         Snapshot {
             ports: self.ports.clone(),
             services,
             document_root: self.layout.www.to_string_lossy().into(),
+            projects,
+            domains_pending: !crate::hosts::current(&domains).unwrap_or(false),
+            https_trusted: crate::tls::trusted(&self.layout),
+            os: std::env::consts::OS.into(),
             data_dir: self.layout.data.to_string_lossy().into(),
             runtime_ready: self.runtime_ready(),
             runtime_versions: fs::read(self.layout.runtime.join("manifest.json"))
@@ -189,6 +212,129 @@ impl Manager {
         self.ports = ports;
         self.errors.clear();
         Ok(())
+    }
+
+    /// Save a new project list and apply it to Nginx, restoring the previous list on failure.
+    fn apply_projects(&mut self, next: Vec<ProjectConfig>) -> Result<()> {
+        let previous = self.layout.registered_projects()?;
+        if next.iter().any(|project| project.https)
+            && [
+                self.ports.website,
+                self.ports.phpmyadmin,
+                self.ports.mysql,
+                self.ports.php,
+            ]
+            .contains(&crate::tls::https_port())
+        {
+            return Err(format!(
+                "Port {} is reserved for project HTTPS. Choose another service port.",
+                crate::tls::https_port()
+            ));
+        }
+        if next.iter().any(|project| project.https)
+            && !previous.iter().any(|project| project.https)
+            && self.processes.contains_key("nginx")
+        {
+            process::ensure_port(crate::tls::https_port(), "Project HTTPS", &[])?;
+        }
+        self.layout.save_projects(&next)?;
+        if let Err(error) = self.reload_sites() {
+            self.layout.save_projects(&previous)?;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn reload_sites(&mut self) -> Result<()> {
+        let _ = self.snapshot();
+        if !self.runtime_ready() {
+            return Err("The bundled web runtime is missing. Reinstall Fairway XMP.".into());
+        }
+        let config = self.layout.data.join("config/nginx.conf");
+        let previous = fs::read(&config).map_err(|e| e.to_string())?;
+        if let Err(error) = self.layout.write_configs(&self.ports) {
+            atomic_write(&config, &previous)?;
+            return Err(error);
+        }
+        let control = |args: &[&str]| {
+            let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
+            cmd.arg("-e")
+                .arg(self.layout.data.join("logs/nginx.log"))
+                .arg("-p")
+                .arg(&self.layout.data)
+                .arg("-c")
+                .arg(&config)
+                .args(args);
+            process::output(cmd)
+        };
+        let result = control(&["-t"]).and_then(|_| {
+            if self.processes.contains_key("nginx") {
+                control(&["-s", "reload"])?;
+            }
+            Ok(())
+        });
+        if let Err(error) = result {
+            atomic_write(&config, &previous)?;
+            return Err(format!("Could not apply project changes: {error}"));
+        }
+        Ok(())
+    }
+
+    /// Add a project, or replace the one registered as `previous`.
+    pub fn save_project(&mut self, previous: Option<&str>, project: ProjectConfig) -> Result<()> {
+        if !project.root.is_dir() {
+            return Err("The web root folder does not exist.".into());
+        }
+        let mut projects = self.layout.registered_projects()?;
+        match previous {
+            Some(domain) => {
+                let slot = projects
+                    .iter_mut()
+                    .find(|p| p.domain == domain)
+                    .ok_or("This project is no longer registered.")?;
+                *slot = project;
+            }
+            None => projects.push(project),
+        }
+        self.apply_projects(projects)
+    }
+
+    pub fn remove_project(&mut self, domain: &str) -> Result<()> {
+        let mut projects = self.layout.registered_projects()?;
+        let count = projects.len();
+        projects.retain(|p| p.domain != domain);
+        if projects.len() == count {
+            return Err("This project is no longer registered.".into());
+        }
+        self.apply_projects(projects)
+    }
+
+    pub fn set_project_https(&mut self, domain: &str, enabled: bool) -> Result<()> {
+        let mut projects = self.layout.registered_projects()?;
+        let project = projects
+            .iter_mut()
+            .find(|p| p.domain == domain)
+            .ok_or("This project is no longer registered.")?;
+        if project.https == enabled {
+            return Ok(());
+        }
+        project.https = enabled;
+        self.apply_projects(projects)
+    }
+
+    /// Certificate trust that no project needs any more; removing a project cleans it up.
+    pub fn unused_trust(&self) -> Result<bool> {
+        Ok(crate::tls::trusted(&self.layout)
+            && !self.layout.registered_projects()?.iter().any(|p| p.https))
+    }
+
+    pub fn domains(&self) -> Result<Vec<String>> {
+        Ok(self
+            .layout
+            .registered_projects()?
+            .into_iter()
+            .map(|p| p.domain)
+            .collect())
     }
 
     pub fn save_settings(&mut self, ports: Ports, version: String) -> Result<()> {
@@ -300,6 +446,7 @@ impl Manager {
             self.ports.phpmyadmin,
             self.ports.mysql,
             self.ports.php,
+            crate::tls::https_port(),
         ];
         for id in ids {
             if self.processes.contains_key(*id) {
@@ -309,6 +456,9 @@ impl Manager {
                 "nginx" => {
                     process::ensure_port(self.ports.website, "Website", &excluded)?;
                     process::ensure_port(self.ports.phpmyadmin, "phpMyAdmin", &excluded)?;
+                    if self.layout.registered_projects()?.iter().any(|p| p.https) {
+                        process::ensure_port(crate::tls::https_port(), "Project HTTPS", &excluded)?;
+                    }
                 }
                 "mysql" => process::ensure_port(self.ports.mysql, "MySQL", &excluded)?,
                 "php" => process::ensure_port(self.ports.php, "PHP", &excluded)?,

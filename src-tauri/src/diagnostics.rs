@@ -90,6 +90,10 @@ mod tests {
             "ports": {"website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000},
             "services":[{"id":"mysql","running":false,"ready":false,"port":13306,"pid":123,"message":"password=private-secret"}],
             "documentRoot":"/Users/private-student/coursework", "dataDir":"private-data",
+            "projects":[{"name":"private-project","domain":"private-project","https":false,
+                "indexFallback":false,"available":true,"domainReady":true,
+                "root":"/Users/private-student/coursework/private-project"}],
+            "domainsPending":false,"httpsTrusted":false,"os":"macos",
             "runtimeReady":true,"runtimeVersions":{"php":"8.5.11","credentials":"private-secret"},
             "phpVersion":"8.5","phpVersions":{"8.5":"8.5.11"},"pathInstalled":true,
             "cliPhp":"private-launcher", "cliComposer":"private-composer", "pathPhp":null,
@@ -103,6 +107,7 @@ mod tests {
             "private-launcher",
             "private-composer",
             "private-data",
+            "private-project",
         ] {
             assert!(!text.contains(private));
         }

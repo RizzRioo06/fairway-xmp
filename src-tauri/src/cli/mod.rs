@@ -3,7 +3,7 @@ mod supervisor;
 mod tui;
 
 use crate::{
-    config::{Layout, Ports, Result},
+    config::{Layout, Ports, ProjectConfig, Result},
     manager::Snapshot,
 };
 use serde::{Deserialize, Serialize};
@@ -14,13 +14,36 @@ use std::{env, io::IsTerminal, path::PathBuf, process::Command};
 pub(super) enum Request {
     Status,
     Diagnostics,
-    Start { service: String },
-    Stop { service: String },
-    Restart { service: String },
-    Log { service: String },
-    Ports { ports: Ports },
-    PhpVersion { version: String },
+    Start {
+        service: String,
+    },
+    Stop {
+        service: String,
+    },
+    Restart {
+        service: String,
+    },
+    Log {
+        service: String,
+    },
+    Ports {
+        ports: Ports,
+    },
+    PhpVersion {
+        version: String,
+    },
     Backup,
+    SaveProject {
+        previous: Option<String>,
+        project: ProjectConfig,
+    },
+    RemoveProject {
+        domain: String,
+    },
+    ProjectHttps {
+        domain: String,
+        enabled: bool,
+    },
     InstallCli,
     RemoveCli,
     ShellTools,
@@ -44,6 +67,23 @@ pub(super) struct Response {
 
 pub fn run() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.first().is_some_and(|value| value == "__sync-hosts") {
+        return crate::hosts::apply(&args[1..]);
+    }
+    #[cfg(target_os = "linux")]
+    if args.first().is_some_and(|value| value == "__trust-ca") {
+        return crate::tls::apply_linux_trust(
+            std::path::Path::new(args.get(1).ok_or("Missing certificate path.")?),
+            false,
+        );
+    }
+    #[cfg(target_os = "linux")]
+    if args.first().is_some_and(|value| value == "__remove-ca") {
+        return crate::tls::apply_linux_trust(
+            std::path::Path::new(args.get(1).ok_or("Missing certificate path.")?),
+            true,
+        );
+    }
     if args == ["--build-info"] {
         println!("{}", crate::diagnostics::build_identity());
         return Ok(());
@@ -52,7 +92,7 @@ pub fn run() -> Result<()> {
         args.first().map(String::as_str),
         Some("help" | "--help" | "-h")
     ) {
-        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql]\nfairway logs nginx|mysql|php  Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP  Change ports while all services are stopped\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services (8.0/8.1 are legacy)\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
+        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql]\nfairway project add DOMAIN FOLDER [--name NAME] [--index]\n                             Serve FOLDER at DOMAIN.test (updates the hosts file with sudo)\nfairway project remove DOMAIN Remove a project; its files are kept\nfairway project https DOMAIN on|off\n                             Toggle HTTPS for one project (:8443)\nfairway project hosts        Retry the hosts-file update for registered projects\nfairway logs nginx|mysql|php  Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP  Change ports while all services are stopped\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services (8.0/8.1 are legacy)\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
         return Ok(());
     }
     if matches!(args.first().map(String::as_str), Some("--version" | "-V")) {
@@ -70,6 +110,12 @@ pub fn run() -> Result<()> {
     let layout = Layout::new(root.join("runtime"))?;
     if args.first().is_some_and(|s| s == "__serve") {
         return supervisor::serve(&layout);
+    }
+    if args.first().is_some_and(|s| s == "clear-domains") {
+        return crate::hosts::ensure(&[], "__sync-hosts");
+    }
+    if args.first().is_some_and(|s| s == "clear-https-trust") {
+        return crate::tls::remove_trust(&layout);
     }
     if args.first().is_some_and(|s| s == "uninstall") {
         let status = Command::new("sh")
@@ -102,6 +148,20 @@ pub fn run() -> Result<()> {
     }
     let request = parse(&args)?;
     supervisor::ensure(&layout)?;
+    if let Request::ProjectHttps {
+        domain,
+        enabled: true,
+    } = &request
+    {
+        if !layout
+            .registered_projects()?
+            .iter()
+            .any(|p| p.domain == *domain)
+        {
+            return Err(format!("No project uses {domain}.test."));
+        }
+        crate::tls::ensure_trust(&layout)?;
+    }
     if command == "tui" {
         if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
             return Err("The dashboard needs an interactive terminal. Use fairway status --json for scripts.".into());
@@ -149,6 +209,22 @@ pub fn run() -> Result<()> {
         std::process::exit(status.code().unwrap_or(1));
     }
     let mut data = supervisor::call(&layout, &request)?;
+    if command == "project" && args[1] != "https" {
+        let projects = layout.registered_projects()?;
+        let domains = projects
+            .iter()
+            .map(|p| p.domain.clone())
+            .collect::<Vec<_>>();
+        crate::hosts::ensure(&domains, "__sync-hosts").map_err(|e| {
+            format!("The hosts file was not updated: {e}. Retry with fairway project hosts.")
+        })?;
+        if args[1] == "remove" && crate::tls::trusted(&layout) && !projects.iter().any(|p| p.https)
+        {
+            crate::tls::remove_trust(&layout)?;
+        }
+        println!("Projects and the hosts file are up to date.");
+        return Ok(());
+    }
     if command == "ports" && args.len() == 1 {
         data = data["ports"].clone();
     }
@@ -185,6 +261,21 @@ pub fn run() -> Result<()> {
             "Projects: {}\nData: {}",
             snapshot.document_root, snapshot.data_dir
         );
+        for project in snapshot.projects {
+            println!(
+                "{}: {} -> {}{}",
+                project.config.name,
+                crate::integration::project_url(&project.config, snapshot.ports.website),
+                project.config.root.display(),
+                if !project.available {
+                    " (web root missing)"
+                } else if !project.domain_ready {
+                    " (hosts file not updated; run fairway project hosts)"
+                } else {
+                    ""
+                }
+            );
+        }
     } else if let Some(text) = data.as_str() {
         println!("{text}");
     } else {
@@ -238,6 +329,7 @@ fn parse(args: &[String]) -> Result<Request> {
             Ok(Request::Ports { ports })
         }
         "backup" if args.len() == 1 => Ok(Request::Backup),
+        "project" => project_request(&args[1..]),
         "diagnostics" if args.len() == 1 => Ok(Request::Diagnostics),
         "php-version" if args.len() == 2 => Ok(Request::PhpVersion {
             version: args[1].clone(),
@@ -250,6 +342,45 @@ fn parse(args: &[String]) -> Result<Request> {
         "ports" | "php-version" | "tui" if args.len() <= 1 => Ok(Request::Status),
         "php" | "composer" | "mysql" | "mysqldump" | "shell" => Ok(Request::Status),
         _ => Err("Unknown command or arguments. Run fairway --help.".into()),
+    }
+}
+
+fn project_request(args: &[String]) -> Result<Request> {
+    let words = args.iter().map(String::as_str).collect::<Vec<_>>();
+    match words.as_slice() {
+        ["add", domain, folder, options @ ..] => {
+            let mut name = domain.to_string();
+            let mut index_fallback = false;
+            let mut options = options.iter();
+            while let Some(option) = options.next() {
+                match *option {
+                    "--index" => index_fallback = true,
+                    "--name" => name = options.next().ok_or("--name needs a value.")?.to_string(),
+                    _ => return Err(format!("Unknown option {option}.")),
+                }
+            }
+            let root = std::fs::canonicalize(folder)
+                .map_err(|e| format!("Cannot use {folder} as the web root: {e}"))?;
+            Ok(Request::SaveProject {
+                previous: None,
+                project: ProjectConfig {
+                    name,
+                    domain: domain.to_string(),
+                    root,
+                    https: false,
+                    index_fallback,
+                },
+            })
+        }
+        ["remove", domain] => Ok(Request::RemoveProject {
+            domain: domain.to_string(),
+        }),
+        ["https", domain, state @ ("on" | "off")] => Ok(Request::ProjectHttps {
+            domain: domain.to_string(),
+            enabled: *state == "on",
+        }),
+        ["hosts"] => Ok(Request::Status),
+        _ => Err("Unknown project command. Run fairway --help.".into()),
     }
 }
 
@@ -266,5 +397,12 @@ mod tests {
         assert!(parse(&args("ports 80 8801 13306 19000")).is_err());
         assert!(parse(&args("ports 8800 8800 13306 19000")).is_err());
         assert!(parse(&args("ports 8800 8801 13306 19000")).is_ok());
+        assert!(parse(&args("project add shop /definitely/missing/folder")).is_err());
+        assert!(parse(&args("project add shop / --unknown")).is_err());
+        assert!(parse(&args("project https shop maybe")).is_err());
+        assert!(matches!(
+            parse(&args("project add shop / --name Shop --index")),
+            Ok(Request::SaveProject { project, .. }) if project.name == "Shop" && project.index_fallback
+        ));
     }
 }

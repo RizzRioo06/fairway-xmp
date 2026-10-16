@@ -1,11 +1,11 @@
 import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2,
-  Database, Download, ExternalLink, FolderOpen, Globe, Leaf, LoaderCircle, Play,
-  RefreshCw, ScrollText, Settings2, Square, Terminal, X,
+  ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleHelp, Clipboard, Code2,
+  Database, Download, ExternalLink, FolderOpen, Globe, Leaf, LoaderCircle, Lock, Play,
+  Plus, RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
 import { canControl, invoke, isDesktop, isUiTest, listen, preview } from './bridge';
-import type { Ports, ServiceId, ServiceStatus, Snapshot, UpdateInfo } from './types';
+import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, UpdateInfo } from './types';
 import HelpTip from './HelpTip';
 import DataBrowser from './data/DataBrowser';
 
@@ -27,6 +27,22 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+type ProjectForm = ProjectConfig & { previous: string | null; domainEdited: boolean; error: string | null };
+
+// Suggest a DNS-safe .test label from a display name.
+function suggestDomain(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/, '');
+}
+
+const hostsApproval: Record<string, string> = {
+  macos: 'macOS will ask for an administrator password.',
+  windows: 'Windows will ask for administrator permission.',
+};
+const trustApproval: Record<string, string> = {
+  macos: 'Fairway adds its local certificate to your login keychain. macOS asks for your password to approve the trust setting; an administrator account is not required.',
+  windows: 'Fairway adds its local certificate to your Windows user certificate store. Windows shows a security warning; choose Yes to continue. An administrator account is not required.',
+};
+
 export default function App() {
   const [data, setData] = useState<Snapshot>(preview);
   const [view, setView] = useState<View>('environment');
@@ -44,8 +60,13 @@ export default function App() {
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const [projectForm, setProjectForm] = useState<ProjectForm | null>(null);
+  const [removing, setRemoving] = useState<Project | null>(null);
+  const [sslSetup, setSslSetup] = useState<Project | null>(null);
   const operation = useRef(false);
   const backendOperation = useRef(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
   const versions = data.runtimeVersions;
   const selectedPhp = data.phpVersions[data.phpVersion] ?? versions?.php;
   const allReady = data.services.every(service => service.ready);
@@ -113,6 +134,8 @@ export default function App() {
     return () => { disposed = true; unlisteners.forEach(fn => fn()); };
   }, []);
 
+  // Results appear at the top of the page; bring them into view from lower cards.
+  useEffect(() => { noticeRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [notice]);
   useEffect(() => { setPorts(data.ports); }, [data.ports.website, data.ports.phpmyadmin, data.ports.mysql, data.ports.php]);
   useEffect(() => { setPhpVersion(data.phpVersion); }, [data.phpVersion]);
 
@@ -150,6 +173,44 @@ export default function App() {
     void run('Reading log…', async () => setLog({ service, text: await invoke<string>('read_log', { service }) }));
   }
 
+  function projectUrl(project: Project) {
+    return project.https ? `https://${project.domain}.test:8443/` : `http://${project.domain}.test:${data.ports.website}/`;
+  }
+
+  function setHttps(project: Project, enabled: boolean) {
+    void run('Updating project HTTPS…', async () => {
+      setData(await invoke<Snapshot>('set_project_https', { domain: project.domain, enabled }));
+      setNotice({ kind: 'success', text: enabled ? `HTTPS is ready at https://${project.domain}.test:8443/.` : `HTTPS is off for ${project.domain}.test. Its HTTP address still works.` });
+    });
+  }
+
+  function saveProject(form: ProjectForm) {
+    const { previous, name, domain, root, https, indexFallback } = form;
+    const project: ProjectConfig = { name, domain, root, https, indexFallback };
+    void run('Saving project…', async () => {
+      try {
+        setData(await invoke<Snapshot>('save_project', { previous, project }));
+        setProjectForm(null);
+        setNotice({ kind: 'success', text: `${project.name} is ready at http://${project.domain}.test:${data.ports.website}/.` });
+      } catch (error) {
+        // A saved project with a pending hosts update is shown in the list with a retry.
+        if (message(error).startsWith('The project was saved')) { setProjectForm(null); throw error; }
+        setProjectForm({ ...form, error: message(error) });
+      }
+    });
+  }
+
+  async function chooseRoot(form: ProjectForm) {
+    try {
+      const root = await invoke<string | null>('pick_folder');
+      if (!root) return;
+      const folder = root.split(/[\\/]/).filter(Boolean).pop() ?? '';
+      const parent = root.split(/[\\/]/).filter(Boolean).slice(-2, -1)[0] ?? '';
+      const name = form.name || (folder === 'public' && parent ? parent : folder);
+      setProjectForm({ ...form, root, name, domain: form.domainEdited ? form.domain : suggestDomain(name) });
+    } catch (error) { setProjectForm({ ...form, error: message(error) }); }
+  }
+
   const connection = `DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=${data.ports.mysql}\nDB_DATABASE=fairway\nDB_USERNAME=fairway\nDB_PASSWORD=fairway`;
 
   return <div className="app-shell">
@@ -175,7 +236,7 @@ export default function App() {
       <div className="main-content">
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
-        {notice && <div className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
+        {notice && <div ref={noticeRef} className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
         {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} /></Suspense></div>}
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
 
@@ -193,6 +254,25 @@ export default function App() {
             <div className="workspace-details"><h2>A home for your projects</h2><p>Put your PHP projects in your document root.</p><code title={data.documentRoot}>{data.documentRoot}</code></div>
             <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('coursework')}>Open folder<ArrowUpRight size={15} /></button>
           </div>
+
+          <section className="project-card">
+            <div className="card-title"><h2><Globe size={17} />Projects</h2><div className="project-heading-actions"><button className="secondary" disabled={!usable} onClick={() => setProjectForm({ previous: null, name: '', domain: '', root: '', https: false, indexFallback: false, domainEdited: false, error: null })}><Plus size={14} />Add project</button><button className="secondary project-collapse" aria-label={projectsExpanded ? 'Collapse projects' : 'Expand projects'} aria-controls="project-sites-content" aria-expanded={projectsExpanded} onClick={() => setProjectsExpanded(expanded => !expanded)}><ChevronDown size={16} className={projectsExpanded ? 'expanded' : ''} /></button></div></div>
+            <div id="project-sites-content" hidden={!projectsExpanded}>
+              <p>Add a project to serve any folder at its own <code>.test</code> address, with optional HTTPS. Everything in your document root still opens at <code>http://127.0.0.1:{data.ports.website}/</code>.</p>
+              {data.domainsPending && <div className="project-pending" role="status"><span>Some project addresses aren’t set up on this computer yet.</span><button className="secondary" disabled={!usable} onClick={() => { void run('Updating the hosts file…', async () => { setData(await invoke<Snapshot>('sync_domains')); setNotice({ kind: 'success', text: 'Project addresses are set up.' }); }); }}>Set up addresses</button></div>}
+              {data.projects.length === 0 && <p className="settings-hint">No projects yet. Choose Add project to serve a folder anywhere on this computer.</p>}
+              {data.projects.length > 0 && <div className="project-table-scroll"><table className="project-table" aria-label="Projects">
+                <thead><tr><th scope="col">Project</th><th scope="col">Address</th><th scope="col">HTTPS</th><th scope="col" aria-label="Actions" /></tr></thead>
+                <tbody>{data.projects.map(project => <tr key={project.domain}>
+                  <th scope="row"><strong title={project.root}>{project.name}</strong>{!project.available && <small className="project-warning">Unavailable: the web root folder is missing. Edit to fix the path.</small>}</th>
+                  <td><span className="project-address">{project.https && <Lock size={11} aria-label="HTTPS" className="project-lock" />}<code title={projectUrl(project)}>{project.domain}.test:{project.https ? 8443 : data.ports.website}</code><button className="icon-button" aria-label={`Open ${project.name}`} title={`Open ${projectUrl(project)}`} disabled={!project.available || !project.domainReady || !data.services.find(service => service.id === 'nginx')?.ready || !!busy} onClick={() => open(`project:${project.domain}`)}><ExternalLink size={13} /></button></span>{!project.domainReady && <small className="project-warning">Address not set up yet</small>}</td>
+                  <td><label className="ssl-toggle"><input type="checkbox" role="switch" aria-label={`HTTPS for ${project.name}`} checked={project.https} disabled={!usable || (!project.https && (!project.available || !project.domainReady))} onChange={event => { if (!event.target.checked) setHttps(project, false); else if (data.httpsTrusted) setHttps(project, true); else setSslSetup(project); }} /><span className="ssl-track" aria-hidden="true" /></label></td>
+                  <td><div className="project-actions"><button className="secondary" aria-label={`Edit ${project.name}`} disabled={!usable} onClick={() => setProjectForm({ ...project, previous: project.domain, domainEdited: true, error: null })}>Edit</button><button className="secondary" aria-label={`Remove ${project.name}`} disabled={!usable} onClick={() => setRemoving(project)}>Remove</button></div></td>
+                </tr>)}</tbody>
+              </table></div>}
+              {data.httpsTrusted && !data.projects.some(project => project.https) && <div className="project-pending"><span>Fairway's local HTTPS certificate is still trusted by this computer. Remove the trust if you no longer need HTTPS.</span><button className="secondary" disabled={!usable} onClick={() => { void run('Removing certificate trust…', async () => { setData(await invoke<Snapshot>('remove_https_trust')); setNotice({ kind: 'success', text: 'Fairway’s local certificate is no longer trusted.' }); }); }}>Remove certificate trust</button></div>}
+            </div>
+          </section>
 
           <div className="bottom-grid">
             <section className="connection-card"><div className="card-title"><h2><Database size={17} />Database connection</h2><button className="icon-button" title="Copy database environment settings" aria-label="Copy database environment settings" onClick={() => { void copy(connection, 'database'); }}>{copied === 'database' ? <Check size={16} /> : <Clipboard size={16} />}</button></div><dl><div><dt>Host</dt><dd>127.0.0.1<span className="port-inline">:{data.ports.mysql}</span></dd></div><div><dt>Database</dt><dd>fairway</dd></div><div><dt>Username / password</dt><dd>fairway / fairway</dd></div></dl><button className="text-link" disabled={!data.services.find(s => s.id === 'mysql')?.ready || !!busy} onClick={() => { void run('Backing up databases…', async () => { const path = await invoke<string>('backup_database'); setNotice({ kind: 'success', text: `Database backup saved: ${path}` }); }); }}><Download size={14} />Back up databases</button></section>
@@ -255,6 +335,17 @@ export default function App() {
     {report !== null && <Modal title="Diagnostic report" onClose={() => setReport(null)}><p>Copy this report when asking for help. You can review everything included below.</p><pre className="log-output">{report}</pre><button className="secondary" onClick={() => { void copy(report, 'diagnostics'); }}>{copied === 'diagnostics' ? <Check size={14} /> : <Clipboard size={14} />}{copied === 'diagnostics' ? 'Copied' : 'Copy diagnostic report'}</button></Modal>}
     {log && <Modal title={`${meta[log.service].name} logs`} onClose={() => setLog(null)}><pre className="log-output">{log.text}</pre><button className="secondary" disabled={!!busy} onClick={() => showLog(log.service)}><RefreshCw size={15} />Refresh log</button></Modal>}
     {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open your coursework folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Closing this window keeps services running. Use the Fairway XMP menu bar or system tray icon to reopen the panel, control services, or quit. Quitting stops all services.</p></Modal>}
+    {projectForm && <Modal title={projectForm.previous ? 'Edit project' : 'Add project'} onClose={() => setProjectForm(null)} backdropCloses={false}><form className="project-form" onSubmit={event => { event.preventDefault(); saveProject(projectForm); }}>
+      <label><span>Name</span><input value={projectForm.name} maxLength={80} required onChange={event => { const name = event.target.value; setProjectForm({ ...projectForm, name, domain: projectForm.domainEdited ? projectForm.domain : suggestDomain(name) }); }} /></label>
+      <label><span>Domain</span><span className="domain-input"><input value={projectForm.domain} maxLength={63} required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" onChange={event => setProjectForm({ ...projectForm, domain: event.target.value.toLowerCase(), domainEdited: true })} /><span>.test</span></span><small>Lowercase letters, numbers, and hyphens.</small></label>
+      <label><span>Web root</span><span className="root-input"><input value={projectForm.root} readOnly required placeholder="Choose a folder" aria-label="Web root folder" className="root-path" onClick={() => { if (!busy) void chooseRoot(projectForm); }} onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && !busy) { event.preventDefault(); void chooseRoot(projectForm); } }} /><button type="button" className="secondary" disabled={!!busy} onClick={() => { void chooseRoot(projectForm); }}><FolderOpen size={14} />Choose…</button></span><small>The folder Fairway serves. For Laravel, choose the project’s <code>public</code> folder; files outside the web root stay private. Folders inside your document root are also served at <code>127.0.0.1:{data.ports.website}</code>.</small></label>
+      <label className="project-check"><input type="checkbox" checked={projectForm.indexFallback} onChange={event => setProjectForm({ ...projectForm, indexFallback: event.target.checked })} /><span>Route missing paths to <code>index.php</code><small>Turn on for Laravel and other frameworks, so routes like <code>/about</code> work.</small></span></label>
+      {projectForm.previous !== projectForm.domain && <p className="settings-hint">Saving {projectForm.previous ? `replaces ${projectForm.previous}.test with` : 'adds'} <code>{projectForm.domain || 'your-domain'}.test</code> in your computer’s hosts file, pointing to this computer. {hostsApproval[data.os] ?? 'Your computer will ask for administrator permission.'}</p>}
+      {projectForm.error && <div className="notice error" role="alert"><span>{projectForm.error}</span></div>}
+      <div className="button-row domain-confirm-actions"><button type="button" className="secondary" onClick={() => setProjectForm(null)}>Cancel</button><button type="submit" className="primary" disabled={!!busy || !projectForm.root}>{projectForm.previous ? 'Save changes' : 'Add project'}</button></div>
+    </form></Modal>}
+    {removing && <Modal title={`Remove ${removing.name}?`} onClose={() => setRemoving(null)}><p>Fairway stops serving <code>{removing.domain}.test</code>{removing.domainReady && <> and removes it from your computer’s hosts file. {hostsApproval[data.os] ?? 'Your computer will ask for administrator permission.'}</>}{!removing.domainReady && '.'} The folder <code>{removing.root}</code> and its files are kept.</p>{data.httpsTrusted && !data.projects.some(project => project.https && project.domain !== removing.domain) && <p>No other project uses HTTPS, so Fairway also removes its local certificate trust. Your computer may ask you to confirm.</p>}<div className="button-row domain-confirm-actions"><button className="secondary" onClick={() => setRemoving(null)}>Cancel</button><button className="primary" onClick={() => { const { domain, name } = removing; setRemoving(null); void run('Removing project…', async () => { setData(await invoke<Snapshot>('remove_project', { domain })); setNotice({ kind: 'success', text: `${name} was removed. Its files were kept.` }); }); }}>Remove project</button></div></Modal>}
+    {sslSetup && <Modal title={`Enable HTTPS for ${sslSetup.domain}.test?`} onClose={() => setSslSetup(null)}><p>HTTPS uses a local certificate that only this computer trusts. {trustApproval[data.os] ?? 'Your computer will ask you to approve trusting the certificate.'}</p><p>The certificate stays trusted until you remove it from this list or uninstall Fairway. <code>http://{sslSetup.domain}.test:{data.ports.website}/</code> keeps working.</p><div className="button-row domain-confirm-actions"><button className="secondary" onClick={() => setSslSetup(null)}>Cancel</button><button className="primary" onClick={() => { const project = sslSetup; setSslSetup(null); setHttps(project, true); }}>Enable HTTPS</button></div></Modal>}
   </div>;
 }
 
@@ -275,7 +366,7 @@ function ServiceCard({ service, version, disabled, busy, onAction, onOpen, onLog
   </section>;
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, backdropCloses = true }: { title: string; onClose: () => void; children: React.ReactNode; backdropCloses?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   useEffect(() => { close.current = onClose; }, [onClose]);
@@ -295,5 +386,5 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
     document.addEventListener('keydown', key);
     return () => { document.removeEventListener('keydown', key); previous?.focus(); };
   }, []);
-  return <div className="modal-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><div ref={container} className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="card-title"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20} /></button></div>{children}</div></div>;
+  return <div className="modal-backdrop" onClick={event => { if (backdropCloses && event.target === event.currentTarget) onClose(); }}><div ref={container} className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="card-title"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20} /></button></div>{children}</div></div>;
 }

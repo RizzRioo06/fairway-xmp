@@ -1,5 +1,5 @@
 use crate::{
-    config::{Layout, Ports, Result},
+    config::{Layout, Ports, ProjectConfig, Result},
     integration,
     lifecycle::{Lifecycle, Operation},
     manager::{Manager, Snapshot},
@@ -350,6 +350,133 @@ async fn save_settings(
     .await
 }
 
+/// Match the hosts file to the registered domains. Runs outside the manager lock
+/// because the OS approval prompt waits for the user.
+async fn sync_hosts(state: Shared) -> Result<()> {
+    let domains = access(state, |m| m.domains()).await?;
+    tauri::async_runtime::spawn_blocking(move || crate::hosts::ensure(&domains, "--sync-hosts"))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn save_project(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    previous: Option<String>,
+    project: ProjectConfig,
+) -> Result<Snapshot> {
+    let _operation = begin_operation(&app, "Saving project…")?;
+    let state = state.inner().clone();
+    access(state.clone(), move |m| {
+        m.save_project(previous.as_deref(), project)
+    })
+    .await?;
+    sync_hosts(state.clone())
+        .await
+        .map_err(|e| format!("The project was saved, but the hosts file was not updated: {e}"))?;
+    access(state, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn remove_project(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    domain: String,
+) -> Result<Snapshot> {
+    let _operation = begin_operation(&app, "Removing project…")?;
+    let state = state.inner().clone();
+    let unused_trust = access(state.clone(), move |m| {
+        m.remove_project(&domain)?;
+        Ok(m.unused_trust()?.then(|| m.layout.clone()))
+    })
+    .await?;
+    sync_hosts(state.clone())
+        .await
+        .map_err(|e| format!("The project was removed, but the hosts file was not updated: {e}"))?;
+    if let Some(layout) = unused_trust {
+        tauri::async_runtime::spawn_blocking(move || crate::tls::remove_trust(&layout))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| {
+                format!("The project was removed, but certificate trust was not removed: {e}")
+            })?;
+    }
+    access(state, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn sync_domains(app: tauri::AppHandle, state: State<'_, Shared>) -> Result<Snapshot> {
+    let _operation = begin_operation(&app, "Updating the hosts file…")?;
+    let state = state.inner().clone();
+    sync_hosts(state.clone()).await?;
+    access(state, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn set_project_https(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    domain: String,
+    enabled: bool,
+) -> Result<Snapshot> {
+    let _operation = begin_operation(&app, "Updating project HTTPS…")?;
+    let shared = state.inner().clone();
+    if enabled {
+        let layout = access(shared.clone(), {
+            let domain = domain.clone();
+            move |m| {
+                if !m.domains()?.contains(&domain) {
+                    return Err("This project is no longer registered.".into());
+                }
+                Ok(m.layout.clone())
+            }
+        })
+        .await?;
+        tauri::async_runtime::spawn_blocking(move || crate::tls::ensure_trust(&layout))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
+    access(shared, move |m| {
+        m.set_project_https(&domain, enabled)?;
+        Ok(m.snapshot())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_https_trust(app: tauri::AppHandle, state: State<'_, Shared>) -> Result<Snapshot> {
+    let _operation = begin_operation(&app, "Removing certificate trust…")?;
+    let shared = state.inner().clone();
+    let layout = access(shared.clone(), |m| {
+        if m.layout.registered_projects()?.iter().any(|p| p.https) {
+            return Err(
+                "Turn off HTTPS for every project before removing certificate trust.".into(),
+            );
+        }
+        Ok(m.layout.clone())
+    })
+    .await?;
+    tauri::async_runtime::spawn_blocking(move || crate::tls::remove_trust(&layout))
+        .await
+        .map_err(|e| e.to_string())??;
+    access(shared, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn pick_folder(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .blocking_pick_folder()
+            .map(|path| path.into_path().map_err(|e| e.to_string()))
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn open_target(state: State<'_, Shared>, target: String) -> Result<()> {
     access(state.inner().clone(), move |m| {
@@ -463,6 +590,26 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     let Some(action) = args.get(1) else {
         return Ok(false);
     };
+    if action == "--sync-hosts" {
+        crate::hosts::apply(&args[2..])?;
+        return Ok(true);
+    }
+    #[cfg(target_os = "linux")]
+    if action == "--trust-ca" {
+        crate::tls::apply_linux_trust(
+            std::path::Path::new(args.get(2).ok_or("Missing certificate path.")?),
+            false,
+        )?;
+        return Ok(true);
+    }
+    #[cfg(target_os = "linux")]
+    if action == "--remove-ca" {
+        crate::tls::apply_linux_trust(
+            std::path::Path::new(args.get(2).ok_or("Missing certificate path.")?),
+            true,
+        )?;
+        return Ok(true);
+    }
     if action == "db" {
         #[cfg(debug_assertions)]
         let runtime = std::env::var_os("FAIRWAY_RUNTIME_DIR")
@@ -480,6 +627,8 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     if ![
         "--install-cli",
         "--remove-cli",
+        "--remove-domains",
+        "--remove-https-trust",
         "--remove-data",
         "--remove-coursework",
         "--prepare-uninstall",
@@ -500,8 +649,16 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
         for name in ["app.pid", "mysql.pid", "nginx.pid", "php.pid"] {
             let path = layout.data.join(name);
             if let Ok(text) = std::fs::read_to_string(&path) {
+                // Nginx can leave an empty PID file after a failed start.
+                if name == "nginx.pid" && text.trim().is_empty() {
+                    if crate::process::health(layout.ports()?.website) {
+                        return Err("Open Fairway XMP, stop all services, and quit before installing or uninstalling.".into());
+                    }
+                    std::fs::remove_file(path).map_err(|e| e.to_string())?;
+                    continue;
+                }
                 let pid: u32 = text.trim().parse().map_err(|_| {
-                    "Cannot verify a service PID; stop services before uninstalling."
+                    "Cannot verify a service PID; stop services before installing or uninstalling."
                 })?;
                 if crate::process::pid_alive(pid) {
                     return Err(
@@ -515,6 +672,8 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     match action.as_str() {
         "--install-cli" => integration::install(&layout)?,
         "--remove-cli" => integration::remove(&layout)?,
+        "--remove-domains" => crate::hosts::ensure(&[], "--sync-hosts")?,
+        "--remove-https-trust" => crate::tls::remove_trust(&layout)?,
         "--remove-data" => {
             integration::remove(&layout)?;
             // Refuse cleanup while an owned server may still be using the data directory.
@@ -569,6 +728,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_window(app);
         }))
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if app.config().plugins.0.contains_key("updater") {
                 app.handle()
@@ -629,6 +789,12 @@ pub fn run() {
             cancel_data_browser,
             service_action,
             save_settings,
+            save_project,
+            remove_project,
+            sync_domains,
+            set_project_https,
+            remove_https_trust,
+            pick_folder,
             open_target,
             read_log,
             cli_integration,

@@ -1,6 +1,6 @@
 //! Exercise real packaged runtimes against an isolated student directory.
 use fairway_core::{
-    config::{Layout, Ports},
+    config::{Layout, Ports, ProjectConfig},
     integration,
     manager::Manager,
     process,
@@ -27,14 +27,43 @@ fn without_startup_warnings(mut command: Command) -> Result<String, String> {
 }
 
 fn http(port: u16, route: &str) -> String {
+    http_host(port, route, "localhost")
+}
+
+fn http_host(port: u16, route: &str, host: &str) -> String {
     let mut socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
     socket
         .set_read_timeout(Some(std::time::Duration::from_secs(15)))
         .unwrap();
-    write!(socket, "GET {route} HTTP/1.0\r\nHost: localhost\r\n\r\n").unwrap();
+    write!(socket, "GET {route} HTTP/1.0\r\nHost: {host}\r\n\r\n").unwrap();
     let mut bytes = Vec::new();
     socket.read_to_end(&mut bytes).unwrap();
     String::from_utf8_lossy(&bytes).into()
+}
+
+fn https(layout: &Layout, host: &str) -> Result<String, String> {
+    let port = fairway_core::tls::https_port();
+    let mut command = process::command("curl");
+    command
+        .args([
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--noproxy",
+            "*",
+            "--resolve",
+        ])
+        .arg(format!("{host}:{port}:127.0.0.1"))
+        // Schannel otherwise fails on the local CA, which has no revocation endpoint.
+        .args(if cfg!(windows) {
+            &["--ssl-no-revoke"][..]
+        } else {
+            &[]
+        })
+        .arg("--cacert")
+        .arg(layout.data.join("tls/root-ca.pem"))
+        .arg(format!("https://{host}:{port}/"));
+    process::output(command)
 }
 
 fn free_ports() -> Result<Ports, String> {
@@ -122,14 +151,15 @@ fn main() -> Result<(), String> {
         root.join("student data"),
         runtime,
     );
-    let mut manager = Manager::new(layout)?;
-    let listeners: Vec<_> = (0..4)
+    let listeners: Vec<_> = (0..5)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)).unwrap())
         .collect();
     let ports: Vec<_> = listeners
         .iter()
         .map(|l| l.local_addr().unwrap().port())
         .collect();
+    std::env::set_var("FAIRWAY_DEV_HTTPS_PORT", ports[4].to_string());
+    let mut manager = Manager::new(layout)?;
     let chosen = Ports {
         website: ports[0],
         phpmyadmin: ports[1],
@@ -138,6 +168,37 @@ fn main() -> Result<(), String> {
     };
     drop(listeners);
     manager.save_ports(chosen.clone())?;
+    fs::create_dir_all(manager.layout.www.join("plain-project")).map_err(|e| e.to_string())?;
+    fs::write(
+        manager.layout.www.join("plain-project/index.php"),
+        "<?php echo 'plain project';",
+    )
+    .map_err(|e| e.to_string())?;
+    // Registered projects can live outside fairway/www and serve only their chosen web root.
+    let shop = manager.layout.home.join("code/shop");
+    fs::create_dir_all(shop.join("public")).map_err(|e| e.to_string())?;
+    fs::write(shop.join("secret.txt"), "private project file").map_err(|e| e.to_string())?;
+    fs::write(
+        shop.join("public/index.php"),
+        "<?php echo 'front controller ', $_SERVER['REQUEST_URI'];",
+    )
+    .map_err(|e| e.to_string())?;
+    let project = |domain: &str, root: PathBuf, index_fallback: bool| ProjectConfig {
+        name: domain.into(),
+        domain: domain.into(),
+        root,
+        https: false,
+        index_fallback,
+    };
+    manager.save_project(
+        None,
+        project(
+            "plain-project",
+            manager.layout.www.join("plain-project"),
+            false,
+        ),
+    )?;
+    manager.save_project(None, project("shop", shop.join("public"), true))?;
     integration::install(&manager.layout)?;
     let result = (|| -> Result<(), String> {
         let snapshot = manager.snapshot();
@@ -172,6 +233,81 @@ fn main() -> Result<(), String> {
         assert!(manager.snapshot().services.iter().all(|s| s.ready));
         let page = http(chosen.website, "/");
         assert!(page.contains("Your environment"), "{page}");
+        assert!(http_host(chosen.website, "/", "plain-project.test").contains("plain project"));
+        assert!(http_host(chosen.website, "/courses/1", "shop.test")
+            .contains("front controller /courses/1"));
+        assert!(
+            !http_host(chosen.website, "/secret.txt", "shop.test").contains("private project file")
+        );
+        assert!(
+            !http_host(chosen.website, "/courses/1", "plain-project.test")
+                .contains("plain project")
+        );
+        fs::create_dir_all(manager.layout.www.join("new-project")).map_err(|e| e.to_string())?;
+        fs::write(
+            manager.layout.www.join("new-project/index.php"),
+            "<?php echo 'refreshed project';",
+        )
+        .map_err(|e| e.to_string())?;
+        manager.save_project(
+            None,
+            project("new-project", manager.layout.www.join("new-project"), false),
+        )?;
+        let mut refreshed = false;
+        for _ in 0..20 {
+            if http_host(chosen.website, "/", "new-project.test").contains("refreshed project") {
+                refreshed = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(refreshed, "Nginx did not reload the added project site");
+        manager.set_project_https("new-project", true)?;
+        let mut tls_ready = false;
+        for _ in 0..20 {
+            if https(&manager.layout, "new-project.test")
+                .is_ok_and(|body| body.contains("refreshed project"))
+            {
+                tls_ready = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if !tls_ready {
+            return Err(format!(
+                "HTTPS project did not serve a trusted certificate: {:?}",
+                https(&manager.layout, "new-project.test")
+            ));
+        }
+        manager.set_project_https("plain-project", true)?;
+        for _ in 0..20 {
+            if https(&manager.layout, "plain-project.test")
+                .is_ok_and(|body| body.contains("plain project"))
+                && https(&manager.layout, "new-project.test")
+                    .is_ok_and(|body| body.contains("refreshed project"))
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if !https(&manager.layout, "plain-project.test")
+            .is_ok_and(|body| body.contains("plain project"))
+        {
+            return Err("The second HTTPS project did not receive a valid certificate".into());
+        }
+        manager.set_project_https("new-project", false)?;
+        manager.set_project_https("plain-project", false)?;
+        manager.remove_project("new-project")?;
+        let mut removed = false;
+        for _ in 0..20 {
+            if !http_host(chosen.website, "/", "new-project.test").contains("refreshed project") {
+                removed = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(removed, "Nginx still serves a removed project");
+        assert!(manager.layout.www.join("new-project/index.php").is_file());
         let probe = manager.layout.www.join("smoke.php");
         fs::write(&probe, format!("<?php $pdo = new PDO('mysql:host=127.0.0.1;port={};dbname=fairway','fairway','fairway'); $pdo->exec('CREATE TABLE IF NOT EXISTS smoke (id INT PRIMARY KEY, title VARCHAR(30))'); $pdo->exec(\"REPLACE INTO smoke VALUES (1, 'classroom works')\"); echo $pdo->query('SELECT title FROM smoke WHERE id=1')->fetchColumn();", chosen.mysql)).map_err(|e| e.to_string())?;
         let result = http(chosen.website, "/smoke.php");

@@ -51,7 +51,92 @@ pub struct Layout {
     pub bin: PathBuf,
 }
 
+/// A project the user registered. Saved registrations are the only source of project sites.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProjectConfig {
+    pub name: String,
+    /// DNS label served as `<domain>.test`.
+    pub domain: String,
+    pub root: PathBuf,
+    pub https: bool,
+    pub index_fallback: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    #[serde(flatten)]
+    pub config: ProjectConfig,
+    pub available: bool,
+    pub domain_ready: bool,
+}
+
+pub fn valid_project_name(name: &str) -> bool {
+    name.len() <= 63
+        && name
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && name
+            .bytes()
+            .last()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+pub fn validate_projects(projects: &[ProjectConfig]) -> Result<()> {
+    let mut domains = HashSet::new();
+    for project in projects {
+        let name = project.name.trim();
+        if name.is_empty() || name.len() > 80 || name != project.name {
+            return Err("Enter a project name up to 80 characters.".into());
+        }
+        if !valid_project_name(&project.domain) {
+            return Err(format!(
+                "{}.test is not available. Use lowercase letters, numbers, and hyphens.",
+                project.domain
+            ));
+        }
+        if !domains.insert(&project.domain) {
+            return Err(format!(
+                "{}.test is already used by another project.",
+                project.domain
+            ));
+        }
+        if !project.root.is_absolute() {
+            return Err("Choose the project's web root folder.".into());
+        }
+    }
+    Ok(())
+}
+
 impl Layout {
+    fn projects_path(&self) -> PathBuf {
+        self.data.join("projects.json")
+    }
+
+    pub fn registered_projects(&self) -> Result<Vec<ProjectConfig>> {
+        let projects: Vec<ProjectConfig> = match fs::read(self.projects_path()) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map_err(|e| format!("The saved project list is invalid: {e}"))?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(error) => return Err(error.to_string()),
+        };
+        validate_projects(&projects)?;
+        Ok(projects)
+    }
+
+    pub fn save_projects(&self, projects: &[ProjectConfig]) -> Result<()> {
+        validate_projects(projects)?;
+        atomic_write(
+            &self.projects_path(),
+            &serde_json::to_vec_pretty(projects).map_err(|e| e.to_string())?,
+        )
+    }
+
     pub fn new(runtime: PathBuf) -> Result<Self> {
         #[cfg(debug_assertions)]
         if let (Some(home), Some(data)) = (
@@ -229,7 +314,21 @@ impl Layout {
             "[global]\npid={}\nerror_log={}\ndaemonize=no\n[www]\nlisten=127.0.0.1:{}\nlisten.allowed_clients=127.0.0.1\npm=ondemand\npm.max_children=4\npm.process_idle_timeout=10s\ncatch_workers_output=yes\nclear_env=no\n",
             ini(&self.data.join("php.pid")), ini(&self.data.join("logs/php-fpm.log")), ports.php);
         atomic_write(&conf.join("php-fpm.conf"), fpm.as_bytes())?;
-        let nginx = nginx_config(self, ports);
+        // ponytail: an unreadable project list must not stop the basic localhost server;
+        // edits still read it strictly, so it is never overwritten silently.
+        let projects = self.registered_projects().unwrap_or_default();
+        if projects.iter().any(|project| project.https) {
+            if [ports.website, ports.phpmyadmin, ports.mysql, ports.php]
+                .contains(&crate::tls::https_port())
+            {
+                return Err(format!(
+                    "Port {} is reserved for project HTTPS. Choose another service port.",
+                    crate::tls::https_port()
+                ));
+            }
+            crate::tls::ensure_certificate(self)?;
+        }
+        let nginx = nginx_config(self, ports, &projects);
         atomic_write(&conf.join("nginx.conf"), nginx.as_bytes())?;
         let mysql = format!(
             "[mysqld]\nbasedir={}\ndatadir={}\nport={}\nbind-address=127.0.0.1\nlower_case_table_names=1\nmysqlx=OFF\nlocal-infile=OFF\ncharacter-set-server=utf8mb4\ncollation-server=utf8mb4_unicode_ci\nmax_connections=40\ninnodb_buffer_pool_size=64M\nlog-error={}\npid-file={}\nsocket={}\nsecure-file-priv={}\n",
@@ -423,17 +522,32 @@ pub fn private_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn nginx_config(layout: &Layout, ports: &Ports) -> String {
+fn nginx_config(layout: &Layout, ports: &Ports, projects: &[ProjectConfig]) -> String {
     let fastcgi = format!(
         "fastcgi_pass 127.0.0.1:{};\nfastcgi_param QUERY_STRING $query_string;\nfastcgi_param REQUEST_METHOD $request_method;\nfastcgi_param CONTENT_TYPE $content_type;\nfastcgi_param CONTENT_LENGTH $content_length;\nfastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\nfastcgi_param SCRIPT_NAME $fastcgi_script_name;\nfastcgi_param REQUEST_URI $request_uri;\nfastcgi_param DOCUMENT_URI $document_uri;\nfastcgi_param DOCUMENT_ROOT $document_root;\nfastcgi_param SERVER_PROTOCOL $server_protocol;\nfastcgi_param REQUEST_SCHEME $scheme;\nfastcgi_param GATEWAY_INTERFACE CGI/1.1;\nfastcgi_param SERVER_SOFTWARE nginx;\nfastcgi_param REMOTE_ADDR $remote_addr;\nfastcgi_param REMOTE_PORT $remote_port;\nfastcgi_param SERVER_ADDR $server_addr;\nfastcgi_param SERVER_PORT $server_port;\nfastcgi_param SERVER_NAME $server_name;\nfastcgi_param REDIRECT_STATUS 200;\nfastcgi_param HTTP_PROXY \"\";\n", ports.php);
+    // A missing web root stays configured (Nginx answers 404), so restoring the folder
+    // brings the site back without another change.
+    let project_servers = projects.iter().map(|project| {
+        let fallback = if project.index_fallback { "/index.php?$query_string" } else { "=404" };
+        let locations = format!("location ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ {fallback}; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {fastcgi} }}");
+        let server = |listen: String, tls: String| format!("server {{ listen 127.0.0.1:{listen}; server_name {}.test; root {}; index index.php index.html;\n{tls}{locations}\n}}\n",
+            project.domain, nginx_path(&project.root));
+        let http = server(ports.website.to_string(), String::new());
+        if !project.https {
+            return http;
+        }
+        let https = server(format!("{} ssl", crate::tls::https_port()), format!("ssl_certificate {};\nssl_certificate_key {};\n",
+            nginx_path(&crate::tls::certificate(layout)), nginx_path(&crate::tls::private_key(layout))));
+        format!("{http}{https}")
+    }).collect::<String>();
     format!(
-        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\naccess_log {};\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n}}\n",
+        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\naccess_log {};\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
         nginx_path(&layout.data.join("nginx.pid")), nginx_path(&layout.data.join("logs/nginx.log")),
         nginx_path(&layout.runtime.join("nginx/conf/mime.types")), nginx_path(&layout.data.join("logs/access.log")),
         nginx_path(&layout.data.join("tmp/client")), nginx_path(&layout.data.join("tmp/fastcgi")),
         nginx_path(&layout.data.join("tmp/proxy")), nginx_path(&layout.data.join("tmp/uwsgi")), nginx_path(&layout.data.join("tmp/scgi")),
         ports.website, nginx_path(&layout.www), fastcgi, ports.phpmyadmin,
-        nginx_path(&layout.data.join("phpmyadmin")), fastcgi)
+        nginx_path(&layout.data.join("phpmyadmin")), fastcgi, project_servers)
 }
 
 fn windows_php_extensions(php_root: &Path) -> String {
@@ -472,12 +586,63 @@ mod tests {
             PathBuf::from("/tmp/runtime"),
         );
         assert_eq!(layout.www, PathBuf::from("/Users/A $name/fairway/www"));
-        let nginx = nginx_config(&layout, &Ports::default());
+        let nginx = nginx_config(&layout, &Ports::default(), &[]);
         assert!(nginx.contains("/Users/A \\$name/fairway/www"));
         assert!(nginx.contains("listen 127.0.0.1:8801"));
         assert!(nginx.contains("/tmp/data/phpmyadmin"));
         assert!(!nginx.contains("listen 0.0.0.0"));
         assert_eq!(php_string("a'b\\c"), "'a\\'b\\\\c'");
+    }
+
+    #[test]
+    fn registered_projects_serve_their_chosen_root_including_missing_folders() {
+        let root = std::env::temp_dir().join(format!(
+            "fairway-sites-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        layout.initialize().unwrap();
+        assert!(layout.registered_projects().unwrap().is_empty());
+        let shop = root.join("code/shop/public");
+        fs::create_dir_all(&shop).unwrap();
+        let project =
+            |name: &str, domain: &str, root: PathBuf, index_fallback: bool| ProjectConfig {
+                name: name.into(),
+                domain: domain.into(),
+                root,
+                https: false,
+                index_fallback,
+            };
+        let projects = vec![
+            project("My Shop", "shop", shop.clone(), true),
+            project("Plain", "plain", layout.www.clone(), false),
+            project("Gone", "gone", root.join("missing"), false),
+        ];
+        layout.save_projects(&projects).unwrap();
+        assert_eq!(layout.registered_projects().unwrap(), projects);
+        let nginx = nginx_config(&layout, &Ports::default(), &projects);
+        let localhost = format!("server_name localhost; root {}", nginx_path(&layout.www));
+        assert!(nginx.find(&localhost) < nginx.find("server_name shop.test"));
+        assert!(nginx.contains(&format!(
+            "server_name shop.test; root {}",
+            nginx_path(&shop)
+        )));
+        assert_eq!(nginx.matches("/index.php?$query_string").count(), 1);
+        assert!(nginx.contains("server_name plain.test"));
+        assert!(nginx.contains("server_name gone.test"));
+        for invalid in [
+            vec![project("", "shop", shop.clone(), false)],
+            vec![project("Shop", "Shop", shop.clone(), false)],
+            vec![project("Shop", "shop", "relative".into(), false)],
+            vec![
+                projects[0].clone(),
+                project("Again", "shop", shop.clone(), false),
+            ],
+        ] {
+            assert!(layout.save_projects(&invalid).is_err());
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
