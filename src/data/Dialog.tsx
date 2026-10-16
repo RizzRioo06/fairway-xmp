@@ -26,10 +26,10 @@ export default function Dialog({ title, busy, onClose, onSubmit, children, submi
     return () => { document.removeEventListener('keydown', key); previous?.focus(); };
   }, []);
   return <div className="modal-backdrop"><div ref={container} className="modal db-dialog" role="dialog" aria-modal="true" aria-labelledby={label}>
-    <form onSubmit={event => { event.preventDefault(); if (!busy && valid) onSubmit(); }}>
+    <form className="modal-form" onSubmit={event => { event.preventDefault(); if (!busy && valid) onSubmit(); }}>
       <div className="card-title"><h2 id={label}>{title}</h2></div>
-      <fieldset disabled={busy}>{children}</fieldset>
-      <div className="db-dialog-actions"><button type="button" className="secondary" onClick={onClose} disabled={busy}><X size={14} />Cancel</button><button type="submit" className={danger ? 'db-danger' : 'primary'} disabled={busy || !valid}>{busy ? 'Working…' : submit}</button></div>
+      <div className="modal-form-body"><fieldset disabled={busy}>{children}</fieldset></div>
+      <div className="db-dialog-actions modal-form-actions"><button type="button" className="secondary" onClick={onClose} disabled={busy}><X size={14} />Cancel</button><button type="submit" className={danger ? 'db-danger' : 'primary'} disabled={busy || !valid}>{busy ? 'Working…' : submit}</button></div>
     </form>
   </div></div>;
 }

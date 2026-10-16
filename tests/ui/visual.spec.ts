@@ -3,6 +3,15 @@ import type { Page, TestInfo } from '@playwright/test';
 
 const scenarios = ['Stopped', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure'];
 
+async function openSites(page: Page) {
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+}
+
+async function siteAction(page: Page, name: string, action: string) {
+  await page.getByRole('button', { name: `Actions for ${name}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: action, exact: true }).click();
+}
+
 async function capture(page: Page, info: TestInfo, name: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const path = info.outputPath(`${name}.png`);
@@ -22,85 +31,91 @@ test('production browser preview cannot enable simulated services', async ({ pag
 
 test('projects are added, edited, and removed explicitly', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByLabel('Scenario', { exact: true }).selectOption('No projects');
-  await expect(page.getByText('No projects yet.')).toBeVisible();
-  await page.getByRole('button', { name: 'Add project' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add project' });
-  await dialog.getByLabel('Name').fill('Course Site');
+  await openSites(page);
+  await page.getByLabel('Scenario', { exact: true }).selectOption('No sites');
+  await expect(page.getByText('No sites yet.')).toBeVisible();
+  await page.getByRole('button', { name: 'Add site' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
+  await dialog.getByLabel('Site name').fill('Course Site');
   await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel('Domain')).toHaveValue('course-site');
-  await expect(dialog.getByRole('button', { name: 'Add project' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Add site' })).toBeDisabled();
   await dialog.getByLabel('Web root folder').click();
   await expect(dialog.getByLabel('Web root folder')).toHaveValue(/new-site.public$/);
   await expect(dialog).toContainText('course-site.test in your computer’s hosts file');
-  await dialog.getByLabel('Route missing paths to index.php').check();
+  await dialog.getByLabel('App type').selectOption('front-controller');
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport();
+  await expect(dialog.getByRole('button', { name: 'Add site', exact: true })).toBeInViewport();
   await capture(page, info, 'add-project');
-  await dialog.getByRole('button', { name: 'Add project' }).click();
-  const table = page.getByRole('table', { name: 'Projects' });
+  await dialog.getByRole('button', { name: 'Add site' }).click();
+  const table = page.getByRole('list', { name: 'Saved sites' });
   await expect(table).toContainText('Course Site');
-  await expect(table.getByText('course-site.test:8800', { exact: true })).toBeVisible();
+  await expect(table.getByText('http://course-site.test:8800/', { exact: true })).toBeVisible();
 
   await expect(page.getByRole('button', { name: 'Open Course Site' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Edit Course Site' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit project' });
-  await edit.getByLabel('Name').fill('Course');
+  await siteAction(page, 'Course Site', 'Edit site');
+  const edit = page.getByRole('dialog', { name: 'Edit site' });
+  await edit.getByLabel('Site name').fill('Course');
   await expect(edit.getByLabel('Domain')).toHaveValue('course-site');
   await edit.getByLabel('Domain').fill('course');
   await expect(edit).toContainText('replaces course-site.test with course.test');
   await edit.getByRole('button', { name: 'Save changes' }).click();
-  await expect(table.getByText('course.test:8800', { exact: true })).toBeVisible();
+  await expect(table.getByText('http://course.test:8800/', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Remove Course' }).click();
+  await siteAction(page, 'Course', 'Remove site');
   const remove = page.getByRole('dialog', { name: 'Remove Course?' });
   await expect(remove).toContainText('its files are kept');
-  await remove.getByRole('button', { name: 'Remove project' }).click();
-  await expect(page.getByText('No projects yet.')).toBeVisible();
+  await remove.getByRole('button', { name: 'Remove site' }).click();
+  await expect(page.getByText('No sites yet.')).toBeVisible();
 });
 
 test('removing the last HTTPS project also removes certificate trust', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Remove Blog' }).click();
+  await openSites(page);
+  await siteAction(page, 'Blog', 'Remove site');
   const blog = page.getByRole('dialog', { name: 'Remove Blog?' });
   await expect(blog).not.toContainText('certificate trust');
-  await blog.getByRole('button', { name: 'Remove project' }).click();
-  await page.getByRole('button', { name: 'Remove My Shop' }).click();
+  await blog.getByRole('button', { name: 'Remove site' }).click();
+  await siteAction(page, 'My Shop', 'Remove site');
   const shop = page.getByRole('dialog', { name: 'Remove My Shop?' });
   await expect(shop).toContainText('also removes its local certificate trust');
-  await shop.getByRole('button', { name: 'Remove project' }).click();
-  await expect(page.getByText('No projects yet.')).toBeVisible();
+  await shop.getByRole('button', { name: 'Remove site' }).click();
+  await expect(page.getByText('No sites yet.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove certificate trust' })).toHaveCount(0);
 });
 
 test('invalid project details stay in the form with an error', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add project' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add project' });
-  await dialog.getByLabel('Name').fill('Shop');
+  await openSites(page);
+  await page.getByRole('button', { name: 'Add site' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
+  await dialog.getByLabel('Site name').fill('Shop');
   await dialog.getByRole('button', { name: 'Choose…' }).click();
-  await dialog.getByRole('button', { name: 'Add project' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('shop.test is already used by another project.');
-  await expect(dialog.getByLabel('Name')).toHaveValue('Shop');
+  await dialog.getByRole('button', { name: 'Add site' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('shop.test is already used by another site.');
+  await expect(dialog.getByLabel('Site name')).toHaveValue('Shop');
 });
 
 test('HTTPS explains trust once and trust can be removed when unused', async ({ page }, info) => {
   await page.goto('/');
+  await openSites(page);
   const shop = page.getByRole('switch', { name: 'HTTPS for My Shop' });
   await expect(shop).toBeChecked();
   await shop.locator('..').click();
   await expect(shop).not.toBeChecked();
-  await expect(page.getByRole('row', { name: /My Shop/ }).getByLabel('HTTPS', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('listitem', { name: 'My Shop', exact: true }).getByLabel('HTTPS', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Remove certificate trust' }).click();
   await expect(page.getByRole('button', { name: 'Remove certificate trust' })).toHaveCount(0);
   const blog = page.getByRole('switch', { name: 'HTTPS for Blog' });
   await blog.locator('..').click();
   const dialog = page.getByRole('dialog', { name: 'Enable HTTPS for blog.test?' });
   await expect(dialog).toContainText('only this computer trusts');
-  await expect(dialog).toContainText('keeps working');
+  await expect(dialog).toContainText('Turning HTTPS off leaves the certificate trusted');
   await capture(page, info, 'enable-https');
   await dialog.getByRole('button', { name: 'Enable HTTPS' }).click();
   await expect(blog).toBeChecked();
-  await expect(page.getByRole('row', { name: /Blog/ }).getByLabel('HTTPS', { exact: true })).toBeVisible();
+  await expect(page.getByRole('listitem', { name: 'Blog', exact: true }).getByLabel('HTTPS', { exact: true })).toBeVisible();
   await shop.locator('..').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(shop).toBeChecked();
@@ -108,17 +123,18 @@ test('HTTPS explains trust once and trust can be removed when unused', async ({ 
 
 test('pending hosts updates and missing folders are shown with a recovery action', async ({ page }, info) => {
   await page.goto('/');
+  await openSites(page);
   await page.getByLabel('Scenario', { exact: true }).selectOption('Hosts update pending');
-  await expect(page.getByText('Address not set up yet')).toBeVisible();
+  await expect(page.getByText('Address setup needed', { exact: true })).toBeVisible();
   await expect(page.getByRole('switch', { name: 'HTTPS for Blog' })).toBeDisabled();
   await capture(page, info, 'hosts-pending');
   await page.getByRole('button', { name: 'Set up addresses' }).click();
-  await expect(page.getByText('Address not set up yet')).toHaveCount(0);
+  await expect(page.getByText('Address setup needed', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'HTTPS for Blog' })).toBeEnabled();
   await page.getByLabel('Scenario', { exact: true }).selectOption('Missing web root');
-  await expect(page.getByText('Unavailable: the web root folder is missing.', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'Collapse projects' }).click();
-  await expect(page.getByText('Unavailable: the web root folder is missing.', { exact: false })).toBeHidden();
+  await expect(page.getByText('The web root folder is missing.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByText('The web root folder is missing.', { exact: false })).toBeHidden();
 });
 
 test('support report is reviewable and excludes private paths; old PHP versions are legacy', async ({ page }, info) => {
@@ -278,4 +294,67 @@ test('port-conflict review and recovery', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await page.getByRole('button', { name: 'Start all', exact: true }).click();
   await expect(page.getByText('All services ready', { exact: true })).toBeVisible();
+});
+
+
+test('site readiness starts only the web server and secure edits keep their URL', async ({ page }, info) => {
+  await page.goto('/'); await openSites(page);
+  await expect(page.getByRole('button', { name: 'Open My Shop', exact: true })).toBeDisabled();
+  await expect(page.getByRole('listitem', { name: 'My Shop', exact: true })).toContainText('Web server stopped');
+  await siteAction(page, 'My Shop', 'Edit site');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'My Shop saved. Web server stopped.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start web server', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Open My Shop', exact: true })).toBeEnabled();
+  await siteAction(page, 'My Shop', 'Edit site');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'My Shop is ready at https://shop.test:8443/' })).toBeVisible();
+  expect(await page.locator('.site-item').evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth))).toBe(true);
+  await capture(page, info, 'sites-ready');
+  await page.getByRole('button', { name: 'Actions for My Shop', exact: true }).click();
+  await capture(page, info, 'site-actions');
+  await page.getByRole('menuitem', { name: 'Open folder', exact: true }).press('Escape');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'MySQL', exact: true }).locator('..').locator('..')).toContainText('Stopped');
+});
+
+test('saved-list errors never look like an empty site list and folder guidance is conditional', async ({ page }, info) => {
+  await page.goto('/'); await openSites(page);
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Saved sites unavailable');
+  await expect(page.getByRole('alert')).toContainText('Your saved sites couldn’t be loaded');
+  await expect(page.getByText('No sites yet.', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add site', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Retry loading sites', exact: true })).toBeEnabled();
+  await capture(page, info, 'sites-load-error');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Stopped');
+  await siteAction(page, 'Blog', 'Edit site');
+  await expect(page.getByRole('dialog')).toContainText('Other project files there may also be accessible');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await siteAction(page, 'My Shop', 'Edit site');
+  await expect(page.getByRole('dialog')).not.toContainText('Other project files there may also be accessible');
+});
+
+test('site terminals open registered locations without replacing existing sessions', async ({ page }) => {
+  await page.goto('/'); await openSites(page);
+  await siteAction(page, 'My Shop', 'Terminal in app folder');
+  const first = page.getByRole('tab', { name: 'Terminal 1 · My Shop · app folder', exact: true });
+  await expect(first).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.terminal-directory code')).toHaveText(/Code[\\/]shop$/);
+  await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  await openSites(page); await siteAction(page, 'My Shop', 'Terminal in web root');
+  await expect(page.getByRole('tab', { name: 'Terminal 2 · My Shop · web root', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  await openSites(page); await siteAction(page, 'Blog', 'Terminal in web root');
+  await expect(page.getByText('Both terminal tabs are open.', { exact: false })).toBeVisible();
+  await expect(first).toBeVisible();
+  await expect(page.getByRole('tab')).toHaveCount(2);
+});
+
+
+test('copy site URL includes HTTPS and the port', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Clipboard permission grants are available in Chromium.');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/'); await openSites(page);
+  await page.getByRole('button', { name: 'Copy URL for My Shop', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('https://shop.test:8443/');
 });

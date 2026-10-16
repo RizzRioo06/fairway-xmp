@@ -2,22 +2,39 @@
 use crate::config::{valid_project_name, Result};
 use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
 
-const BEGIN: &str = "# >>> Fairway XMP project domains >>>";
-const END: &str = "# <<< Fairway XMP project domains <<<";
+const LEGACY_BEGIN: &str = "# >>> Fairway XMP project domains >>>";
+const LEGACY_END: &str = "# <<< Fairway XMP project domains <<<";
+const BEGIN: &str = "# >>> Fairway XMP sites >>>";
+const END: &str = "# <<< Fairway XMP sites <<<";
+
+fn block_markers(text: &str) -> Result<Option<(&'static str, &'static str)>> {
+    let current = text.contains(BEGIN) || text.contains(END);
+    let legacy = text.contains(LEGACY_BEGIN) || text.contains(LEGACY_END);
+    if current && legacy {
+        return Err("Multiple or incomplete Fairway hosts blocks were found.".into());
+    }
+    if current {
+        Ok(Some((BEGIN, END)))
+    } else if legacy {
+        Ok(Some((LEGACY_BEGIN, LEGACY_END)))
+    } else {
+        Ok(None)
+    }
+}
 
 fn managed_names_from(text: &str) -> Result<BTreeSet<String>> {
-    let Some(start) = text.find(BEGIN) else {
-        if text.contains(END) {
-            return Err("The Fairway hosts block is incomplete.".into());
-        }
+    let Some((begin, end_marker)) = block_markers(text)? else {
         return Ok(BTreeSet::new());
+    };
+    let Some(start) = text.find(begin) else {
+        return Err("The Fairway hosts block is incomplete.".into());
     };
     if start != 0 && text.as_bytes()[start - 1] != b'\n' {
         return Err("The Fairway hosts marker is not on its own line.".into());
     }
-    let body = &text[start + BEGIN.len()..];
+    let body = &text[start + begin.len()..];
     let end = body
-        .find(END)
+        .find(end_marker)
         .ok_or("The Fairway hosts block is incomplete.")?;
     if !body[..end].starts_with('\n') && !body[..end].starts_with("\r\n") {
         return Err("The Fairway hosts block is malformed.".into());
@@ -32,7 +49,7 @@ fn managed_names_from(text: &str) -> Result<BTreeSet<String>> {
             .strip_suffix(".test")
             .ok_or("The Fairway hosts block contains an unexpected domain.")?;
         if !valid_project_name(name) || !names.insert(name.to_string()) {
-            return Err("The Fairway hosts block contains an invalid project name.".into());
+            return Err("The Fairway hosts block contains an invalid site name.".into());
         }
     }
     Ok(names)
@@ -69,18 +86,21 @@ fn hosts_path() -> Result<PathBuf> {
 
 fn updated(previous: &str, names: &[String]) -> Result<String> {
     if names.iter().any(|name| !valid_project_name(name)) {
-        return Err("Invalid project domain name.".into());
+        return Err("Invalid site domain name.".into());
     }
     let mut text = previous.to_string();
-    if let Some(start) = text.find(BEGIN) {
+    if let Some((begin, end_marker)) = block_markers(&text)? {
+        let start = text
+            .find(begin)
+            .ok_or("The Fairway hosts block is incomplete.")?;
         if start != 0 && text.as_bytes()[start - 1] != b'\n' {
             return Err("The Fairway hosts marker is not on its own line.".into());
         }
         let end = text[start..]
-            .find(END)
+            .find(end_marker)
             .ok_or("The Fairway hosts block is incomplete.")?
             + start
-            + END.len();
+            + end_marker.len();
         if !matches!(text.as_bytes().get(end), None | Some(b'\r' | b'\n')) {
             return Err("The Fairway hosts marker is not on its own line.".into());
         }
@@ -93,7 +113,11 @@ fn updated(previous: &str, names: &[String]) -> Result<String> {
         };
         text.replace_range(start..end, "");
     }
-    if text.contains(BEGIN) || text.contains(END) {
+    if text.contains(BEGIN)
+        || text.contains(END)
+        || text.contains(LEGACY_BEGIN)
+        || text.contains(LEGACY_END)
+    {
         return Err("Multiple or incomplete Fairway hosts blocks were found.".into());
     }
     let mut names = names.to_vec();
@@ -194,7 +218,7 @@ pub fn apply(names: &[String]) -> Result<()> {
 
 pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
     if names.iter().any(|name| !valid_project_name(name)) {
-        return Err("Invalid project domain name.".into());
+        return Err("Invalid site domain name.".into());
     }
     if current(names)? {
         return Ok(());
@@ -287,6 +311,13 @@ mod tests {
         let own = "127.0.0.1 localhost alpha.test\n";
         assert!(updated(own, &["alpha".into()]).is_err());
         assert!(updated("192.0.2.1 alpha.test\n", &["alpha".into()]).is_err());
-        assert!(managed_names_from("# >>> Fairway XMP project domains >>>\n192.0.2.1 alpha.test\n# <<< Fairway XMP project domains <<<\n").is_err());
+        assert!(managed_names_from(
+            "# >>> Fairway XMP sites >>>\n192.0.2.1 alpha.test\n# <<< Fairway XMP sites <<<\n"
+        )
+        .is_err());
+        let legacy = "# >>> Fairway XMP project domains >>>\n127.0.0.1 alpha.test\n# <<< Fairway XMP project domains <<<\n";
+        let migrated = updated(legacy, &["alpha".into()]).unwrap();
+        assert!(migrated.contains("# >>> Fairway XMP sites >>>"));
+        assert!(!migrated.contains("project domains"));
     }
 }

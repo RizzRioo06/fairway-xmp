@@ -7,7 +7,7 @@ import { cancelData, databaseRequest, resetData } from './data-browser';
 // Fast Refresh cannot keep a screen subscribed to an obsolete simulation.
 if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
 
-export const scenarios = ['Stopped', 'No projects', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled'] as const;
+export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled'] as const;
 export type Scenario = typeof scenarios[number];
 export type Platform = 'Windows' | 'macOS';
 const events = new EventTarget();
@@ -65,11 +65,12 @@ export function select(next: Scenario, os: Platform) {
   resetData();
   scenario = next; platform = os;
   data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', pathInstalled: true };
-  data.projects = next === 'No projects' ? [] : [
+  data.sitesError = next === 'Saved sites unavailable' ? 'The saved site list is invalid: expected a JSON array.' : null;
+  data.projects = next === 'No sites' || data.sitesError ? [] : [
     { name: 'My Shop', domain: 'shop', root: joinPath(home(), 'Code', 'shop', 'public'), https: true, indexFallback: true, available: next !== 'Missing web root', domainReady: true },
     { name: 'Blog', domain: 'blog', root: joinPath(data.documentRoot, 'blog'), https: false, indexFallback: false, available: true, domainReady: next !== 'Hosts update pending' },
   ];
-  data.httpsTrusted = next !== 'No projects';
+  data.httpsTrusted = next !== 'No sites';
   data.domainsPending = next === 'Hosts update pending';
   data.os = platform === 'Windows' ? 'windows' : 'macos';
   configureCli(next !== 'CLI disabled');
@@ -94,7 +95,7 @@ export function listen(event: string, callback: (payload: unknown) => void) {
 }
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady) as T;
+  if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
   if (command === 'data_browser') {
@@ -140,9 +141,9 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       // Match the backend's deny_unknown_fields so the form cannot send display-only fields.
       if (Object.keys(project).sort().join() !== 'domain,https,indexFallback,name,root') throw new Error(`invalid args \`project\` for command \`save_project\`: ${Object.keys(project).join(', ')}`);
       const others = data.projects.filter(item => item.domain !== args.previous);
-      if (!project.name.trim()) throw new Error('Enter a project name up to 80 characters.');
+      if (!project.name.trim()) throw new Error('Enter a site name up to 80 characters.');
       if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(project.domain)) throw new Error(`${project.domain}.test is not available. Use lowercase letters, numbers, and hyphens.`);
-      if (others.some(item => item.domain === project.domain)) throw new Error(`${project.domain}.test is already used by another project.`);
+      if (others.some(item => item.domain === project.domain)) throw new Error(`${project.domain}.test is already used by another site.`);
       const saved = { ...project, available: true, domainReady: true };
       data.projects = args.previous ? data.projects.map(item => item.domain === args.previous ? saved : item) : [...data.projects, saved];
       syncDomains(); result = structuredClone(data); break;
@@ -154,13 +155,13 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'sync_domains': syncDomains(); result = structuredClone(data); break;
     case 'set_project_https': {
       const project = data.projects.find(item => item.domain === args.domain);
-      if (!project) throw new Error('This project is no longer registered.');
+      if (!project) throw new Error('This site is no longer registered.');
       project.https = Boolean(args.enabled);
       if (project.https) data.httpsTrusted = true;
       result = structuredClone(data); break;
     }
     case 'remove_https_trust':
-      if (data.projects.some(item => item.https)) throw new Error('Turn off HTTPS for every project before removing certificate trust.');
+      if (data.projects.some(item => item.https)) throw new Error('Turn off HTTPS for every site before removing certificate trust.');
       data.httpsTrusted = false; result = structuredClone(data); break;
     case 'backup_database':
       if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before making a backup.');

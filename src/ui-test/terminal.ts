@@ -1,11 +1,12 @@
+import type { Project } from '../types';
 // Deterministic terminal fixture. This module never executes host commands.
 type Session = { id: string; directory: string; output: string; line: string; exited: boolean; code: number | null };
 const sessions = new Map<string, Session>();
 const slots = new Map<number, string>();
 let workspace: string | null = null;
 const prompt = '\r\n$ ';
-export function terminalRequest(command: string, args: Record<string, unknown>, directory: string, version: string, ready: boolean): unknown {
-  if (command === 'terminal_context') return { folders: ['hello', 'Student project'], historySupported: directory.startsWith('/') };
+export function terminalRequest(command: string, args: Record<string, unknown>, directory: string, version: string, ready: boolean, sites: Project[]): unknown {
+  if (command === 'terminal_context') return { folders: ['hello', 'Student project'], sites: sites.filter(site => site.available).flatMap(site => [{ folder: `site:${site.domain}`, label: `${site.name} — web root` }, ...(/[\\/]public$/i.test(site.root) ? [{ folder: `site-parent:${site.domain}`, label: `${site.name} — app folder` }] : [])]), historySupported: directory.startsWith('/') };
   const request = command === 'terminal_start' ? args.request as Record<string, unknown> : args;
   const id = String(request.id);
   if (command === 'terminal_start') {
@@ -13,7 +14,13 @@ export function terminalRequest(command: string, args: Record<string, unknown>, 
     if (workspace !== request.workspace) { sessions.clear(); slots.clear(); workspace = String(request.workspace); }
     const slot = Number(request.slot);
     const previous = slots.get(slot); if (previous) sessions.delete(previous);
-    const cwd = request.folder ? directory + (directory.startsWith('/') ? '/' : '\\') + String(request.folder) : directory;
+    let cwd = request.folder ? directory + (directory.startsWith('/') ? '/' : '\\') + String(request.folder) : directory;
+    const token = String(request.folder ?? '').match(/^(site|site-parent):(.+)$/);
+    if (token) {
+      const site = sites.find(site => site.domain === token[2] && site.available);
+      if (!site) throw new Error('The site folder is no longer available.');
+      cwd = token[1] === 'site-parent' ? site.root.replace(/[\\/]public$/i, '') : site.root;
+    }
     sessions.set(id, { id, directory: cwd, output: `Fairway XMP simulated terminal${prompt}`, line: '', exited: false, code: null });
     slots.set(slot, id);
     return { shell: directory.startsWith('/') ? 'zsh' : 'Command Prompt', directory: cwd };

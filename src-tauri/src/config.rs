@@ -51,7 +51,7 @@ pub struct Layout {
     pub bin: PathBuf,
 }
 
-/// A project the user registered. Saved registrations are the only source of project sites.
+/// A site the user registered. Saved registrations are the only source of sites.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectConfig {
@@ -91,8 +91,8 @@ pub fn validate_projects(projects: &[ProjectConfig]) -> Result<()> {
     let mut domains = HashSet::new();
     for project in projects {
         let name = project.name.trim();
-        if name.is_empty() || name.len() > 80 || name != project.name {
-            return Err("Enter a project name up to 80 characters.".into());
+        if name.is_empty() || name.chars().count() > 80 || name != project.name {
+            return Err("Enter a site name up to 80 characters.".into());
         }
         if !valid_project_name(&project.domain) {
             return Err(format!(
@@ -102,39 +102,59 @@ pub fn validate_projects(projects: &[ProjectConfig]) -> Result<()> {
         }
         if !domains.insert(&project.domain) {
             return Err(format!(
-                "{}.test is already used by another project.",
+                "{}.test is already used by another site.",
                 project.domain
             ));
         }
         if !project.root.is_absolute() {
-            return Err("Choose the project's web root folder.".into());
+            return Err("Choose the site's web root folder.".into());
         }
     }
     Ok(())
 }
 
 impl Layout {
-    fn projects_path(&self) -> PathBuf {
+    fn sites_path(&self) -> PathBuf {
+        self.data.join("sites.json")
+    }
+
+    fn legacy_sites_path(&self) -> PathBuf {
         self.data.join("projects.json")
     }
 
     pub fn registered_projects(&self) -> Result<Vec<ProjectConfig>> {
-        let projects: Vec<ProjectConfig> = match fs::read(self.projects_path()) {
-            Ok(bytes) => serde_json::from_slice(&bytes)
-                .map_err(|e| format!("The saved project list is invalid: {e}"))?,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
+        let (bytes, migrate) = match fs::read(self.sites_path()) {
+            Ok(bytes) => (bytes, false),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                match fs::read(self.legacy_sites_path()) {
+                    Ok(bytes) => (bytes, true),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+                    Err(error) => return Err(error.to_string()),
+                }
+            }
             Err(error) => return Err(error.to_string()),
         };
+        let projects: Vec<ProjectConfig> = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("The saved site list is invalid: {e}"))?;
         validate_projects(&projects)?;
+        if migrate {
+            self.save_projects(&projects)?;
+        } else if self.legacy_sites_path().exists() {
+            fs::remove_file(self.legacy_sites_path()).map_err(|e| e.to_string())?;
+        }
         Ok(projects)
     }
 
     pub fn save_projects(&self, projects: &[ProjectConfig]) -> Result<()> {
         validate_projects(projects)?;
         atomic_write(
-            &self.projects_path(),
+            &self.sites_path(),
             &serde_json::to_vec_pretty(projects).map_err(|e| e.to_string())?,
-        )
+        )?;
+        if self.legacy_sites_path().exists() {
+            fs::remove_file(self.legacy_sites_path()).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     pub fn new(runtime: PathBuf) -> Result<Self> {
@@ -322,7 +342,7 @@ impl Layout {
                 .contains(&crate::tls::https_port())
             {
                 return Err(format!(
-                    "Port {} is reserved for project HTTPS. Choose another service port.",
+                    "Port {} is reserved for site HTTPS. Choose another service port.",
                     crate::tls::https_port()
                 ));
             }
@@ -642,6 +662,16 @@ mod tests {
         ] {
             assert!(layout.save_projects(&invalid).is_err());
         }
+        assert!(layout.data.join("sites.json").is_file());
+        fs::write(
+            layout.data.join("projects.json"),
+            fs::read(layout.data.join("sites.json")).unwrap(),
+        )
+        .unwrap();
+        fs::remove_file(layout.data.join("sites.json")).unwrap();
+        assert_eq!(layout.registered_projects().unwrap(), projects);
+        assert!(layout.data.join("sites.json").is_file());
+        assert!(!layout.data.join("projects.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
