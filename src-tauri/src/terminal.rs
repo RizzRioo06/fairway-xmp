@@ -682,8 +682,21 @@ mod tests {
         fn until(&self, id: &str, expected: &str) -> String {
             let deadline = Instant::now() + std::time::Duration::from_secs(8);
             let mut bytes = Vec::new();
+            #[cfg(windows)]
+            let mut cursor_queries = 0;
             while Instant::now() < deadline {
                 bytes.extend(self.terminals.read(id).unwrap().data);
+                #[cfg(windows)]
+                {
+                    // ConPTY waits for the terminal emulator's initial cursor
+                    // position. xterm replies in the app; this headless fixture
+                    // must supply the same VT response before cmd can start.
+                    let queries = bytes.windows(4).filter(|part| *part == b"\x1b[6n").count();
+                    for _ in cursor_queries..queries {
+                        self.terminals.write(id, "\x1b[1;1R").unwrap();
+                    }
+                    cursor_queries = queries;
+                }
                 let text = String::from_utf8_lossy(&bytes);
                 if text.contains(expected) {
                     return text.into_owned();
@@ -1080,6 +1093,7 @@ mod tests {
     fn native_windows_shell_accepts_input_resizes_and_exits() {
         let fixture = Fixture::new();
         fixture.start("windows");
+        fixture.until("windows", ">");
         fixture.terminals.resize("windows", 100, 32).unwrap();
         fixture
             .terminals
