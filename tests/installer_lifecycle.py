@@ -97,6 +97,8 @@ def main():
             if not args.update_probe: raise RuntimeError('The signed update drill requires --update-probe')
             from updater_lifecycle import exercise
             update_evidence = exercise(args.update_probe, exe, args.updater, output)
+            updated_build = json.loads(subprocess.check_output([str(exe), '--build-info'], text=True))
+            if updated_build != build: raise RuntimeError('Updated app identity differs from the tested candidate')
             probe('verify'); completed.append('signed-update-preserves-database-settings-backup-coursework')
         runtime_manifest = json.loads((runtime / 'manifest.json').read_text())
         expected = json.loads((ROOT / 'runtime-manifest.json').read_text())

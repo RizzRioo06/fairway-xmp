@@ -2,26 +2,44 @@
 """Sign independent Mach-O files first, then seal and verify the app bundle."""
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import re
 import subprocess
 import sys
 from prepare_runtime import macho
 
-app, identity = Path(sys.argv[1]), sys.argv[2]
-# Finder can run the bundled .command uninstaller only when it is executable.
-uninstaller = app / 'Contents/Resources/Uninstall Fairway XMP.command'
-if uninstaller.is_file():
-    uninstaller.chmod(uninstaller.stat().st_mode | 0o111)
+ENTITLEMENTS = Path(__file__).resolve().parents[1] / 'packaging/macos/php.entitlements.plist'
 
 
-def sign(file):
-    subprocess.run(['codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', identity, str(file)], check=True)
+def signing_command(file, identity, app):
+    command = ['codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', identity]
+    try:
+        parts = file.relative_to(app / 'Contents/Resources/runtime').parts
+    except ValueError:
+        parts = ()
+    # PHP's PCRE JIT uses MAP_JIT. Grant that permission only to the PHP
+    # interpreters, never the desktop app, servers, or shared libraries.
+    if (len(parts) == 3 and re.fullmatch(r'php(?:-\d+\.\d+)?', parts[0])
+            and parts[1] == 'bin' and parts[2] in ('php', 'php-cgi', 'php-fpm')):
+        command.extend(['--entitlements', str(ENTITLEMENTS)])
+    return [*command, str(file)]
 
 
-# Each file is independent (symlink aliases are skipped). Seal the containing
-# app only after every executable/library succeeds. Bounded concurrency avoids
-# hundreds of sequential timestamp requests for the bundled PHP/MySQL tools.
-files = [file for file in app.rglob('*') if not file.is_symlink() and macho(file)]
-with ThreadPoolExecutor(max_workers=4) as pool:
-    list(pool.map(sign, files))
-sign(app)
-subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+def main():
+    app, identity = Path(sys.argv[1]), sys.argv[2]
+    uninstaller = app / 'Contents/Resources/Uninstall Fairway XMP.command'
+    if uninstaller.is_file():
+        uninstaller.chmod(uninstaller.stat().st_mode | 0o111)
+
+    def sign(file):
+        subprocess.run(signing_command(file, identity, app), check=True)
+
+    # Snapshot before signing creates transient files. Symlink aliases are
+    # skipped; seal the containing app after every code file has succeeded.
+    files = [file for file in app.rglob('*') if not file.is_symlink() and macho(file)]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(sign, files))
+    sign(app)
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+
+
+if __name__ == '__main__': main()

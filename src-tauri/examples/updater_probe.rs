@@ -39,7 +39,7 @@ async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
             .timeout(Duration::from_secs(120))
             .on_before_exit(|| {});
         #[cfg(windows)]
-        let builder = builder.current_exe_args(vec![executable.clone().into_os_string()]).restart_after_install(false);
+        let builder = builder.restart_after_install(false);
         let mut update = builder.build().map_err(|e| e.to_string())?
             .check().await.map_err(|e| e.to_string())?.ok_or("Test update missing")?;
         update.timeout = Some(Duration::from_secs(600));

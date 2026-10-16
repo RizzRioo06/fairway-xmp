@@ -1,6 +1,6 @@
 //! CI-only probe of real installed user data across installer replacement/removal.
 use fairway_core::{
-    config::{Layout, Ports, Result},
+    config::{Layout, Ports, ProjectConfig, Result},
     diagnostics,
     manager::Manager,
     process,
@@ -46,6 +46,16 @@ fn run() -> Result<()> {
             };
             drop(listeners);
             manager.save_ports(ports)?;
+            manager.save_project(
+                None,
+                ProjectConfig {
+                    name: "Preserved site".into(),
+                    domain: "beta-preserved".into(),
+                    root: manager.layout.www.clone(),
+                    https: false,
+                    index_fallback: true,
+                },
+            )?;
             fs::write(&coursework, "<?php echo 'Student May coursework retained';")
                 .map_err(|e| e.to_string())?;
         } else {
@@ -55,6 +65,10 @@ fn run() -> Result<()> {
             assert_eq!(
                 serde_json::to_value(&manager.ports).unwrap(),
                 state["ports"]
+            );
+            assert_eq!(
+                serde_json::to_value(manager.layout.registered_projects()?).unwrap(),
+                state["sites"]
             );
             assert_eq!(
                 manager.layout.php_version()?,
@@ -94,7 +108,7 @@ fn run() -> Result<()> {
         if seed {
             let backup = manager.backup()?;
             fs::write(&state_path, serde_json::to_vec_pretty(&serde_json::json!({
-                "ports": manager.ports, "phpVersion": manager.layout.php_version()?, "backup": backup,
+                "sites": manager.layout.registered_projects()?, "ports": manager.ports, "phpVersion": manager.layout.php_version()?, "backup": backup,
                 "documentRoot": manager.layout.www, "dataDir": manager.layout.data,
             })).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         }

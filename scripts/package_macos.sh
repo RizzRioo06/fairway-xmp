@@ -26,6 +26,7 @@ notarize() {
 # contain these exact stapled bytes; notarizing only the pkg is insufficient.
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   python3 "$ROOT/scripts/sign_macos.py" "$APP" "$APPLE_SIGNING_IDENTITY"
+  python3 "$ROOT/scripts/check_signed_php.py" "$APP"
 fi
 if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   ZIP="$ROOT/.runtime-work/notarize-app.zip"
