@@ -427,7 +427,13 @@ impl Manager {
             }
             _ => return Err("Unknown service.".into()),
         };
-        cmd.current_dir(&self.layout.data);
+        // MySQL's Windows runtime also resolves files relative to its working
+        // directory through ANSI APIs, even when all configured paths are aliases.
+        cmd.current_dir(if id == "mysql" {
+            crate::config::mysql_path(&self.layout.data)
+        } else {
+            self.layout.data.clone()
+        });
         let owned = OwnedProcess::spawn(
             cmd,
             &self.layout.data.join(format!("logs/{id}-process.log")),

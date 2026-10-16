@@ -42,9 +42,9 @@ export async function nativeBridge(page: Page, info: TestInfo) {
       await Promise.race([exited, new Promise<void>(resolve => { timer = setTimeout(() => { child.kill(); resolve(); }, 15000); })]);
       clearTimeout(timer);
       lines.close();
-      {
-        const log = await readFile(join(root, 'data 日本/logs/mysql.log')).catch(() => null);
-        if (log) await info.attach('native-mysql-log', { body: log, contentType: 'text/plain' });
+      for (const name of ['mysql.log', 'mysql-process.log']) {
+        const log = await readFile(join(root, 'data 日本/logs', name)).catch(() => null);
+        if (log) await info.attach(`native-${name}`, { body: log, contentType: 'text/plain' });
       }
       await rm(parent, { recursive: true, force: true });
     },
