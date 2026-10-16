@@ -1,6 +1,6 @@
 # Contributing to Fairway XMP
 
-The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. Manual/reusable workflows build platform installers as Actions artifacts; the unsigned candidate workflow combines them without publishing GitHub Releases. After testing, publish the exact downloaded installer rather than rebuilding it.
+The application uses Tauri 2, Rust, React, and TypeScript. Source checks run on Windows and macOS. Manual/reusable workflows build platform installers as Actions artifacts; the release candidate workflow combines them without publishing GitHub Releases. After testing, publish the exact downloaded installer rather than rebuilding it.
 
 ## Development
 
@@ -127,11 +127,11 @@ python3 scripts/configure_release.py --public-key /path/to/updater.pub
 cargo tauri build --config artifacts/tauri.release.json
 ```
 
-Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. The default feed is `https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json`; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
+Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. The default feed is `https://github.com/eimg/fairway-xmp/releases/download/beta-feed/latest.json`; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
 
 ## Publishing a release
 
-For new unsigned candidates, use the [beta candidate and acceptance process](docs/beta-acceptance.md). The **Unsigned release candidate** workflow orchestrates all platforms plus browser review from one commit, exercises actual installer upgrades/removal/reinstallation, verifies embedded identity, and generates an acceptance template for the exact hashes. It does not publish. Signing remains deferred; PHP 8.0/8.1 are legacy compatibility options, and their existing Windows source-verification follow-up remains open.
+For new candidates, use the [beta candidate and acceptance process](docs/beta-acceptance.md). The **Release candidate** workflow orchestrates all platforms plus browser review from one commit, exercises actual installer upgrades/removal/reinstallation, verifies embedded identity, and generates an acceptance template for the exact hashes. It does not publish. Mac signing/notarization and desktop updater signatures are required by the release orchestrator; Windows Authenticode remains deferred. See [signed beta releases](docs/signed-beta-releases.md). PHP 8.0/8.1 are legacy compatibility options, and their existing Windows source-verification follow-up remains open.
 
 For an unsigned x64 Windows installer, dispatch the **Windows installer** workflow with `gh workflow run windows-test-build.yml --ref main`. It checks the source, stages the pinned runtime, exercises real services and cleanup, and verifies an 8.4 → 9.7 database upgrade before building an NSIS installer. Confirm the resulting run uses the intended source commit before accepting its installer. The alpha 1 migration fixtures retain its exact Windows versions and download checksums; the preparer stages them into a separate folder without replacing the current runtime.
 

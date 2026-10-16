@@ -41,6 +41,18 @@ pub fn installed(layout: &Layout) -> bool {
         && launcher(layout, "composer").is_some()
 }
 
+/// Bundle updates do not run installer hooks on macOS. Rewrite app-owned
+/// commands without editing profiles or re-enabling tools the user disabled.
+pub fn refresh(layout: &Layout) -> Result<()> {
+    if layout.data.join("cli-installed").exists() {
+        #[cfg(unix)]
+        write_unix_launchers(layout)?;
+        #[cfg(windows)]
+        write_windows_launchers(layout)?;
+    }
+    Ok(())
+}
+
 // These paths describe Fairway's own commands, independently of the desktop
 // process's inherited PATH (which often excludes shell profiles on macOS).
 pub fn launcher(layout: &Layout, name: &str) -> Option<String> {
@@ -452,6 +464,37 @@ pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn refresh_repairs_enabled_launchers_without_enabling_tools_or_editing_profiles() {
+        let root = env::temp_dir().join(format!("fairway-refresh-{}", rand::random::<u64>()));
+        let layout = Layout::at(
+            root.join("home"),
+            root.join("data"),
+            root.join("new app/runtime"),
+        );
+        fs::create_dir_all(&layout.bin).unwrap();
+        fs::create_dir_all(&layout.home).unwrap();
+        fs::create_dir_all(&layout.runtime).unwrap();
+        fs::write(layout.runtime.join("manifest.json"), r#"{"php":"8.5.11"}"#).unwrap();
+        let profile = layout.home.join(".zshrc");
+        fs::write(&profile, "# preserve my profile\n").unwrap();
+        refresh(&layout).unwrap();
+        assert!(launcher(&layout, "php").is_none());
+        assert!(!layout.data.join("cli-installed").exists());
+        fs::write(layout.data.join("cli-installed"), "1").unwrap();
+        refresh(&layout).unwrap();
+        let php = launcher(&layout, "php").unwrap();
+        fs::write(&php, "old installation").unwrap();
+        refresh(&layout).unwrap();
+        assert!(fs::read_to_string(&php).unwrap().contains("new app"));
+        assert!(launcher(&layout, "composer").is_some());
+        assert_eq!(
+            fs::read_to_string(profile).unwrap(),
+            "# preserve my profile\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn installed_commands_do_not_depend_on_inherited_path() {
         let root = env::temp_dir().join(format!(

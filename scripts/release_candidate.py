@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate, describe and gate exact unsigned release-candidate artifacts; never publish."""
+"""Validate, describe and gate exact release-candidate artifacts; never publish."""
 import argparse
 import hashlib
 import json
@@ -12,8 +12,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = ('windows-x64', 'macos-arm64', 'linux-x86_64')
 MANUAL_CHECKS = {
-    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup'],
-    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup'],
+    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart'],
+    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart'],
     'linux-x86_64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'dashboard-detach-and-shutdown'],
 }
 
@@ -49,7 +49,7 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def record(target, directory, artifact, lifecycle, output):
+def record(target, directory, artifact, lifecycle, output, signing="unsigned"):
     version = versions()
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     if subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=ROOT, text=True).strip():
@@ -65,22 +65,31 @@ def record(target, directory, artifact, lifecycle, output):
     if evidence['runtime'] != runtime:
         raise ValueError('Installed runtime differs from the candidate manifest')
     files = {path.name: {'sha256': digest(path), 'bytes': path.stat().st_size} for path in sorted(Path(directory).iterdir())
-             if path.is_file() and path.name.endswith(('.exe', '.pkg', '.run', '.tar.gz'))}
-    extension = {'windows-x64': '-setup.exe', 'macos-arm64': '-unsigned.pkg', 'linux-x86_64': '.run'}[target]
+             if path.is_file() and path.name.endswith(('.exe', '.pkg', '.run', '.tar.gz', '.sig'))}
+    extension = {'windows-x64': '-setup.exe', 'macos-arm64': '-macos-arm64.pkg' if signing == 'apple-notarized' else '-unsigned.pkg', 'linux-x86_64': '.run'}[target]
     installers = [name for name in files if name.endswith(extension)]
     if len(installers) != 1 or version not in installers[0]:
         raise ValueError('Expected exactly one versioned candidate installer')
     if evidence.get('installer') != installers[0] or evidence.get('installerSha256') != files[installers[0]]['sha256']:
         raise ValueError('Candidate installer differs from the file used by the lifecycle test')
-    data = {'schema': 1, 'target': target, 'version': version, 'commit': commit, 'signed': False,
+    data = {'schema': 1, 'target': target, 'version': version, 'commit': commit, 'signed': signing == 'apple-notarized', 'signing': signing,
             'artifact': artifact, 'relatedArtifacts': [f'fairway-xmp-linux-x86_64-{version}-sources'] if target == 'linux-x86_64' else [], 'installer': installers[0], 'files': files, 'runtime': runtime, 'lifecycle': evidence,
             'run': f"{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"}
+    if signing != 'unsigned':
+        if (target == 'macos-arm64' and signing != 'apple-notarized') or (target == 'windows-x64' and signing != 'updater-only') or target == 'linux-x86_64':
+            raise ValueError('Invalid signing policy for target')
+        updater = f'fairway-xmp-{version}-macos-arm64.app.tar.gz' if target == 'macos-arm64' else installers[0]
+        if updater not in files or updater + '.sig' not in files:
+            raise ValueError('Signed release requires the exact updater file and signature')
+        if (evidence.get('updater') or {}).get('status') != 'passed':
+            raise ValueError('Signed release requires the native updater lifecycle drill')
+        data['updater'] = {'artifact': updater, 'signature': updater + '.sig'}
     write(output, data)
     write(Path(directory) / 'candidate-info.json', data)
     (Path(directory) / 'SHA256SUMS.txt').write_text(''.join(f'{info["sha256"]}  {name}\n' for name, info in files.items()))
 
 
-def assemble(inputs, output):
+def assemble(inputs, output, require_updater=False):
     candidates = [read(path) for path in Path(inputs).rglob('candidate-*.json')]
     by_target = {candidate['target']: candidate for candidate in candidates}
     if len(candidates) != 3 or set(by_target) != set(TARGETS):
@@ -91,10 +100,16 @@ def assemble(inputs, output):
     for candidate in candidates:
         if candidate['version'] != version or candidate['commit'] != commit or candidate['runtime'] != runtime or candidate['lifecycle']['status'] != 'passed':
             raise ValueError('Candidate versions, source, runtime or lifecycle results disagree')
+    if require_updater:
+        if by_target['macos-arm64'].get('signing') != 'apple-notarized' or by_target['windows-x64'].get('signing') != 'updater-only':
+            raise ValueError('Beta releases require signed/notarized Mac builds and signed Windows updates')
+        for target in ('macos-arm64', 'windows-x64'):
+            if not by_target[target].get('updater') or by_target[target]['lifecycle'].get('updater', {}).get('status') != 'passed':
+                raise ValueError('Missing native updater evidence')
     data = {'schema': 1, 'version': version, 'commit': commit, 'status': 'awaiting-human-acceptance',
             'uiReview': {'artifact': f'ui-visual-review-{commit}'},
-            'signing': 'deferred', 'legacyPhp': ['8.0', '8.1'],
-            'knownLimitations': ['Unsigned installers; manual updates.', 'Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases; see docs/data-browser.md.', 'PHP 8.0/8.1 are unsupported legacy compatibility options.', 'Exact Windows PHP 8.0/8.1 dependency build/patch provenance remains unverified; see docs/release-follow-ups.md.'],
+            'signing': {target: by_target[target].get('signing', 'unsigned') for target in TARGETS}, 'legacyPhp': ['8.0', '8.1'],
+            'knownLimitations': ['Windows installer has no Authenticode signature; first downloads can show SmartScreen. Linux updates are manual.' if require_updater else 'Unsigned installers; manual updates.', 'Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases; see docs/data-browser.md.', 'PHP 8.0/8.1 are unsupported legacy compatibility options.', 'Exact Windows PHP 8.0/8.1 dependency build/patch provenance remains unverified; see docs/release-follow-ups.md.'],
             'candidates': by_target}
     write(output, data)
     acceptance = {'version': version, 'commit': commit, 'platforms': {target: {
@@ -134,7 +149,9 @@ def main():
     task = commands.add_parser('record')
     for name in ('target', 'directory', 'artifact', 'lifecycle', 'output'):
         task.add_argument('--' + name, required=True)
+    task.add_argument('--signing', choices=('unsigned', 'apple-notarized', 'updater-only'), default='unsigned')
     task = commands.add_parser('assemble')
+    task.add_argument('--require-updater', action='store_true')
     task.add_argument('--inputs', required=True); task.add_argument('--output', required=True)
     task = commands.add_parser('verify-files')
     task.add_argument('--candidate', required=True); task.add_argument('--directory', required=True)
@@ -142,8 +159,8 @@ def main():
     task.add_argument('--manifest', required=True); task.add_argument('--evidence', required=True)
     args = parser.parse_args()
     if args.command == 'version': print(versions())
-    elif args.command == 'record': record(args.target, args.directory, args.artifact, args.lifecycle, args.output)
-    elif args.command == 'assemble': assemble(args.inputs, args.output)
+    elif args.command == 'record': record(args.target, args.directory, args.artifact, args.lifecycle, args.output, args.signing)
+    elif args.command == 'assemble': assemble(args.inputs, args.output, args.require_updater)
     elif args.command == 'verify-files': verify_files(read(args.candidate), args.directory)
     else: acceptance(read(args.manifest), read(args.evidence)); print('Human acceptance complete for these exact installers. No release was published.')
 

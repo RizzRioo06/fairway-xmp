@@ -7,6 +7,7 @@ pub mod integration;
 pub mod manager;
 pub mod process;
 pub mod tls;
+pub mod updates;
 
 #[cfg(feature = "terminal")]
 pub mod terminal;

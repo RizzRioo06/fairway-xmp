@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.3 — in preparation
+
+- Developer ID signing, Apple notarization and stapling for the Mac app and installer.
+- In-app beta updates on Mac and Windows, with version-bound signatures, download progress, verification before service shutdown, database backup, safe installer handoff, and enabled CLI launcher refresh.
+- A fixed beta feed promoted after verified versioned assets are published; native updater rejection/reinstall drills and exact artifact hashes gate candidate recording.
+- Saved Sites with optional local domains and HTTPS, clearer readiness/recovery, folder and terminal actions, and project workflow improvements.
+
+Beta 2 and earlier require one manual installation of beta 3. Windows Authenticode is deferred; Linux keeps manual updates. See [signed beta releases](docs/signed-beta-releases.md) for release preparation and remaining human acceptance.
+
 ## 0.1.0-beta.2 — 2026-10-16
 
 - Embedded Terminal on macOS and Windows: up to two local shells in coursework or project folders, with PHP and Composer available for that session even when persistent command-line integration is off.

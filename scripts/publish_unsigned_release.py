@@ -40,7 +40,7 @@ def published_name(target, name):
     return name
 
 
-def main():
+def main(signed=False):
     repo = os.environ['GH_REPO']
     run_id = os.environ['FAIRWAY_RUN_ID']
     tag = os.environ['FAIRWAY_TAG']
@@ -63,7 +63,7 @@ def main():
         names = [
             f'candidate-metadata-{target}' for target in ('windows-x64', 'macos-arm64', 'linux-x86_64')
         ] + [
-            f'unsigned-candidate-acceptance-{sha}',
+            f'{"candidate" if signed else "unsigned-candidate"}-acceptance-{sha}',
             f'fairway-xmp-windows-x64-{version}',
             f'fairway-xmp-macos-arm64-{version}',
             f'fairway-xmp-linux-x86_64-{version}',
@@ -87,9 +87,21 @@ def main():
                 '--candidate', str(download / f'candidate-metadata-{target}' / f'candidate-{target}.json'),
                 '--directory', str(directory),
             ], cwd=ROOT)
-        manifest_path = download / f'unsigned-candidate-acceptance-{sha}' / 'candidate-manifest.json'
+        manifest_path = download / f'{"candidate" if signed else "unsigned-candidate"}-acceptance-{sha}' / 'candidate-manifest.json'
         manifest = json.loads(manifest_path.read_text())
         require(manifest['commit'] == sha and manifest['version'] == version, 'Candidate manifest does not match this release')
+        if signed:
+            from update_feed import generate
+            feed = generate(manifest, directories, repo, notes.read_text())
+            for target in ('macos-arm64', 'windows-x64'):
+                candidate = manifest['candidates'][target]
+                subprocess.check_call([
+                    'cargo', 'run', '--manifest-path', str(ROOT / 'src-tauri/Cargo.toml'),
+                    '--no-default-features', '--example', 'verify_update', '--locked', '--',
+                    str(ROOT / 'packaging/updater.pub'),
+                    str(directories[target] / candidate['updater']['artifact']),
+                    str(directories[target] / candidate['updater']['signature']), version,
+                ], cwd=ROOT)
         stage = Path(temporary) / 'release'
         stage.mkdir()
         published = {}
@@ -105,6 +117,8 @@ def main():
                     'sha256': info['sha256'], 'bytes': info['bytes'], 'candidateName': name, 'target': target,
                 }
                 require(sha256(destination) == info['sha256'], f'Published file changed: {destination_name}')
+        if signed:
+            (stage / 'latest.json').write_text(json.dumps(feed, indent=2) + '\n')
         macos = directories['macos-arm64']
         for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'runtime-manifest.json', 'runtime-downloads.lock.json'):
             os.link(macos / name, stage / name)
@@ -118,17 +132,26 @@ def main():
         }
         build_info = {
             'schema': 1, 'version': version, 'tag': tag, 'commit': sha, 'run': run['url'],
-            'signed': False, 'prerelease': True, 'latest': False, 'rebuilt': False, 'files': files,
+            'signed': manifest['signing'] if signed else False, 'prerelease': True, 'latest': False, 'rebuilt': False, 'files': files,
         }
         (stage / 'BUILD-INFO.json').write_text(json.dumps(build_info, indent=2) + '\n')
         files['BUILD-INFO.json'] = {'sha256': sha256(stage / 'BUILD-INFO.json'), 'bytes': (stage / 'BUILD-INFO.json').stat().st_size}
         sums = ''.join(f"{files[name]['sha256']}  {name}\n" for name in sorted(files))
         (stage / 'SHA256SUMS.txt').write_text(sums)
         subprocess.check_call([
-            'gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--prerelease', '--latest=false',
+            'gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', *(['--draft'] if signed else []), '--prerelease', '--latest=false',
             '--title', f'Fairway XMP {version}', '--notes-file', str(notes),
             *sorted(stage.iterdir(), key=lambda path: path.name),
         ])
+        if signed:
+            uploaded = run_json('gh', 'api', f'repos/{repo}/releases/tags/{tag}')
+            actual = {asset['name']: asset for asset in uploaded['assets']}
+            for path in stage.iterdir():
+                asset = actual.get(path.name, {})
+                require(asset.get('digest') == 'sha256:' + sha256(path) and asset.get('size') == path.stat().st_size,
+                        f'Uploaded release asset does not match the tested file: {path.name}')
+            subprocess.check_call(['gh', 'release', 'edit', tag, '--repo', repo, '--draft=false'])
+            print('Versioned release published. Publish the beta feed as the final step using publish_beta_feed.py.')
         print(f'Published {tag} from {run["url"]}')
 
 

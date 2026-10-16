@@ -30,6 +30,8 @@ def main():
     parser.add_argument('--baseline', required=True, type=Path)
     parser.add_argument('--probe', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--updater', type=Path)
+    parser.add_argument('--update-probe', type=Path)
     parser.add_argument('--allow-user-profile-changes', action='store_true')
     args = parser.parse_args()
     if not args.allow_user_profile_changes or os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
@@ -90,6 +92,12 @@ def main():
             if 'fairway db export DATABASE' not in help_text:
                 raise RuntimeError('Windows database launcher did not return command output')
         completed.append('installed-database-cli-and-launcher')
+        update_evidence = None
+        if args.updater:
+            if not args.update_probe: raise RuntimeError('The signed update drill requires --update-probe')
+            from updater_lifecycle import exercise
+            update_evidence = exercise(args.update_probe, exe, args.updater, output)
+            probe('verify'); completed.append('signed-update-preserves-database-settings-backup-coursework')
         runtime_manifest = json.loads((runtime / 'manifest.json').read_text())
         expected = json.loads((ROOT / 'runtime-manifest.json').read_text())
         if runtime_manifest != expected: raise RuntimeError('Installed runtime differs from the candidate')
@@ -105,7 +113,7 @@ def main():
                 raise RuntimeError('Candidate installer changed during lifecycle testing')
         report = {'schema': 1, 'status': 'passed', 'build': build, 'runtime': runtime_manifest,
                   'installer': args.installer.name, 'installerSha256': installer_sha256,
-                  'baseline': '0.1.0-alpha.3', 'checks': completed}
+                  'baseline': '0.1.0-alpha.3', 'checks': completed, 'updater': update_evidence}
         (output / 'lifecycle.json').write_text(json.dumps(report, indent=2) + '\n')
     finally:
         if candidate_installed and exe.exists(): uninstall()

@@ -14,3 +14,4 @@ export type Snapshot = {
   pathPhp: string | null; pathComposer: string | null; version: string;
 };
 export type UpdateInfo = { configured: boolean; version: string | null; notes: string | null };
+export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'preparing' | 'installing'; downloaded?: number; total?: number | null };

@@ -1,6 +1,6 @@
 [package]
 name = "fairway"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 description = "A consistent PHP development environment for the classroom"
 edition = "2021"
 default-run = "fairway"
@@ -60,3 +60,11 @@ objc2-foundation = { version = "0.3", optional = true, default-features = false,
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_System_JobObjects", "Win32_System_Console", "Win32_System_Threading"] }
+
+[[example]]
+name = "updater_probe"
+required-features = ["desktop"]
+
+[dev-dependencies]
+base64 = "0.22"
+minisign-verify = "0.3"

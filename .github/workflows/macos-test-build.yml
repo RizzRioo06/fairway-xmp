@@ -2,7 +2,16 @@ name: macOS installer
 
 on:
   workflow_dispatch:
+    inputs:
+      signed_release:
+        description: Sign, notarize, and enable beta updates
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      signed_release:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -10,7 +19,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -63,24 +72,75 @@ jobs:
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/macos-smoke"
       - name: Exercise native data browser and SQL export/import
         run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- "$PWD/.runtime-work/data-browser-smoke"
-      - name: Build unsigned app and installer
+      - name: Import release signing credentials
+        if: inputs.signed_release
+        env:
+          APPLE_CERTIFICATES_P12: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          APPLE_CERTIFICATES_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: bash scripts/import_apple_credentials.sh
+      - name: Build release app with updater
+        if: inputs.signed_release
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          python scripts/configure_release.py --public-key packaging/updater.pub
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --config artifacts/tauri.release.json
+      - name: Sign and notarize app, installer and updater archive
+        if: inputs.signed_release
+        env:
+          FAIRWAY_SIGNED_RELEASE: '1'
+          APPLE_SIGNING_IDENTITY: 'Developer ID Application: Ei Maung (4Q27NQ2UAF)'
+          APPLE_INSTALLER_IDENTITY: 'Developer ID Installer: Ei Maung (4Q27NQ2UAF)'
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: sh scripts/package_macos.sh
+      - name: Build unsigned development installer
+        if: ${{ !inputs.signed_release }}
         run: |
           npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app
           sh scripts/package_macos.sh
+      - name: Collect exact release artifacts
+        id: installer
+        env:
+          SIGNED_RELEASE: ${{ inputs.signed_release }}
+        run: |
           mkdir -p artifacts/macos-installer
-          mv "artifacts/fairway-xmp-${{ steps.metadata.outputs.version }}-macos-arm64-unsigned.pkg" "artifacts/macos-installer/"
-      - name: Test actual installer, alpha upgrade and data-preserving removal
+          version='${{ steps.metadata.outputs.version }}'
+          if [ "$SIGNED_RELEASE" = true ]; then
+            name="fairway-xmp-$version-macos-arm64.pkg"
+            mv "artifacts/$name" "artifacts/fairway-xmp-$version-macos-arm64.app.tar.gz" "artifacts/fairway-xmp-$version-macos-arm64.app.tar.gz.sig" artifacts/macos-installer/
+            echo 'signing=apple-notarized' >> "$GITHUB_OUTPUT"
+          else
+            name="fairway-xmp-$version-macos-arm64-unsigned.pkg"
+            mv "artifacts/$name" artifacts/macos-installer/
+            echo 'signing=unsigned' >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Build native updater probe
+        if: inputs.signed_release
+        run: cargo build --release --example updater_probe --manifest-path src-tauri/Cargo.toml --locked
+      - name: Test actual installer, signed updater and data-preserving removal
+        shell: bash
         run: |
           python scripts/fetch_installer_baseline.py macos --output .runtime-work/baseline-macos.pkg
           cargo build --release --example installer_probe --manifest-path src-tauri/Cargo.toml --no-default-features --locked
-          python tests/installer_lifecycle.py --installer "artifacts/macos-installer/fairway-xmp-${{ steps.metadata.outputs.version }}-macos-arm64-unsigned.pkg" --baseline .runtime-work/baseline-macos.pkg --probe src-tauri/target/release/examples/installer_probe --output .runtime-work/macos-lifecycle --allow-user-profile-changes
+          extra=()
+          if [ '${{ inputs.signed_release }}' = true ]; then
+            extra=(--updater "artifacts/macos-installer/fairway-xmp-${{ steps.metadata.outputs.version }}-macos-arm64.app.tar.gz" --update-probe src-tauri/target/release/examples/updater_probe)
+          fi
+          python tests/installer_lifecycle.py "${extra[@]}" --installer "artifacts/macos-installer/${{ steps.installer.outputs.name }}" --baseline .runtime-work/baseline-macos.pkg --probe src-tauri/target/release/examples/installer_probe --output .runtime-work/macos-lifecycle --allow-user-profile-changes
       - name: Collect exact application and bundled-tool sources
         run: |
           python scripts/package_sources.py --locked
           cp "artifacts/alpha-${{ steps.metadata.outputs.version }}/fairway-xmp-${{ steps.metadata.outputs.version }}-bundled-tool-sources.tar.gz" artifacts/macos-installer/
           git archive --format=tar.gz --output="artifacts/macos-installer/fairway-xmp-${{ steps.metadata.outputs.version }}-build-source.tar.gz" HEAD
           cp LICENSE THIRD_PARTY_NOTICES.md runtime-manifest.json runtime-downloads.lock.json artifacts/macos-installer/
-          python scripts/release_candidate.py record --target macos-arm64 --directory artifacts/macos-installer --artifact fairway-xmp-macos-arm64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/macos-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-macos-arm64.json
+          python scripts/release_candidate.py record --target macos-arm64 --signing ${{ steps.installer.outputs.signing }} --directory artifacts/macos-installer --artifact fairway-xmp-macos-arm64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/macos-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-macos-arm64.json
       - uses: actions/upload-artifact@v6
         with:
           name: fairway-xmp-macos-arm64-${{ steps.metadata.outputs.version }}
@@ -93,6 +153,9 @@ jobs:
           path: artifacts/candidate-metadata/
           if-no-files-found: error
           retention-days: 90
+      - name: Remove temporary signing credentials
+        if: ${{ always() && inputs.signed_release }}
+        run: bash scripts/cleanup_apple_credentials.sh
       - uses: actions/upload-artifact@v6
         if: failure()
         with:

@@ -3,11 +3,19 @@ name: Windows installer
 on:
   workflow_call:
     inputs:
+      signed_release:
+        description: Enable signed beta updates (without Authenticode)
+        type: boolean
+        default: false
       record_runtime_checksums:
         type: boolean
         default: false
   workflow_dispatch:
     inputs:
+      signed_release:
+        description: Enable signed beta updates (without Authenticode)
+        type: boolean
+        default: false
       record_runtime_checksums:
         description: Record Windows runtime download checksums for review
         type: boolean
@@ -101,7 +109,19 @@ jobs:
           Write-Host "Bundled runtime: $([math]::Round($bytes / 1MB, 1)) MiB"
           $debugFiles = @($runtimeFiles | Where-Object { $_.FullName -match '[\\/]mysql[\\/]' -and $_.Extension -in '.pdb', '.lib' })
           if ($debugFiles.Count -gt 0) { throw 'MySQL debug symbols or linker libraries remain in the bundle.' }
-      - name: Build x64 NSIS installer
+      - name: Build x64 NSIS installer with signed updater
+        if: inputs.signed_release
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Updater signing key is required.' }
+          python scripts/configure_release.py --public-key packaging/updater.pub
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc --config artifacts/tauri.release.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build unsigned development installer
+        if: ${{ !inputs.signed_release }}
         run: npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc
       - name: Collect installer and checksums
         run: |
@@ -112,6 +132,11 @@ jobs:
           $version = '${{ steps.metadata.outputs.version }}'
           $filename = "fairway-xmp-$version-windows-x64-setup.exe"
           Copy-Item $installers[0].FullName (Join-Path $output $filename)
+          if ('${{ inputs.signed_release }}' -eq 'true') {
+            $signature = "$($installers[0].FullName).sig"
+            if (-not (Test-Path $signature)) { throw 'Missing updater signature.' }
+            Copy-Item $signature (Join-Path $output "$filename.sig")
+          }
           Copy-Item runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
           $hash = Get-FileHash $installers[0].FullName -Algorithm SHA256
           "$($hash.Hash.ToLower())  $filename" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
@@ -123,12 +148,16 @@ jobs:
             run = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
             target = 'x86_64-pc-windows-msvc'
             signed = $false
+            updaterSigned = '${{ inputs.signed_release }}' -eq 'true'
             installer = $filename
             sha256 = $hash.Hash.ToLower()
             runtime = Get-Content runtime-manifest.json -Raw | ConvertFrom-Json
             checks = @('frontend build', 'packaging tests', 'Rust tests and clippy', 'fresh runtime smoke', 'MySQL 8.4 to 9.7 upgrade, backup and restart')
             purpose = 'Release candidate installer; reuse this exact file after testing'
           } | ConvertTo-Json -Depth 8 | Set-Content "$output/build-info.json" -Encoding utf8
+      - name: Build native updater probe
+        if: inputs.signed_release
+        run: cargo build --release --example updater_probe --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --locked
       - name: Verify the real installed alpha upgrade and reinstall lifecycle
         if: inputs.record_runtime_checksums != true
         run: |
@@ -137,9 +166,14 @@ jobs:
           cargo build --release --example installer_probe --manifest-path src-tauri/Cargo.toml --no-default-features --target x86_64-pc-windows-msvc --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = (Get-ChildItem 'artifacts/windows-installer/*-setup.exe').FullName
-          python tests/installer_lifecycle.py --installer $installer --baseline .runtime-work/baseline-windows.exe --probe src-tauri/target/x86_64-pc-windows-msvc/release/examples/installer_probe.exe --output .runtime-work/windows-lifecycle --allow-user-profile-changes
+          $extra = @()
+          if ('${{ inputs.signed_release }}' -eq 'true') {
+            $extra = @('--updater', $installer, '--update-probe', 'src-tauri/target/x86_64-pc-windows-msvc/release/examples/updater_probe.exe')
+          }
+          python tests/installer_lifecycle.py @extra --installer $installer --baseline .runtime-work/baseline-windows.exe --probe src-tauri/target/x86_64-pc-windows-msvc/release/examples/installer_probe.exe --output .runtime-work/windows-lifecycle --allow-user-profile-changes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/release_candidate.py record --target windows-x64 --directory artifacts/windows-installer --artifact fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
+          $signing = if ('${{ inputs.signed_release }}' -eq 'true') { 'updater-only' } else { 'unsigned' }
+          python scripts/release_candidate.py record --target windows-x64 --signing $signing --directory artifacts/windows-installer --artifact fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v6
         if: inputs.record_runtime_checksums != true

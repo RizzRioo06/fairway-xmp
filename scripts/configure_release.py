@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--endpoint', default='https://github.com/eimg/fairway-xmp/releases/latest/download/latest.json', help='HTTPS URL to signed update metadata (defaults to Fairway GitHub releases)')
+parser.add_argument('--endpoint', default='https://github.com/eimg/fairway-xmp/releases/download/beta-feed/latest.json', help='HTTPS URL to signed update metadata (defaults to Fairway GitHub releases)')
 parser.add_argument('--public-key', required=True, help='Tauri updater public key file')
 parser.add_argument('--output', default='artifacts/tauri.release.json')
 args = parser.parse_args()
@@ -17,6 +17,6 @@ output = Path(args.output)
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text(json.dumps({
     'bundle': {'createUpdaterArtifacts': True},
-    'plugins': {'updater': {'pubkey': key, 'endpoints': [args.endpoint], 'windows': {'installMode': 'passive'}}},
+    'plugins': {'updater': {'pubkey': key, 'requireSignedVersion': True, 'endpoints': [args.endpoint], 'windows': {'installMode': 'passive'}}},
 }, indent=2) + '\n')
 print(output)

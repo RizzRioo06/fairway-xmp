@@ -1,10 +1,10 @@
-# Unsigned beta candidate and acceptance
+# Beta candidate and acceptance
 
-Signing and automatic updates are deferred. PHP 8.5 is the default; PHP 8.0/8.1 remain unsupported legacy options for older coursework. Their Windows dependency build/patch provenance remains an open, explicitly recorded limitation in [release follow-ups](release-follow-ups.md). This process does not mark that work verified.
+Beta 3 candidates require Mac signing/notarization and signed Mac/Windows updater artifacts; Windows Authenticode remains deferred. See [signed beta releases](signed-beta-releases.md). PHP 8.5 is the default; PHP 8.0/8.1 remain unsupported legacy options for older coursework. Their Windows dependency build/patch provenance remains an open, explicitly recorded limitation in [release follow-ups](release-follow-ups.md). This process does not mark that work verified.
 
 ## Build a candidate
 
-Run **Unsigned release candidate** (`release-candidate.yml`) on the intended source branch/ref. It calls the browser, Windows, Apple Silicon macOS, and Linux workflows against the **same caller commit**. It doesn't publish releases or modify versions.
+Run **Release candidate** (`release-candidate.yml`) on the intended source branch/ref. It calls the browser, Windows, Apple Silicon macOS, and Linux workflows against the **same caller commit**. It doesn't publish releases or modify versions.
 
 Before preparing a beta release, set the chosen version consistently in `package.json`, the header and root package entry in `package-lock.json`, `src-tauri/Cargo.toml`, the `fairway` package in `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. The workflow checks these agree. Do not reuse alpha binaries under a beta filename.
 
@@ -60,3 +60,6 @@ Before dispatching the publication workflow, create and push the release tag at 
 Desktop: **Settings → Help and diagnostics → Diagnostic report**, review the JSON, then **Copy diagnostic report**. Linux: `fairway diagnostics`. The report includes app version, source commit/modified-source flag, OS/architecture, runtime readiness/versions, selected PHP, service ports/readiness, and command-detection categories. It excludes filesystem paths, logs, project/database contents, and credentials. GUI app PATH detection can differ from a new terminal.
 
 Desktop executables and the Linux CLI also accept `--build-info` for machine-readable version/commit/OS/architecture without launching the GUI or supervisor. Build identity is embedded at compilation; local builds with source edits are marked modified and cannot be recorded as clean release candidates.
+
+8. **Desktop Sites and HTTPS:** add/edit a site, check domain setup/retry, approve HTTPS trust, verify the browser URL and registered web root, and confirm saved settings survive restart and upgrade.
+9. **Desktop in-app update and restart:** from an enabled signed build, install a subsequent version through Updates; check progress, database backup, graceful service/terminal shutdown, restart, version change, preserved project/site/settings/data, and PHP/Composer/database launchers. Check the macOS administrator prompt if the installed app cannot be replaced directly. Earlier betas require the manual bootstrap install. The automated same-version reinstall drill does not mark this check complete.

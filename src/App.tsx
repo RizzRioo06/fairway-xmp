@@ -5,7 +5,7 @@ import {
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
 import { canControl, invoke, isDesktop, isUiTest, listen, preview } from './bridge';
-import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, UpdateInfo } from './types';
+import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, UpdateInfo, UpdateProgress } from './types';
 import HelpTip from './HelpTip';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
@@ -71,6 +71,7 @@ export default function App() {
   const [ports, setPorts] = useState<Ports>(preview.ports);
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectForm | null>(null);
   const [removing, setRemoving] = useState<Project | null>(null);
@@ -123,7 +124,7 @@ export default function App() {
       ...(isUiTest ? [listen('ui-test-reset', payload => {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
-        setNotice(null); setUpdate(null); setLog(null); setReport(null); setHelp(false); setCopied(null);
+        setNotice(null); setUpdate(null); setUpdateProgress(null); setLog(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
       listen('fairway-status', payload => setData(payload as Snapshot)),
       listen('fairway-operation-started', payload => {
@@ -131,7 +132,9 @@ export default function App() {
       }),
       listen('fairway-operation-finished', () => {
         backendOperation.current = false; setBackendBusy(null);
+        setUpdateProgress(null);
       }),
+      listen('fairway-update-progress', payload => setUpdateProgress(payload as UpdateProgress)),
       listen('fairway-error', payload => {
         setBusy(null); operation.current = false;
         setNotice({ kind: 'error', text: String(payload) });
@@ -326,14 +329,15 @@ export default function App() {
 
         {view === 'updates' && <>
           <div className="page-heading"><div><h1>A dependable environment.</h1><p>Find new versions of Fairway XMP and your bundled tools.</p></div></div>
-          <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : 'Composer'}</span><code>{name === 'php' ? selectedPhp ?? 'Unavailable' : versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>{update?.configured ? 'Updates preserve your projects and database data. Fairway XMP backs up student databases and stops services before installing an update.' : 'Download a newer installer from View downloads. Back up your databases, stop all services, and quit Fairway XMP before installing. Your projects and database data are kept.'}</p><div className="button-row update-actions"><button className="primary" disabled={!canControl || !!busy} onClick={() => { void run('Checking for updates…', async () => {
+          <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : 'Composer'}</span><code>{name === 'php' ? selectedPhp ?? 'Unavailable' : versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>{update?.configured === false ? 'Download a newer installer from View downloads. Back up your databases, stop all services, and quit Fairway XMP before installing. Your projects and database data are kept.' : 'Updates download and verify while your services keep running. Before installing, Fairway XMP backs up your databases, stops services and terminal sessions, then restarts. Your projects, saved sites, and settings are kept.'}</p><div className="button-row update-actions"><button className="primary" disabled={!canControl || !!busy} onClick={() => { void run('Checking for updates…', async () => {
             const result = await invoke<UpdateInfo>('check_update'); setUpdate(result);
             if (result.configured && !result.version) setNotice({ kind: 'success', text: 'You’re using the latest available release.' });
             if (!result.configured) setNotice({ kind: 'success', text: 'This version uses manual updates. Choose View downloads to find a newer installer.' });
           }); }}><RefreshCw size={15} />Check for updates</button>
             <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('releases')}>View downloads<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('source')}>Source code<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('issues')}>Get help<ExternalLink size={15} /></button></div>
             {update && !update.configured && <p className="settings-hint">Visit the downloads page to see available releases.</p>}
-            {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy} onClick={() => { void run('Backing up and installing update…', () => invoke<void>('install_update')); }}>Install update</button></div>}
+            {updateProgress && <div className="update-progress" role="status"><span>{updateProgress.phase === 'downloading' ? `Downloading update${updateProgress.total ? ` · ${Math.min(100, Math.floor((updateProgress.downloaded ?? 0) / updateProgress.total * 100))}%` : ''}…` : updateProgress.phase === 'verifying' ? 'Verifying update…' : updateProgress.phase === 'preparing' ? 'Backing up databases and stopping services…' : 'Installing update and restarting…'}</span>{updateProgress.phase === 'downloading' && <progress aria-label="Update download" value={updateProgress.total ? updateProgress.downloaded ?? 0 : undefined} max={updateProgress.total ?? undefined} />}</div>}
+            {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy} onClick={() => { void run('Downloading update…', async () => { setUpdateProgress({ phase: 'downloading', downloaded: 0 }); try { await invoke<void>('install_update', { version: update.version }); } finally { setUpdateProgress(null); } }); }}>Install update</button></div>}
           </section>
         </>}
       </div>

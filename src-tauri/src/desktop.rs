@@ -531,7 +531,9 @@ async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo> {
         });
     }
     let update = app
-        .updater()
+        .updater_builder()
+        .timeout(Duration::from_secs(30))
+        .build()
         .map_err(|e| e.to_string())?
         .check()
         .await
@@ -544,29 +546,74 @@ async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo> {
 }
 
 #[tauri::command]
-async fn install_update(app: tauri::AppHandle, state: State<'_, Shared>) -> Result<()> {
-    let _operation = begin_operation(&app, "Installing update…")?;
-    let updater = app.updater().map_err(|e| e.to_string())?;
-    let update = updater
+async fn install_update(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    version: String,
+) -> Result<()> {
+    let _operation = begin_operation(&app, "Downloading update…")?;
+    let updater = app
+        .updater_builder()
+        .timeout(Duration::from_secs(30))
+        // All owned processes and markers are handled below. Avoid tearing down
+        // the webview before ShellExecute, which can still fail on Windows.
+        .on_before_exit(|| {})
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut update = updater
         .check()
         .await
         .map_err(|e| e.to_string())?
         .ok_or("No update is available.")?;
-    // Stop and make a logical backup before replacing any bundled runtime.
-    access(state.inner().clone(), |m| {
-        if m.layout.data.join("database-ready").exists() {
-            m.start("mysql")?;
-            m.backup()?;
+    if update.version != version {
+        return Err(
+            "The available version changed. Check for updates again before installing.".into(),
+        );
+    }
+    update.timeout = Some(Duration::from_secs(30 * 60));
+    let mut downloaded = 0u64;
+    let mut last_progress = std::time::Instant::now();
+    let bytes = update.download(|chunk, total| {
+        downloaded = downloaded.saturating_add(chunk as u64);
+        if last_progress.elapsed() >= Duration::from_millis(150) {
+            let _ = app.emit("fairway-update-progress", serde_json::json!({
+                "phase": "downloading", "downloaded": downloaded, "total": total,
+            }));
+            last_progress = std::time::Instant::now();
         }
-        m.stop_all()
-    })
-    .await?;
+    }, || {
+        let _ = app.emit("fairway-update-progress", serde_json::json!({"phase": "verifying"}));
+    }).await.map_err(|e| format!("Could not download or verify the update. Services are still available. Try again later. {e}"))?;
+
+    // Reserve replacement against Quit only after download AND verification.
+    // During the download Quit can still run once this operation completes.
+    let _installation = app.state::<DesktopControl>().lifecycle.begin_install()?;
+    let _ = app.emit(
+        "fairway-update-progress",
+        serde_json::json!({"phase": "preparing"}),
+    );
+    access(state.inner().clone(), crate::updates::prepare).await?;
     app.state::<crate::terminal::Terminals>().close_all();
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|e| e.to_string())?;
+    // Windows exits inside install(); post-install cleanup is unreachable.
     access(state.inner().clone(), |m| remove_app_marker(m)).await?;
+    let _ = app.emit(
+        "fairway-update-progress",
+        serde_json::json!({"phase": "installing"}),
+    );
+    let result = tauri::async_runtime::spawn_blocking(move || update.install(bytes))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r.map_err(|e| e.to_string()));
+    if let Err(error) = result {
+        access(state.inner().clone(), |m| {
+            crate::config::atomic_write(
+                &m.layout.data.join("app.pid"),
+                std::process::id().to_string().as_bytes(),
+            )
+        })
+        .await?;
+        return Err(format!("The update could not be installed. Your projects and backups are kept. Services are stopped; you can start them again or retry the update. {error}"));
+    }
     app.state::<DesktopControl>().lifecycle.allow_exit();
     app.restart();
 }
@@ -743,6 +790,7 @@ pub fn run() {
             };
             let manager = Manager::new(Layout::new(runtime).map_err(std::io::Error::other)?)
                 .map_err(std::io::Error::other)?;
+            integration::refresh(&manager.layout).map_err(std::io::Error::other)?;
             crate::config::atomic_write(
                 &manager.layout.data.join("app.pid"),
                 std::process::id().to_string().as_bytes(),

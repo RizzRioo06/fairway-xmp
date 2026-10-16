@@ -1,7 +1,15 @@
 !include "LogicLib.nsh"
 !include "WinVer.nsh"
+Var FairwayRefreshCli
 
 !macro NSIS_HOOK_PREINSTALL
+  StrCpy $FairwayRefreshCli 1
+  ; The updater must retain a user's decision to disable command-line tools.
+  ${If} $UpdateMode = 1
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\dev.fairway.environment\cli-installed"
+      StrCpy $FairwayRefreshCli 0
+    ${EndIf}
+  ${EndIf}
   ${IfNot} ${AtLeastWin10}
     MessageBox MB_ICONSTOP "Fairway XMP needs Windows 10 22H2 (64-bit) or Windows 11."
     Abort
@@ -33,10 +41,12 @@
       Abort
     ${EndIf}
   ${EndIf}
-  ExecWait '"$INSTDIR\fairway.exe" --install-cli' $0
-  ${If} $0 != 0
-    MessageBox MB_ICONSTOP "Fairway XMP could not enable PHP and Composer in your user PATH. Open Settings in Fairway XMP to retry."
-    Abort
+  ${If} $FairwayRefreshCli = 1
+    ExecWait '"$INSTDIR\fairway.exe" --install-cli' $0
+    ${If} $0 != 0
+      MessageBox MB_ICONSTOP "Fairway XMP could not enable PHP and Composer in your user PATH. Open Settings in Fairway XMP to retry."
+      Abort
+    ${EndIf}
   ${EndIf}
 !macroend
 

@@ -12,7 +12,7 @@ Beta 1 is published. The Windows PHP 8.0/8.1 provenance work below remains open 
 
 ## Legacy PHP scope for beta
 
-Signing is deferred while beta recovery/release/support work is completed. PHP 8.0/8.1 remain legacy compatibility options, labeled in Advanced settings and CLI help; PHP 8.5 stays the default. No additional legacy runtime expansion or source-mapping research is scheduled in this pass. The provenance work below remains open and is disclosed in candidate metadata; labeling a runtime legacy does not verify its dependency sources.
+Beta 3 preparation adds Mac signing/notarization and signed desktop updates; see [signed beta releases](signed-beta-releases.md). Windows Authenticode remains deferred. PHP 8.0/8.1 remain legacy compatibility options, labeled in Advanced settings and CLI help; PHP 8.5 stays the default. No additional legacy runtime expansion or source-mapping research is scheduled in this pass. The provenance work below remains open and is disclosed in candidate metadata; labeling a runtime legacy does not verify its dependency sources.
 
 The new [beta acceptance process](beta-acceptance.md) covers candidate identity, native lifecycle checks, restore verification, diagnostic reports, and final human review. A green browser run does not complete the remaining native checklist.
 

@@ -1,0 +1,31 @@
+# Signed beta releases
+
+Beta 3 is the manual bootstrap for automatic desktop updates. Beta 2 and earlier do not contain a feed or verification key, so students install beta 3 once by hand. Linux continues to update manually. Windows Authenticode signing is deferred; the updater's minisign signatures are enabled independently.
+
+## Credentials
+
+`packaging/updater.pub` is the public verification key. Keep its private key outside the repository, with an offline backup. The existing GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` sign version-bound update artifacts. Release builds fail if signing inputs are absent or do not match.
+
+The Mac release runner imports only the release identities supplied in `APPLE_CERTIFICATES_P12` (base64 PKCS#12) using `APPLE_CERTIFICATES_PASSWORD`. The current identities are `Developer ID Application: Ei Maung (4Q27NQ2UAF)` and `Developer ID Installer: Ei Maung (4Q27NQ2UAF)`. `APPLE_API_PRIVATE_KEY`, `APPLE_API_KEY`, and `APPLE_API_ISSUER` provide notarization credentials. An ephemeral keychain stores the profile; cleanup runs even on failure. Local builders can instead use the validated `fairway-notary` Keychain profile. Never put private keys or exported identities in the repository or build artifacts.
+
+## Build and verify
+
+Dispatch **Release candidate** (`release-candidate.yml`) from the reviewed commit. It runs UI review and the reusable Mac, Windows, and Linux jobs. Signed release inputs are explicit; standalone development jobs remain unsigned unless requested.
+
+Mac packaging signs all Mach-O code in the final app, notarizes and staples the app, then creates the `.pkg` and `.app.tar.gz` from that app. The installer is separately signed, notarized, and stapled. The updater archive is signed with minisign and bound to its release version. Gatekeeper, stapler, and codesign checks must pass. A notarized pkg alone would not establish that the app inside an updater archive can run.
+
+Windows creates a normal current-user NSIS installer and its version-bound `.sig`. The same setup executable supports first installation and in-app replacement. `updater_probe` uses the real Tauri updater on a disposable hosted runner: it rejects a tampered download and a signed-version mismatch while services stay ready, downloads the exact candidate, backs up databases, gracefully stops services, removes only stopped PID markers, and installs. The normal installed-data probe then verifies the project, database, selected PHP, settings, backups, and CLI. This is an explicit same-version reinstall drill; production keeps normal semver comparison. Human testing of a later version, restart, native UI, and system prompts remains separate.
+
+Review the exact candidate's acceptance template and UI report. Do not mark unperformed human checks complete. Mac and Windows acceptance includes Sites/HTTPS and a subsequent-version update/restart. The candidate records the installed binaries' commit/version and every installer/updater/signature hash. Rebuild after application changes; never reuse an old tag for changed bytes.
+
+## Publication and feed promotion
+
+Prepare/review release notes and create a version tag at the successful candidate's exact source commit. Dispatch **Publish tested beta** (`publish-beta-release.yml`) with its run ID, commit, and tag. This is an explicit publication action; building a candidate never publishes a release.
+
+The publisher downloads only that candidate, rechecks its file hashes, verifies both updater signatures and authenticated release versions against `packaging/updater.pub`, and creates a draft prerelease with the exact files. It compares GitHub asset digests/sizes before publishing the numbered prerelease. The feed is promoted only after the versioned release exists.
+
+The stable beta endpoint is `https://github.com/eimg/fairway-xmp/releases/download/beta-feed/latest.json`. The `beta-feed` prerelease holds only this file; it points to the immutable numbered release's Mac archive and Windows installer and carries their signatures. GitHub's `/releases/latest/` endpoint omits prereleases. Feed promotion refuses an older numbered beta. If feed publication fails, the versioned release stays available for manual installation and the existing feed remains unchanged; rerun only `scripts/publish_beta_feed.py` with `GH_REPO` and `FAIRWAY_TAG` to retry. Do not overwrite a published installer's bytes.
+
+## Local Mac app
+
+The local profile is `fairway-notary`. An enabled release build needs the release overlay from `scripts/configure_release.py`; plain development builds intentionally have no updater. Use the signing identities above and `APPLE_NOTARY_PROFILE=fairway-notary` with `scripts/package_macos.sh`. `FAIRWAY_SIGNED_RELEASE=1` requires all Apple credentials plus the updater signing key and produces signed updater artifacts. Test the standalone signed app without installing the pkg when desired.

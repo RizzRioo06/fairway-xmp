@@ -358,3 +358,20 @@ test('copy site URL includes HTTPS and the port', async ({ page, context, browse
   await page.getByRole('button', { name: 'Copy URL for My Shop', exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('https://shop.test:8443/');
 });
+
+
+test('update progress clears after a failed download and services stay available', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Update failure');
+  await page.getByRole('button', { name: 'Start all', exact: true }).click();
+  await page.getByRole('button', { name: 'Updates', exact: true }).click();
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await page.getByRole('button', { name: 'Install update', exact: true }).click();
+  await expect(page.getByRole('progressbar', { name: 'Update download' })).toHaveAttribute('value', '25');
+  await expect(page.getByRole('button', { name: 'Install update', exact: true })).toBeDisabled();
+  await expect(page.getByRole('alert')).toContainText('Your services are still available');
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Install update', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.locator('.service-card .status-label.ready')).toHaveCount(4);
+});

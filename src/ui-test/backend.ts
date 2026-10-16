@@ -181,7 +181,19 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       version: scenario.startsWith('Update ') ? '0.2.0-preview-with-a-long-version-label' : null,
       notes: 'Simulated release for visual review. Includes PHP selection, service controls, and database backups.',
     }; break;
-    case 'install_update': throw new Error(scenario === 'Update failure' ? 'Could not download the update. Your projects and database data have been kept. Try again later.' : 'UI test only: no update was downloaded or installed.');
+    case 'install_update': {
+      emit('fairway-operation-started', 'Downloading update…');
+      try {
+        emit('fairway-update-progress', { phase: 'downloading', downloaded: 25, total: 100 });
+        await new Promise(resolve => setTimeout(resolve, 600));
+        if (scenario === 'Update failure') throw new Error('Could not download the update. Your services are still available. Your projects and database data have been kept. Try again later.');
+        for (const phase of ['verifying', 'preparing', 'installing']) {
+          emit('fairway-update-progress', { phase });
+          await new Promise(resolve => setTimeout(resolve, 350));
+        }
+        throw new Error('UI test only: no update was downloaded or installed.');
+      } finally { emit('fairway-operation-finished', null); }
+    }
     case 'open_target': throw new Error(`UI test only: would open ${String(args.target)}. No external application was opened.`);
     default: throw new Error(`Unsupported UI test command: ${command}`);
   }
