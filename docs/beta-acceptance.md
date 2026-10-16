@@ -53,6 +53,8 @@ python scripts/release_candidate.py check-acceptance \
 
 This rejects mismatched commits/versions/hashes, missing tester information, and unfinished checks. It reports acceptance; it never publishes. When publishing is authorized, reuse the reviewed files unchanged, include their matching source archives and checksums, and update downloads/changelog/known limitations. Don't rebuild between acceptance and publication.
 
+Before dispatching the publication workflow, create and push the release tag at the exact candidate commit using the release owner's authenticated Git access. The publisher checks that the fetched tag resolves to that commit and uses `--verify-tag`; it never moves the tag or supplies a historical `target_commitish` to the release API. GitHub's workflow token cannot satisfy the extra workflow permission that explicit historical targets can require.
+
 ## Support reports
 
 Desktop: **Settings → Help and diagnostics → Diagnostic report**, review the JSON, then **Copy diagnostic report**. Linux: `fairway diagnostics`. The report includes app version, source commit/modified-source flag, OS/architecture, runtime readiness/versions, selected PHP, service ports/readiness, and command-detection categories. It excludes filesystem paths, logs, project/database contents, and credentials. GUI app PATH detection can differ from a new terminal.

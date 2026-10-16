@@ -25,6 +25,13 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+def verify_tag(tag, sha, root=ROOT):
+    commit = subprocess.check_output(
+        ['git', 'rev-parse', '--verify', f'refs/tags/{tag}^{{commit}}'], cwd=root, text=True,
+    ).strip()
+    require(commit == sha, f'{tag} does not identify the tested candidate commit')
+
+
 def published_name(target, name):
     marker = '-build-source.tar.gz'
     if name.endswith(marker):
@@ -46,6 +53,10 @@ def main():
     require(run['headSha'] == sha, 'Candidate run is not the requested commit')
     releases = run_json('gh', 'api', f'repos/{repo}/releases?per_page=100')
     require(all(item['tag_name'] != tag for item in releases), f'{tag} already exists')
+    # The release owner creates the tag before dispatching this workflow.
+    # Explicit target_commitish on a historical commit can require workflow
+    # permissions unavailable to GITHUB_TOKEN, even when the tag exists.
+    verify_tag(tag, sha)
 
     with tempfile.TemporaryDirectory() as temporary:
         download = Path(temporary) / 'artifacts'
@@ -114,7 +125,7 @@ def main():
         sums = ''.join(f"{files[name]['sha256']}  {name}\n" for name in sorted(files))
         (stage / 'SHA256SUMS.txt').write_text(sums)
         subprocess.check_call([
-            'gh', 'release', 'create', tag, '--repo', repo, '--target', sha, '--prerelease', '--latest=false',
+            'gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--prerelease', '--latest=false',
             '--title', f'Fairway XMP {version}', '--notes-file', str(notes),
             *sorted(stage.iterdir(), key=lambda path: path.name),
         ])
