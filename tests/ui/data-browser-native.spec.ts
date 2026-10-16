@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { nativeBridge } from './native-bridge';
 
+// Use the same production frontend that is packaged in the desktop app.
+test.use({ baseURL: 'http://127.0.0.1:1422' });
+
 test('desktop data browser starts bundled MySQL and edits real rows', async ({ page }, info) => {
   test.skip(!process.env.FAIRWAY_TEST_RUNTIME, 'Set FAIRWAY_TEST_RUNTIME and build the terminal_bridge example.');
   test.setTimeout(120000);

@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test';
 import { join } from 'node:path';
 import { nativeBridge } from './native-bridge';
 
+// Use the same production frontend that is packaged in the desktop app.
+test.use({ baseURL: 'http://127.0.0.1:1422' });
+
 // Opt-in after building the stdio example; ordinary browser CI uses the fixture.
 // No listener is opened and the packaged runtime is read only.
 test('React input reaches the real native PTY and packaged PHP/Composer', async ({ page }, info) => {

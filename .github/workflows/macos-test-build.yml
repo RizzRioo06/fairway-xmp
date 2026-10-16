@@ -46,6 +46,7 @@ jobs:
       - run: npx playwright install chromium
       - name: Exercise native terminal and data browser through browser input
         env:
+          FAIRWAY_NATIVE_ONLY: '1'
           FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
         run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts --project chromium --workers=1
       - name: Save native desktop browser report
