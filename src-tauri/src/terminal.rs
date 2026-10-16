@@ -231,7 +231,8 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
         let executable = std::env::var_os("SystemRoot")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| "C:\\Windows".into())
-            .join("System32/cmd.exe");
+            .join("System32")
+            .join("cmd.exe");
         let mut c = CommandBuilder::new(executable);
         // Keep the fixed command as separate words: CommandBuilder quotes
         // arguments with spaces using CRT rules, which differ from cmd /K.
@@ -1134,7 +1135,10 @@ mod tests {
             .unwrap();
         fixture.until("windows", "Fairway XMP");
         fixture.terminals.write("windows", "cd\r").unwrap();
-        fixture.until("windows", &fixture.layout.www.to_string_lossy());
+        fixture.until(
+            "windows",
+            &fixture.layout.www.to_string_lossy().replace('/', "\\"),
+        );
         fixture.terminals.write("windows", "exit 7\r").unwrap();
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         loop {
