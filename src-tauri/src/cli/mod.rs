@@ -261,6 +261,9 @@ pub fn run() -> Result<()> {
             "Document root: {}\nData: {}",
             snapshot.document_root, snapshot.data_dir
         );
+        if let Some(error) = snapshot.sites_error {
+            println!("Saved sites could not be loaded: {error}. Site files were kept.");
+        }
         for project in snapshot.projects {
             println!(
                 "{}: {} -> {}{}",

@@ -91,7 +91,7 @@ pub fn validate_projects(projects: &[ProjectConfig]) -> Result<()> {
     let mut domains = HashSet::new();
     for project in projects {
         let name = project.name.trim();
-        if name.is_empty() || name.len() > 80 || name != project.name {
+        if name.is_empty() || name.chars().count() > 80 || name != project.name {
             return Err("Enter a site name up to 80 characters.".into());
         }
         if !valid_project_name(&project.domain) {

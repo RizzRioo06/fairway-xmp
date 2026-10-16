@@ -30,6 +30,8 @@ pub struct Snapshot {
     pub services: Vec<ServiceStatus>,
     pub document_root: String,
     pub projects: Vec<Project>,
+    #[serde(default)]
+    pub sites_error: Option<String>,
     /// The hosts file does not match the registered domains yet.
     pub domains_pending: bool,
     pub https_trusted: bool,
@@ -157,7 +159,10 @@ impl Manager {
             }
         })
         .collect();
-        let registered = self.layout.registered_projects().unwrap_or_default();
+        let (registered, sites_error) = match self.layout.registered_projects() {
+            Ok(sites) => (sites, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
         let managed = crate::hosts::managed_names().unwrap_or_default();
         let domains = registered
             .iter()
@@ -176,7 +181,9 @@ impl Manager {
             services,
             document_root: self.layout.www.to_string_lossy().into(),
             projects,
-            domains_pending: !crate::hosts::current(&domains).unwrap_or(false),
+            sites_error: sites_error.clone(),
+            domains_pending: sites_error.is_none()
+                && !crate::hosts::current(&domains).unwrap_or(false),
             https_trusted: crate::tls::trusted(&self.layout),
             os: std::env::consts::OS.into(),
             data_dir: self.layout.data.to_string_lossy().into(),
@@ -911,6 +918,26 @@ fn copy_tree(source: &Path, target: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unreadable_sites_are_reported_and_preserved_until_repaired() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-sites-error-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let mut manager = Manager::new(layout).unwrap();
+        let saved = manager.layout.data.join("sites.json");
+        fs::write(&saved, b"invalid json").unwrap();
+        let snapshot = manager.snapshot();
+        assert!(snapshot
+            .sites_error
+            .unwrap()
+            .contains("saved site list is invalid"));
+        assert!(!snapshot.domains_pending);
+        assert_eq!(fs::read(&saved).unwrap(), b"invalid json");
+        manager.layout.save_projects(&[]).unwrap();
+        assert!(manager.snapshot().sites_error.is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn settings_save_validates_both_fields_before_changing_either() {

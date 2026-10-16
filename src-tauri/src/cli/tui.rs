@@ -340,6 +340,12 @@ fn draw(
             clean(&snapshot.document_root)
         ));
         lines.push(format!("  Data:       {}", clean(&snapshot.data_dir)));
+        if let Some(error) = &snapshot.sites_error {
+            lines.push(format!(
+                "  Saved sites could not be loaded: {}",
+                clean(error)
+            ));
+        }
     }
     lines.push(String::new());
     lines.push("↑/↓ Select  s Start  x Stop  r Restart  a Start all  z Stop all".into());

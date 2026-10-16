@@ -7,7 +7,7 @@ import { cancelData, databaseRequest, resetData } from './data-browser';
 // Fast Refresh cannot keep a screen subscribed to an obsolete simulation.
 if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
 
-export const scenarios = ['Stopped', 'No sites', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled'] as const;
+export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled'] as const;
 export type Scenario = typeof scenarios[number];
 export type Platform = 'Windows' | 'macOS';
 const events = new EventTarget();
@@ -65,7 +65,8 @@ export function select(next: Scenario, os: Platform) {
   resetData();
   scenario = next; platform = os;
   data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', pathInstalled: true };
-  data.projects = next === 'No sites' ? [] : [
+  data.sitesError = next === 'Saved sites unavailable' ? 'The saved site list is invalid: expected a JSON array.' : null;
+  data.projects = next === 'No sites' || data.sitesError ? [] : [
     { name: 'My Shop', domain: 'shop', root: joinPath(home(), 'Code', 'shop', 'public'), https: true, indexFallback: true, available: next !== 'Missing web root', domainReady: true },
     { name: 'Blog', domain: 'blog', root: joinPath(data.documentRoot, 'blog'), https: false, indexFallback: false, available: true, domainReady: next !== 'Hosts update pending' },
   ];
@@ -94,7 +95,7 @@ export function listen(event: string, callback: (payload: unknown) => void) {
 }
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady) as T;
+  if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
   if (command === 'data_browser') {

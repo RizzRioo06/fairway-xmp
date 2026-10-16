@@ -43,7 +43,14 @@ pub struct StartRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalContext {
     folders: Vec<String>,
+    sites: Vec<SiteFolder>,
     history_supported: bool,
+}
+
+#[derive(Serialize)]
+struct SiteFolder {
+    folder: String,
+    label: String,
 }
 
 struct Session {
@@ -113,18 +120,59 @@ pub fn prepare_tools(layout: &Layout) -> Result<std::path::PathBuf> {
 
 fn directory(layout: &Layout, folder: Option<&str>) -> Result<std::path::PathBuf> {
     use std::path::{Component, Path};
+    // Site tokens resolve only persisted registrations, never arbitrary IPC paths.
+    if let Some(token) = folder {
+        let selection = token
+            .strip_prefix("site:")
+            .map(|domain| (domain, false))
+            .or_else(|| {
+                token
+                    .strip_prefix("site-parent:")
+                    .map(|domain| (domain, true))
+            });
+        if let Some((domain, parent)) = selection {
+            let site = layout
+                .registered_projects()?
+                .into_iter()
+                .find(|site| site.domain == domain)
+                .ok_or("This site is no longer registered.")?;
+            let root = std::fs::canonicalize(&site.root)
+                .map_err(|_| "The site's web root folder is no longer available.".to_string())?;
+            if !root.is_dir() {
+                return Err("The site's web root is not a folder.".into());
+            }
+            let path = if parent {
+                if site
+                    .root
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| !name.eq_ignore_ascii_case("public"))
+                {
+                    return Err("Choose the web root for this site.".into());
+                }
+                let parent = site
+                    .root
+                    .parent()
+                    .ok_or("The application folder is unavailable.")?;
+                std::fs::canonicalize(parent).map_err(|e| e.to_string())?
+            } else {
+                root
+            };
+            return shell_directory(path);
+        }
+    }
     let root = std::fs::canonicalize(&layout.www).map_err(|e| e.to_string())?;
     let Some(folder) = folder else {
         return shell_directory(root);
     };
     let mut parts = Path::new(folder).components();
     if !matches!(parts.next(), Some(Component::Normal(_))) || parts.next().is_some() {
-        return Err("Choose a folder directly inside your coursework folder.".into());
+        return Err("Choose a folder directly inside the default folder.".into());
     }
     let path = std::fs::canonicalize(root.join(folder))
         .map_err(|_| "This folder is no longer available. Refresh the folder list.".to_string())?;
     if !path.starts_with(&root) || !path.is_dir() {
-        return Err("Choose a folder inside your coursework folder.".into());
+        return Err("Choose a folder inside the default folder.".into());
     }
     shell_directory(path)
 }
@@ -171,8 +219,21 @@ pub fn context(layout: &Layout) -> Result<TerminalContext> {
         }
     }
     folders.sort();
+    let mut sites = Vec::new();
+    for site in layout.registered_projects()? {
+        for (prefix, label) in [("site", "web root"), ("site-parent", "app folder")] {
+            let folder = format!("{prefix}:{}", site.domain);
+            if directory(layout, Some(&folder)).is_ok() {
+                sites.push(SiteFolder {
+                    folder,
+                    label: format!("{} — {label}", site.name),
+                });
+            }
+        }
+    }
     Ok(TerminalContext {
         folders,
+        sites,
         history_supported: cfg!(target_os = "macos"),
     })
 }
@@ -951,6 +1012,71 @@ mod tests {
             fixture.terminals.write("project", "pwd\r").unwrap();
             fixture.until("project", name);
         }
+    }
+
+    #[test]
+    fn registered_site_folders_resolve_outside_coursework_and_reject_stale_tokens() {
+        let fixture = Fixture::new();
+        let app = fixture.root.join("code/Student's shop 日本");
+        let web = app.join("public");
+        fs::create_dir_all(&web).unwrap();
+        fixture
+            .layout
+            .save_projects(&[crate::config::ProjectConfig {
+                name: "Shop".into(),
+                domain: "shop".into(),
+                root: web.clone(),
+                https: false,
+                index_fallback: true,
+            }])
+            .unwrap();
+        assert_eq!(
+            directory(&fixture.layout, Some("site:shop")).unwrap(),
+            shell_directory(fs::canonicalize(&web).unwrap()).unwrap()
+        );
+        assert_eq!(
+            directory(&fixture.layout, Some("site-parent:shop")).unwrap(),
+            shell_directory(fs::canonicalize(&app).unwrap()).unwrap()
+        );
+        assert_eq!(context(&fixture.layout).unwrap().sites.len(), 2);
+        for token in ["site:missing", "site:../shop", "site-parent:missing"] {
+            assert!(directory(&fixture.layout, Some(token)).is_err());
+        }
+        fixture.start("existing");
+        let info = fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    folder: Some("site-parent:shop".into()),
+                    ..Fixture::request("shop-app")
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            info.directory,
+            shell_directory(fs::canonicalize(&app).unwrap())
+                .unwrap()
+                .to_string_lossy()
+        );
+        fs::remove_dir(&web).unwrap();
+        assert!(fixture
+            .terminals
+            .start(
+                &fixture.layout,
+                StartRequest {
+                    slot: 1,
+                    folder: Some("site:shop".into()),
+                    ..Fixture::request("stale")
+                }
+            )
+            .is_err());
+        assert!(fixture.terminals.read("existing").is_ok());
+        assert!(fixture.terminals.read("shop-app").is_ok());
+        assert!(context(&fixture.layout).unwrap().sites.is_empty());
+        fixture.layout.save_projects(&[]).unwrap();
+        assert!(directory(&fixture.layout, Some("site-parent:shop")).is_err());
     }
 
     #[cfg(unix)]

@@ -378,6 +378,12 @@ pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<(
             .find(|project| project.domain == name[8..] && project.root.is_dir())
             .map(|project| project_url(&project, website))
             .ok_or("This site's web root folder is missing. Edit the site to choose it again.")?,
+        name if name.starts_with("site-folder:") => layout
+            .registered_projects()?
+            .into_iter()
+            .find(|site| site.domain == name[12..] && site.root.is_dir())
+            .map(|site| site.root.to_string_lossy().into_owned())
+            .ok_or("This site's web root folder is missing. Edit the site to choose it again.")?,
         "coursework" => layout.www.to_string_lossy().into(),
         "logs" => layout.data.join("logs").to_string_lossy().into(),
         "backups" => layout.data.join("backups").to_string_lossy().into(),
