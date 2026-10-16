@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import plistlib
 import sys
+import tempfile
 import unittest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
@@ -21,3 +22,14 @@ class SigningTests(unittest.TestCase):
             self.assertNotIn('--entitlements', sign_macos.signing_command(path, 'Developer ID', app))
         entitlements = plistlib.loads(sign_macos.ENTITLEMENTS.read_bytes())
         self.assertEqual(entitlements, {'com.apple.security.cs.allow-jit': True})
+
+    def test_main_executable_is_signed_only_by_the_final_bundle_step(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / 'Fairway XMP.app'
+            main = app / 'Contents/MacOS/fairway'
+            library = app / 'Contents/Resources/runtime/lib/libexample.dylib'
+            for file in (main, library):
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(bytes.fromhex('cffaedfe'))
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'fairway'}))
+            self.assertEqual(sign_macos.signing_targets(app), [library])

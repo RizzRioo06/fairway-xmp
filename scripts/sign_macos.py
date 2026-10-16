@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
+import plistlib
 import subprocess
 import sys
 from prepare_runtime import macho
@@ -24,6 +25,15 @@ def signing_command(file, identity, app):
     return [*command, str(file)]
 
 
+def signing_targets(app):
+    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+    main_binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
+    # Signing the app seals its main executable. Sign it only at that final
+    # stage, after all nested code and resources are ready.
+    return [file for file in app.rglob('*')
+            if file != main_binary and not file.is_symlink() and macho(file)]
+
+
 def main():
     app, identity = Path(sys.argv[1]), sys.argv[2]
     uninstaller = app / 'Contents/Resources/Uninstall Fairway XMP.command'
@@ -35,7 +45,7 @@ def main():
 
     # Snapshot before signing creates transient files. Symlink aliases are
     # skipped; seal the containing app after every code file has succeeded.
-    files = [file for file in app.rglob('*') if not file.is_symlink() and macho(file)]
+    files = signing_targets(app)
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(sign, files))
     sign(app)

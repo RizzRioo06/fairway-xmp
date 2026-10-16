@@ -10,7 +10,7 @@ The Mac release runner imports only the release identities supplied in `APPLE_CE
 
 ## Build and verify
 
-Dispatch **Release candidate** (`release-candidate.yml`) from the reviewed commit. It runs UI review and the reusable Mac, Windows, and Linux jobs. Signed release inputs are explicit; standalone development jobs remain unsigned unless requested.
+Dispatch **Release candidate** (`release-candidate.yml`) from the reviewed commit, or push a `candidate-*` tag at that commit. Candidate tags trigger builds only; they do not publish releases or promote the feed. It runs UI review and the reusable Mac, Windows, and Linux jobs. Signed release inputs are explicit; standalone development jobs remain unsigned unless requested.
 
 Mac packaging signs all Mach-O code in the final app, notarizes and staples the app, then creates the `.pkg` and `.app.tar.gz` from that app. The installer is separately signed, notarized, and stapled. The updater archive is signed with minisign and bound to its release version. Gatekeeper, stapler, and codesign checks must pass. Only PHP interpreters receive Apple’s `allow-jit` entitlement for PCRE JIT; regex JIT and Composer must run on all six signed PHP versions before notarization. The desktop app, Nginx, MySQL, and libraries receive no JIT exception. A notarized pkg alone would not establish that the app inside an updater archive can run.
 
