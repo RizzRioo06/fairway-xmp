@@ -1,27 +1,27 @@
 # Fairway XMP
 
-A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. Run your web server and database from one control panel, write code in your preferred editor, and manage your data in phpMyAdmin.
+A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. Run your web server and database from one control panel, write code in your preferred editor, and manage your data with the built-in database browser or phpMyAdmin.
 
 ![Fairway XMP control panel with PHP, Nginx, MySQL, and phpMyAdmin running](docs/images/control-panel.png)
 
 ## Downloads
 
-Current release: **[v0.1.0-beta.2](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-beta.2)**.
+Current release: **[v0.1.0-beta.3](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-beta.3)**.
 
 | Computer | Requirements | Download |
 | --- | --- | --- |
-| Windows | Windows 10 22H2 or Windows 11, x64 | [Windows installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.2/fairway-xmp-0.1.0-beta.2-windows-x64-setup.exe) |
-| Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.2/fairway-xmp-0.1.0-beta.2-macos-arm64-unsigned.pkg) |
-| Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.2/fairway-xmp-0.1.0-beta.2-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.2/fairway-xmp-0.1.0-beta.2-linux-x86_64.tar.gz) |
+| Windows | Windows 10 22H2 or Windows 11, x64 | [Windows installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.3/fairway-xmp-0.1.0-beta.3-windows-x64-setup.exe) |
+| Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.3/fairway-xmp-0.1.0-beta.3-macos-arm64.pkg) |
+| Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.3/fairway-xmp-0.1.0-beta.3-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-beta.3/fairway-xmp-0.1.0-beta.3-linux-x86_64.tar.gz) |
 
-Beta 2 installs report `0.1.0-beta.2`. Download the installer for your computer and follow its prompts. The installers are unsigned, so Windows may show an unknown-publisher warning. If macOS blocks the installer or app, follow [Apple’s instructions for opening an app from an unidentified developer](https://support.apple.com/en-us/102445).
+Beta 3 installs report `0.1.0-beta.3`. Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
 
 ## Linux terminal edition
 
 Download the Linux `.run` installer or `.tar.gz` archive from the table above. Linux requires x86_64 and glibc 2.35 or newer; Alpine/musl and ARM are not supported. No desktop, root access, distro packages, Docker or systemd service is required.
 
 ```sh
-sh fairway-xmp-0.1.0-beta.2-linux-x86_64.run
+sh fairway-xmp-0.1.0-beta.3-linux-x86_64.run
 # Reopen your shell after installation:
 fairway                      # terminal dashboard
 fairway start                # start all services
@@ -131,12 +131,17 @@ If a port is already in use, Fairway XMP shows the conflict. Stop all services, 
 
 ## Updates and removal
 
-Open **Updates → View downloads** to get a newer installer. On a Mac, the installer quits a running Fairway XMP and stops its services before replacing the app. On Windows, quit Fairway XMP from the system tray before installing. Your projects and database data are kept.
+From beta 3 onward, macOS and Windows users can choose **Updates → Check for updates → Install update**. Fairway verifies the signed download before backing up databases, stopping services, and installing the update.
+
+**Beta 2 and earlier need one manual installation of beta 3.** Stop services and quit Fairway before installing. Projects, databases, settings, and saved sites are kept.
+
+Linux updates remain manual: download and run the newer `.run` installer over the existing installation, using the same `--prefix` if you chose a custom directory. It backs up databases and stops services before switching versions; projects and data are preserved.
 
 To uninstall:
 
 - **Windows:** open **Settings → Apps**, select **Fairway XMP**, and choose **Uninstall**.
 - **Mac:** quit Fairway XMP, then open **Applications** in Finder. Right-click **Fairway XMP → Show Package Contents**, open **Contents → Resources**, and double-click **Uninstall Fairway XMP.command**.
+- **Linux:** run `fairway uninstall`.
 
 The uninstaller removes the app and its command-line integration. Your projects and database data are kept unless you choose to delete them.
 
@@ -144,4 +149,4 @@ The uninstaller removes the app and its command-line integration. Your projects 
 
 For problems or suggestions, [open an issue](https://github.com/eimg/fairway-xmp/issues). Include your operating system, what you tried, and any error shown in Fairway XMP.
 
-Fairway XMP’s application code uses the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). Release checksums and bundled-tool sources are available on the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-beta.2). For contributing to the app, see [Contributing](CONTRIBUTING.md).
+Fairway XMP’s application code uses the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). Release checksums and bundled-tool sources are available on the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-beta.3). For contributing to the app, see [Contributing](CONTRIBUTING.md).

@@ -1,5 +1,15 @@
 # Follow-up work after PHP version selection
 
+## Beta 3 publication
+
+The release owner authorized publishing `v0.1.0-beta.3` on 2026-10-17 from successful candidate run [38989070274](https://github.com/eimg/fairway-xmp/actions/runs/38989070274), source commit `b860ddc824a1b966a5ffaee81c22b80d07bb6357`. The release tag identifies that tested application commit; later documentation commits update the release notes and download instructions. Publication reuses the exact candidate files without rebuilding.
+
+The [publication workflow](https://github.com/eimg/fairway-xmp/actions/runs/38992340587) verified both updater signatures and uploaded the draft, then failed because draft lookup by tag returned 404. The publisher was corrected to find drafts through the release collection and publish by numeric release ID, with regression tests and exact asset-set validation. Recovery verified all 21 existing asset digests/sizes against the candidate, BUILD-INFO, and release checksums before publishing the same draft; no binary was rebuilt or replaced. The stable `beta-feed/latest.json` was published afterward and points to the versioned beta 3 assets.
+
+Mac app and installer signing/notarization, signed Mac/Windows updater drills, native feature/service/backup tests, browser review, and five Linux distro checks passed. The first rebuild attempt failed after a successful Mac update when Apple's ticket-validation connection dropped; the fresh candidate passed all checks. Issue #3 is fixed by recovering verified Nginx/PHP-FPM masters on Mac after an unexpected exit. Linux updates remain manual; Windows Authenticode remains deferred.
+
+Human acceptance fields remain unchanged: the user's successful subsequent-version Mac update/restart confirmation belongs to the earlier `123ccfe` candidate. Unperformed exact-candidate Windows and protected Mac installation checks are not marked complete by publication. The release notes and candidate manifest retain these limits and the existing legacy PHP/Windows path limitations.
+
 ## Beta 2 publication
 
 The release owner authorized publishing `v0.1.0-beta.2` on 2026-10-16 from successful candidate run [38848919567](https://github.com/eimg/fairway-xmp/actions/runs/38848919567), source commit `764bccae0287af74cca0382359ab3de7853c5f48`. Publication reuses the tested binaries and source archives without rebuilding. The tag identifies that candidate commit; the subsequent publication commit only updates documentation and the publishing workflow.
@@ -12,7 +22,7 @@ Beta 1 is published. The Windows PHP 8.0/8.1 provenance work below remains open 
 
 ## Legacy PHP scope for beta
 
-Beta 3 preparation adds Mac signing/notarization and signed desktop updates; see [signed beta releases](signed-beta-releases.md). Windows Authenticode remains deferred. PHP 8.0/8.1 remain legacy compatibility options, labeled in Advanced settings and CLI help; PHP 8.5 stays the default. No additional legacy runtime expansion or source-mapping research is scheduled in this pass. The provenance work below remains open and is disclosed in candidate metadata; labeling a runtime legacy does not verify its dependency sources.
+Beta 3 adds Mac signing/notarization and signed desktop updates; see [signed beta releases](signed-beta-releases.md). Windows Authenticode remains deferred. PHP 8.0/8.1 remain legacy compatibility options, labeled in Advanced settings and CLI help; PHP 8.5 stays the default. No additional legacy runtime expansion or source-mapping research is scheduled in this pass. The provenance work below remains open and is disclosed in candidate metadata; labeling a runtime legacy does not verify its dependency sources.
 
 The new [beta acceptance process](beta-acceptance.md) covers candidate identity, native lifecycle checks, restore verification, diagnostic reports, and final human review. A green browser run does not complete the remaining native checklist.
 
