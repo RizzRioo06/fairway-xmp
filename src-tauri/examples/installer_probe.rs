@@ -30,7 +30,7 @@ fn run() -> Result<()> {
     let coursework = manager.layout.www.join("beta-installer-check.php");
     let result = (|| -> Result<()> {
         if seed {
-            let listeners = (0..4)
+            let listeners = (0..6)
                 .map(|_| TcpListener::bind(("127.0.0.1", 0)))
                 .collect::<std::io::Result<Vec<_>>>()
                 .map_err(|e| e.to_string())?;
@@ -43,6 +43,8 @@ fn run() -> Result<()> {
                 phpmyadmin: ports[1],
                 mysql: ports[2],
                 php: ports[3],
+                mail: ports[4],
+                smtp: ports[5],
             };
             drop(listeners);
             manager.save_ports(ports)?;
@@ -81,11 +83,13 @@ fn run() -> Result<()> {
             );
         }
         manager.start_all()?;
+        // The baseline installer predates Mailpit; every other service must still be ready.
+        let mail_available = manager.mail_available();
         assert!(manager
             .snapshot()
             .services
             .iter()
-            .all(|service| service.ready));
+            .all(|service| service.ready || (service.id == "mail" && !mail_available)));
         let mysql = || {
             let mut command = process::command(manager.layout.exe("mysql", "mysql"));
             command

@@ -45,7 +45,11 @@ impl MacMenu {
         let stop_all = MenuItem::with_id("stop_all", "Stop all", false, None);
         let mut services = Vec::new();
         let mut submenus = Vec::new();
-        for (id, name, row) in [("nginx", "Nginx", 5), ("mysql", "MySQL", 6)] {
+        for (id, name, row) in [
+            ("nginx", "Nginx", 5),
+            ("mysql", "MySQL", 6),
+            ("mail", "Mail", 7),
+        ] {
             let start = MenuItem::with_id(format!("start:{id}"), "Start", false, None);
             let stop = MenuItem::with_id(format!("stop:{id}"), "Stop", false, None);
             submenus.push(
@@ -79,6 +83,7 @@ impl MacMenu {
             &PredefinedMenuItem::separator(),
             &submenus[0],
             &submenus[1],
+            &submenus[2],
             &admin,
             &PredefinedMenuItem::separator(),
             &quit,
@@ -103,28 +108,17 @@ impl MacMenu {
         // the duration of the update; no native objects cross threads.
         let menu = unsafe { Retained::retain(self.menu.ns_menu().cast::<NSMenu>()) }
             .ok_or("The native tray menu is unavailable.")?;
-        for (row, label, status) in [
-            (
-                self.services[0].row,
-                self.services[0].name,
-                self.services[0].status,
-            ),
-            (
-                self.services[1].row,
-                self.services[1].name,
-                self.services[1].status,
-            ),
-        ] {
+        for service in &self.services {
             let item = menu
-                .itemAtIndex(row)
+                .itemAtIndex(service.row)
                 .ok_or("A tray menu item is unavailable.")?;
-            let text = NSString::from_str(&format!("{label}  ●"));
+            let text = NSString::from_str(&format!("{}  ●", service.name));
             let title = NSMutableAttributedString::initWithString(
                 NSMutableAttributedString::alloc(),
                 &text,
             );
             let dot = NSRange::new(text.length() - 1, 1);
-            let (red, green, blue) = status.rgb();
+            let (red, green, blue) = service.status.rgb();
             let text_color = if item.isEnabled() {
                 NSColor::labelColor()
             } else {
@@ -188,9 +182,11 @@ impl MacMenu {
         for service in &mut self.services {
             if let Some(status) = snapshot.services.iter().find(|s| s.id == service.id) {
                 service.status = Status::service(status.ready);
-                service
-                    .start
-                    .set_enabled(snapshot.runtime_ready && !status.running);
+                service.start.set_enabled(
+                    snapshot.runtime_ready
+                        && !status.running
+                        && (service.id != "mail" || snapshot.mail_available),
+                );
                 service.stop.set_enabled(status.running);
             }
         }
@@ -240,7 +236,9 @@ impl NativeTray {
                 "show" => desktop::show_window(app),
                 "quit" => desktop::request_quit(app),
                 id @ ("start_all" | "stop_all" | "phpmyadmin" | "start:nginx" | "stop:nginx"
-                | "start:mysql" | "stop:mysql") => desktop::tray_action(app, id),
+                | "start:mysql" | "stop:mysql" | "start:mail" | "stop:mail") => {
+                    desktop::tray_action(app, id)
+                }
                 _ => (),
             })
             .build(app)?;

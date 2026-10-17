@@ -354,8 +354,8 @@ fn execute(manager: &mut Manager, request: Request) -> Result<serde_json::Value>
 }
 
 fn service_action(manager: &mut Manager, service: &str, start: bool) -> Result<()> {
-    if !["all", "nginx", "mysql"].contains(&service) {
-        return Err("Choose all, nginx or mysql.".into());
+    if !["all", "nginx", "mysql", "mail"].contains(&service) {
+        return Err("Choose all, nginx, mysql or mail.".into());
     }
     if service == "all" {
         if start {

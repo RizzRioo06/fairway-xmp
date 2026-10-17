@@ -36,7 +36,7 @@ fn main() -> Result<(), String> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime"),
     );
     let mut manager = Manager::new(layout)?;
-    let listeners: Vec<_> = (0..4)
+    let listeners: Vec<_> = (0..6)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)).unwrap())
         .collect();
     let ports: Vec<_> = listeners
@@ -48,6 +48,8 @@ fn main() -> Result<(), String> {
         phpmyadmin: ports[1],
         mysql: ports[2],
         php: ports[3],
+        mail: ports[4],
+        smtp: ports[5],
     })?;
     drop(listeners);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(

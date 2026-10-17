@@ -36,7 +36,7 @@ fairway backup               # requires running MySQL
 fairway shutdown             # stop services and the supervisor
 ```
 
-In the dashboard, use ↑/↓ to select Nginx or MySQL, `s` to start, `x` to stop, `r` to restart, `a` to start all, `z` to stop all, `l` for logs, `f` for PHP logs, `p` for ports and `b` for a database backup. **`q` closes the dashboard and leaves services running; `Q` shuts everything down.** Run `fairway --help` for CLI commands. phpMyAdmin remains a browser interface at the displayed URL.
+In the dashboard, use ↑/↓ to select Nginx, MySQL or Mail, `s` to start, `x` to stop, `r` to restart, `a` to start all, `z` to stop all, `l` for logs, `f` for PHP logs, `p` for ports and `b` for a database backup. **`q` closes the dashboard and leaves services running; `Q` shuts everything down.** Run `fairway --help` for CLI commands. phpMyAdmin remains a browser interface at the displayed URL.
 
 The installer defaults to `~/.local/share/fairway-xmp`; use `--prefix /absolute/path` for another dedicated directory. It enables Fairway, PHP and Composer through managed Bash/Zsh profile blocks. `fairway remove-cli` removes that integration. `fairway shell` opens a shell with bundled PHP/Composer available without editing profiles. Fish users can invoke the displayed absolute Fairway path or add it to their shell’s PATH themselves.
 
@@ -51,6 +51,7 @@ Re-running the installer backs up an existing student database and stops service
 - **Nginx 1.30.5** for serving your projects.
 - **MySQL 9.7.2 LTS** for local databases.
 - **phpMyAdmin 5.2.3** for managing tables and data in your browser.
+- **Mailpit 1.31.6** for catching the emails your apps send.
 
 The control panel provides service controls, port settings, logs, and database backups.
 
@@ -79,7 +80,7 @@ Each site has an optional **HTTPS** switch. The first time you turn it on, Fairw
 
 On Linux, use `fairway site add shop ~/code/shop/public --name "My Shop" --index`, `fairway site remove shop`, `fairway site https shop on|off`, and `fairway site hosts` to retry a hosts-file update. `fairway status` lists sites. Hosts-file and certificate changes ask for your sudo password. Browser trust stores can differ on Linux; if a browser still warns, check its certificate settings rather than bypassing the warning.
 
-Closing or minimizing the window keeps Fairway XMP and its services running. Use its macOS menu bar or Windows system tray icon to reopen the panel, start/stop all services or individual Nginx/MySQL services, open phpMyAdmin, or **Quit**. Nginx automatically manages its PHP worker; PHP CLI works without starting services. Quit gracefully stops all services before exiting.
+Closing or minimizing the window keeps Fairway XMP and its services running. Use its macOS menu bar or Windows system tray icon to reopen the panel, start/stop all services or individual Nginx/MySQL/Mail services, open phpMyAdmin, or **Quit**. Nginx automatically manages its PHP worker; PHP CLI works without starting services. Quit gracefully stops all services before exiting.
 
 ## PHP and Composer in your terminal
 
@@ -120,6 +121,18 @@ To save a SQL backup, click **Back up databases**. Find saved backups under **Se
 
 For complete database recovery, including routines and triggers, follow the [backup and restore guide](docs/backup-and-restore.md). Support reports are available under **Settings → Help and diagnostics** or with `fairway diagnostics` on Linux.
 
+## Test emails
+
+Fairway XMP catches every email your PHP apps send, so nothing reaches real inboxes. **Start all** also starts Mail. Open **Mail** in the sidebar to read, search, and delete caught emails, and to save attachments. Images from the internet are not loaded in the preview; use **Open in browser** for Mailpit’s full inbox at [http://127.0.0.1:8802/](http://127.0.0.1:8802/).
+
+PHP’s `mail()` works without any setup. For Laravel and other frameworks that send through SMTP, copy the settings from the Mail page:
+
+```
+MAIL_MAILER=smtp
+MAIL_HOST=127.0.0.1
+MAIL_PORT=11025
+```
+
 ## Ports
 
 | Service | Default port |
@@ -128,6 +141,8 @@ For complete database recovery, including routines and triggers, follow the [bac
 | phpMyAdmin | `8801` |
 | MySQL | `13306` |
 | PHP’s connection to Nginx | `19000` |
+| Mail inbox | `8802` |
+| Mail SMTP | `11025` |
 
 If a port is already in use, Fairway XMP shows the conflict. Stop all services, change the port in **Settings**, and save. If you change the MySQL port, use the new port in your project’s database settings.
 

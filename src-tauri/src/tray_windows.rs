@@ -69,7 +69,7 @@ impl NativeTray {
         let start_all = item("start_all", "Start all")?;
         let stop_all = item("stop_all", "Stop all")?;
         let mut services = Vec::new();
-        for (id, name) in [("nginx", "Nginx"), ("mysql", "MySQL")] {
+        for (id, name) in [("nginx", "Nginx"), ("mysql", "MySQL"), ("mail", "Mail")] {
             let start = MenuItem::with_id(app, format!("start:{id}"), "Start", true, None::<&str>)?;
             let stop = MenuItem::with_id(app, format!("stop:{id}"), "Stop", true, None::<&str>)?;
             let menu = SubmenuBuilder::with_id(app, format!("service:{id}"), name)
@@ -99,6 +99,7 @@ impl NativeTray {
                 &separator2,
                 &services[0].menu,
                 &services[1].menu,
+                &services[2].menu,
                 &admin,
                 &separator3,
                 &quit,
@@ -113,7 +114,9 @@ impl NativeTray {
                 "show" => desktop::show_window(app),
                 "quit" => desktop::request_quit(app),
                 id @ ("start_all" | "stop_all" | "phpmyadmin" | "start:nginx" | "stop:nginx"
-                | "start:mysql" | "stop:mysql") => desktop::tray_action(app, id),
+                | "start:mysql" | "stop:mysql" | "start:mail" | "stop:mail") => {
+                    desktop::tray_action(app, id)
+                }
                 _ => (),
             })
             .build(app)?;
@@ -162,9 +165,11 @@ impl NativeTray {
                         .ready
                         .store(status.ready, std::sync::atomic::Ordering::Relaxed);
                 }
-                service
-                    .start
-                    .set_enabled(snapshot.runtime_ready && !status.running)?;
+                service.start.set_enabled(
+                    snapshot.runtime_ready
+                        && !status.running
+                        && (service.id != "mail" || snapshot.mail_available),
+                )?;
                 service.stop.set_enabled(status.running)?;
             }
         }

@@ -29,7 +29,7 @@ pub fn prepare(manager: &mut Manager) -> Result<()> {
 /// NSIS checks these files before upgrading. Never conceal a live process by
 /// deleting its marker; only remove stale markers after graceful shutdown.
 pub fn clear_stopped_markers(layout: &Layout) -> Result<()> {
-    for name in ["mysql.pid", "nginx.pid", "php.pid"] {
+    for name in ["mysql.pid", "nginx.pid", "php.pid", "mail.pid"] {
         let path = layout.data.join(name);
         let text = match std::fs::read_to_string(&path) {
             Ok(text) => text,

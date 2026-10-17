@@ -4,6 +4,7 @@ pub mod database;
 pub mod diagnostics;
 pub mod hosts;
 pub mod integration;
+pub mod mail;
 pub mod manager;
 pub mod process;
 pub mod tls;

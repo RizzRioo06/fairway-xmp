@@ -411,6 +411,38 @@ fn macos_executable_matches(pid: u32, expected: &Path) -> bool {
     }
 }
 
+/// Whether `pid` runs `executable` with exactly `args`, for services that keep their command line.
+#[cfg(unix)]
+pub fn matches_command(pid: u32, executable: &Path, args: &[String]) -> bool {
+    #[cfg(target_os = "linux")]
+    let executable_matches = linux_executable_matches(pid, executable);
+    #[cfg(target_os = "macos")]
+    let executable_matches = macos_executable_matches(pid, executable);
+    if !pid_alive(pid) || !executable_matches {
+        return false;
+    }
+    let expected = std::iter::once(executable.to_string_lossy().into_owned())
+        .chain(args.iter().cloned())
+        .collect::<Vec<_>>();
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read(format!("/proc/{pid}/cmdline")).is_ok_and(|bytes| {
+            bytes
+                .strip_suffix(b"\0")
+                .unwrap_or(&bytes)
+                .split(|b| *b == 0)
+                .map(|arg| String::from_utf8_lossy(arg).into_owned())
+                .eq(expected)
+        })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = command("/bin/ps");
+        cmd.args(["-ww", "-p", &pid.to_string(), "-o", "command="]);
+        output(cmd).is_ok_and(|line| line == expected.join(" "))
+    }
+}
+
 #[cfg(unix)]
 pub fn matches_web(pid: u32, id: &str, layout: &crate::config::Layout) -> bool {
     let exe = match id {
@@ -558,6 +590,27 @@ mod tests {
         assert!(!macos_executable_matches(std::process::id(), &different));
         assert!(!macos_executable_matches(0, &actual));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_identity_requires_the_exact_arguments() {
+        let mut child = command("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        // Pass the path as launched; the binary check resolves symlinks itself.
+        let sleep = Path::new("/bin/sleep");
+        // Linux can briefly report the pre-exec image right after spawn returns.
+        assert!((0..100).any(|_| {
+            matches_command(pid, sleep, &["30".into()]) || {
+                std::thread::sleep(Duration::from_millis(10));
+                false
+            }
+        }));
+        assert!(!matches_command(pid, sleep, &["31".into()]));
+        assert!(!matches_command(pid, Path::new("/bin/sh"), &["30".into()]));
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert!(!matches_command(pid, sleep, &["30".into()]));
     }
 
     #[cfg(windows)]

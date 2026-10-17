@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         project.join(".fairway-terminal-location"),
         b"PROJECT_FOLDER_VERIFIED",
     )?;
-    let listeners: Vec<_> = (0..4)
+    let listeners: Vec<_> = (0..6)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)))
         .collect::<Result<_, _>>()?;
     let ports: Vec<_> = listeners
@@ -55,6 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             phpmyadmin: ports[1],
             mysql: ports[2],
             php: ports[3],
+            mail: ports[4],
+            smtp: ports[5],
         })
         .map_err(io::Error::other)?;
     drop(listeners);

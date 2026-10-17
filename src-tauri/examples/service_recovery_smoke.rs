@@ -25,7 +25,7 @@ mod smoke {
 
     fn start_controller(root: &Path, runtime: &Path) -> Result<(), String> {
         let mut manager = Manager::new(layout(root, runtime))?;
-        let listeners = (0..4)
+        let listeners = (0..6)
             .map(|_| TcpListener::bind(("127.0.0.1", 0)))
             .collect::<std::io::Result<Vec<_>>>()
             .map_err(|e| e.to_string())?;
@@ -39,6 +39,8 @@ mod smoke {
             phpmyadmin: ports[1],
             mysql: ports[2],
             php: ports[3],
+            mail: ports[4],
+            smtp: ports[5],
         })?;
         manager.start("nginx")?;
         fs::write(

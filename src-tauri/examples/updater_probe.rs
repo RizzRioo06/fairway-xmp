@@ -32,7 +32,7 @@ async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
                 .build().map_err(|e| e.to_string())?
                 .check().await.map_err(|e| e.to_string())?.ok_or("Test update missing")?;
             assert!(update.download(|_, _| {}, || {}).await.is_err());
-            assert!(manager.snapshot().services.iter().all(|s| s.running && s.ready));
+            assert!(manager.snapshot().services.iter().all(|s| (s.running && s.ready) || (s.id == "mail" && !manager.mail_available())));
         }
         let builder = app.updater_builder()
             .executable_path(executable.clone())
@@ -47,7 +47,7 @@ async fn exercise(app: tauri::AppHandle, args: Vec<String>) -> Result<()> {
         update.timeout = Some(Duration::from_secs(600));
         let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
         eprintln!("Updater drill: valid download and version verified");
-        assert!(manager.snapshot().services.iter().all(|s| s.ready));
+        assert!(manager.snapshot().services.iter().all(|s| s.ready || (s.id == "mail" && !manager.mail_available())));
         let backups = fs::read_dir(manager.layout.data.join("backups")).map_err(|e| e.to_string())?.count();
         updates::prepare(&mut manager)?;
         eprintln!("Updater drill: databases backed up and services stopped");

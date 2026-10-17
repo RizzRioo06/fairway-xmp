@@ -377,10 +377,12 @@ pub fn project_url(project: &crate::config::ProjectConfig, website: u16) -> Stri
     }
 }
 
-pub fn open(layout: &Layout, target: &str, website: u16, admin: u16) -> Result<()> {
+pub fn open(layout: &Layout, target: &str, ports: &crate::config::Ports) -> Result<()> {
+    let website = ports.website;
     let path = match target {
         "website" => format!("http://127.0.0.1:{website}/"),
-        "phpmyadmin" => format!("http://127.0.0.1:{admin}/"),
+        "phpmyadmin" => format!("http://127.0.0.1:{}/", ports.phpmyadmin),
+        "mail" => format!("http://127.0.0.1:{}/", ports.mail),
         "releases" => "https://github.com/eimg/fairway-xmp/releases".into(),
         "source" => "https://github.com/eimg/fairway-xmp".into(),
         "issues" => "https://github.com/eimg/fairway-xmp/issues".into(),
