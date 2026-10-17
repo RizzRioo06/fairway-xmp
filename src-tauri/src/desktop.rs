@@ -268,6 +268,40 @@ async fn data_browser(
 }
 
 #[tauri::command]
+async fn mail_inbox(
+    state: State<'_, Shared>,
+    request: crate::mail::Request,
+) -> Result<serde_json::Value> {
+    let port = access(state.inner().clone(), |m| Ok(m.ports.mail)).await?;
+    tauri::async_runtime::spawn_blocking(move || crate::mail::execute(port, request))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn save_mail_attachment(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    id: String,
+    part: String,
+    name: String,
+) -> Result<Option<PathBuf>> {
+    use tauri_plugin_dialog::DialogExt;
+    let port = access(state.inner().clone(), |m| Ok(m.ports.mail)).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = crate::mail::attachment(port, &id, &part)?;
+        let Some(path) = app.dialog().file().set_file_name(name).blocking_save_file() else {
+            return Ok(None);
+        };
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        std::fs::write(&path, bytes).map_err(|e| format!("Could not save the attachment: {e}"))?;
+        Ok(Some(path))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn cancel_data_browser(app: tauri::AppHandle, id: String) -> Result<()> {
     app.state::<crate::data_browser::Jobs>().cancel(&id);
     Ok(())
@@ -833,6 +867,8 @@ pub fn run() {
             diagnostic_report,
             data_browser,
             cancel_data_browser,
+            mail_inbox,
+            save_mail_attachment,
             service_action,
             save_settings,
             save_project,

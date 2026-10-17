@@ -9,6 +9,7 @@ import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot,
 import HelpTip from './HelpTip';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
+import MailPage from './MailPage';
 import { insideDocumentRoot, siteSaveMessage } from './sites';
 import type { TerminalLaunch } from './TerminalPage';
 
@@ -24,10 +25,11 @@ const meta = {
   mail: { name: 'Mail', description: 'Catches emails your apps send', icon: Mail, version: 'mailpit', color: 'teal' },
 } as const;
 
-type View = 'environment' | 'projects' | 'settings' | 'updates' | 'data' | 'terminal';
+type View = 'environment' | 'projects' | 'mail' | 'settings' | 'updates' | 'data' | 'terminal';
 const viewTitle: Record<View, string> = {
   environment: 'Environment',
   projects: 'Sites',
+  mail: 'Mail',
   settings: 'Settings',
   updates: 'Updates',
   data: 'Data browser',
@@ -69,6 +71,7 @@ export default function App() {
   const [report, setReport] = useState<string | null>(null);
   const [log, setLog] = useState<{ service: ServiceId; text: string } | null>(null);
   const [help, setHelp] = useState(false);
+  const [mailSettings, setMailSettings] = useState(false);
   const [ports, setPorts] = useState<Ports>(preview.ports);
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
@@ -173,6 +176,7 @@ export default function App() {
   }
 
   function open(target: string) {
+    if (target === 'mail') { setView('mail'); return; }
     if (target === 'terminal') { setTerminalOpened(true); setView('terminal'); setTerminalFocus(value => value + 1); return; }
     void run('Opening…', () => invoke<void>('open_target', { target }));
   }
@@ -230,6 +234,7 @@ export default function App() {
     } catch (error) { setProjectForm({ ...form, error: message(error) }); }
   }
 
+  const mailEnv = `MAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=${data.ports.smtp}\nMAIL_USERNAME=null\nMAIL_PASSWORD=null`;
   const connection = `DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=${data.ports.mysql}\nDB_DATABASE=fairway\nDB_USERNAME=fairway\nDB_PASSWORD=fairway`;
 
   return <div className="app-shell">
@@ -240,6 +245,7 @@ export default function App() {
       <nav aria-label="Main navigation">
         <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
         <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} onClick={() => setView('projects')}><AppWindow size={18} />Sites</button>
+        <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mail')}><Mail size={18} />Mail</button>
         {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Data browser</button>}
         <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
         <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
@@ -253,7 +259,7 @@ export default function App() {
 
     <main>
       <header className="topbar"><span>Workspace <ChevronRight size={13} />{viewTitle[view]}</span><span className="local-pill"><span />Local environment</span></header>
-      <div className="main-content">
+      <div className={view === 'mail' ? 'main-content wide' : 'main-content'}>
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
         {notice && <div ref={noticeRef} className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
@@ -292,6 +298,10 @@ export default function App() {
           https={(site, enabled) => { if (enabled && !data.httpsTrusted) setSslSetup(site); else setHttps(site, enabled); }}
           removeTrust={() => { void run('Removing certificate trust…', async () => { setData(await invoke<Snapshot>('remove_https_trust')); setNotice({ kind: 'success', text: 'Fairway’s local certificate is no longer trusted.' }); }); }}
         />}
+
+        {view === 'mail' && <MailPage data={data} busy={!!busy} settings={() => setMailSettings(true)}
+          start={() => serviceAction('start', 'mail')} stop={() => serviceAction('stop', 'mail')} logs={() => showLog('mail')}
+          open={() => { void run('Opening…', () => invoke<void>('open_target', { target: 'mail' })); }} />}
 
         {view === 'settings' && <>
           <div className="page-heading"><div><h1>Environment settings.</h1><p>Predictable defaults, with room to adjust.</p></div></div>
@@ -347,6 +357,7 @@ export default function App() {
 
     {report !== null && <Modal title="Diagnostic report" onClose={() => setReport(null)}><p>Copy this report when asking for help. You can review everything included below.</p><pre className="log-output">{report}</pre><button className="secondary" onClick={() => { void copy(report, 'diagnostics'); }}>{copied === 'diagnostics' ? <Check size={14} /> : <Clipboard size={14} />}{copied === 'diagnostics' ? 'Copied' : 'Copy diagnostic report'}</button></Modal>}
     {log && <Modal title={`${meta[log.service].name} logs`} onClose={() => setLog(null)}><pre className="log-output">{log.text}</pre><button className="secondary" disabled={!!busy} onClick={() => showLog(log.service)}><RefreshCw size={15} />Refresh log</button></Modal>}
+    {mailSettings && <Modal title="Mail connection" onClose={() => setMailSettings(false)}><p>PHP’s <code>mail()</code> already sends here. Frameworks that send through SMTP need these settings.</p><dl className="mail-settings"><div><dt>SMTP host</dt><dd>127.0.0.1</dd></div><div><dt>Port</dt><dd>{data.ports.smtp}</dd></div><div><dt>Username / password</dt><dd>Not required</dd></div></dl><div className="card-title mail-env-title"><h2>Laravel .env</h2><button className="secondary" aria-label="Copy Laravel mail settings" onClick={() => { void copy(mailEnv, 'mail-env'); }}>{copied === 'mail-env' ? <Check size={14} /> : <Clipboard size={14} />}{copied === 'mail-env' ? 'Copied' : 'Copy'}</button></div><pre className="log-output">{mailEnv}</pre></Modal>}
     {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open the default web folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Closing this window keeps services running. Use the Fairway XMP menu bar or system tray icon to reopen the panel, control services, or quit. Quitting stops all services.</p></Modal>}
     {projectForm && <Modal title={projectForm.previous ? 'Edit site' : 'Add site'} onClose={() => setProjectForm(null)} backdropCloses={false}><form className="project-form modal-form" onSubmit={event => { event.preventDefault(); saveProject(projectForm); }}><div className="modal-form-body">
       <label><span>Site name</span><input aria-label="Site name" disabled={!!busy} value={projectForm.name} maxLength={80} required onChange={event => { const name = event.target.value; setProjectForm({ ...projectForm, name, domain: projectForm.domainEdited ? projectForm.domain : suggestDomain(name) }); }} /></label>

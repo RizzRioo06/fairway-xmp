@@ -123,9 +123,9 @@ For complete database recovery, including routines and triggers, follow the [bac
 
 ## Test emails
 
-Fairway XMP catches every email your PHP apps send, so nothing reaches real inboxes. **Start all** also starts Mail. Click **Open Mail** on the Mail card to read caught emails in your browser at [http://127.0.0.1:8802/](http://127.0.0.1:8802/).
+Fairway XMP catches every email your PHP apps send, so nothing reaches real inboxes. **Start all** also starts Mail. Open **Mail** in the sidebar to read, search, and delete caught emails, and to save attachments. Images from the internet are not loaded in the preview; use **Open in browser** for Mailpit’s full inbox at [http://127.0.0.1:8802/](http://127.0.0.1:8802/).
 
-PHP’s `mail()` works without any setup. For Laravel and other frameworks that send through SMTP, use these settings:
+PHP’s `mail()` works without any setup. For Laravel and other frameworks that send through SMTP, copy the settings from the Mail page:
 
 ```
 MAIL_MAILER=smtp

@@ -2,6 +2,7 @@
 use fairway_core::{
     config::{Layout, Ports, ProjectConfig},
     integration,
+    mail::{self, Request},
     manager::Manager,
     process,
 };
@@ -252,8 +253,26 @@ fn main() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
             let sent = http(chosen.website, "/mail.php");
             assert!(sent.contains("bool(true)"), "{sent}");
-            let inbox = http(chosen.mail, "/api/v1/messages");
-            assert!(inbox.contains("Smoke mail"), "{inbox}");
+            // The native inbox reads, opens, and deletes caught mail through Mailpit's API.
+            let inbox = mail::execute(
+                chosen.mail,
+                Request::List {
+                    query: "Smoke".into(),
+                },
+            )?;
+            assert_eq!(inbox["messages_count"], 1, "{inbox}");
+            let id = inbox["messages"][0]["ID"].as_str().unwrap().to_string();
+            let opened = mail::execute(chosen.mail, Request::Message { id: id.clone() })?;
+            assert!(opened["Text"].as_str().unwrap().contains("Caught locally"));
+            mail::execute(chosen.mail, Request::Delete { ids: vec![id] })?;
+            mail::execute(chosen.mail, Request::Clear)?;
+            let empty = mail::execute(
+                chosen.mail,
+                Request::List {
+                    query: String::new(),
+                },
+            )?;
+            assert_eq!(empty["messages_count"], 0, "{empty}");
         }
         assert!(http_host(chosen.website, "/", "plain-project.test").contains("plain project"));
         assert!(http_host(chosen.website, "/courses/1", "shop.test")

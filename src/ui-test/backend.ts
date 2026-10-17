@@ -1,6 +1,6 @@
 import { preview } from '../bridge';
 import { terminalRequest } from './terminal';
-import type { Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
+import type { MailMessage, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
 import { cancelData, databaseRequest, resetData } from './data-browser';
 
 // Fixture modules own event subscriptions and state. Reload them together so
@@ -15,6 +15,39 @@ let scenario: Scenario = 'Stopped';
 export const defaultPlatform: Platform = navigator.platform.startsWith('Mac') ? 'macOS' : 'Windows';
 let platform: Platform = defaultPlatform;
 let data: Snapshot;
+let mailbox: (MailMessage & { Read: boolean })[] = [];
+
+function seedMail() {
+  const from = { Name: 'My Shop', Address: 'orders@shop.test' };
+  const to = [{ Name: 'Student May', Address: 'may@example.com' }];
+  const at = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+  mailbox = [
+    { ID: 'welcome', From: from, To: to, Cc: null, Subject: 'Welcome to My Shop', Date: at(2), Read: false, Attachments: [], Text: 'Thanks for joining My Shop.', HTML: '<h1 style="color:#1e654c">Welcome!</h1><p>Thanks for joining <strong>My Shop</strong>.</p><script>document.body.textContent = "scripts must not run"</script>' },
+    { ID: 'reset', From: from, To: to, Cc: null, Subject: 'Reset your password', Date: at(65), Read: true, Attachments: [], Text: 'Use this link to reset your password: http://shop.test:8800/reset/abc', HTML: '' },
+    { ID: 'invoice', From: { Name: '', Address: 'billing@shop.test' }, To: to, Cc: [{ Name: '', Address: 'accounts@shop.test' }], Subject: 'Invoice #1042', Date: at(60 * 26), Read: true, Attachments: [{ PartID: '2', FileName: 'invoice-1042.pdf', ContentType: 'application/pdf', Size: 48213 }], Text: 'Your invoice is attached.', HTML: '<p>Your invoice is attached.</p>' },
+  ];
+}
+
+function mailRequest(request: { action: string; query?: string; id?: string; ids?: string[] }) {
+  if (!data.services.find(service => service.id === 'mail')?.ready) throw new Error('Mail is not running. Start mail to see caught emails.');
+  if (request.action === 'list') {
+    const query = (request.query ?? '').trim().toLowerCase();
+    const found = mailbox.filter(item => !query || `${item.Subject} ${item.From?.Address} ${item.Text}`.toLowerCase().includes(query));
+    return {
+      messages_count: found.length, messages_unread: found.filter(item => !item.Read).length,
+      messages: found.map(({ ID, Read, From, To, Subject, Date: Created, Text, Attachments }) => ({ ID, Read, From, To, Subject, Created, Snippet: Text.slice(0, 80), Attachments: Attachments?.length ?? 0 })),
+    };
+  }
+  if (request.action === 'message') {
+    const item = mailbox.find(entry => entry.ID === request.id);
+    if (!item) throw new Error('This email is no longer available.');
+    item.Read = true;
+    return item;
+  }
+  if (request.action === 'delete') { mailbox = mailbox.filter(item => !request.ids?.includes(item.ID)); return null; }
+  if (request.action === 'clear') { mailbox = []; return null; }
+  throw new Error('Unsupported simulated mail request.');
+}
 
 function emit(event: string, payload: unknown) {
   events.dispatchEvent(new CustomEvent(event, { detail: payload }));
@@ -63,6 +96,7 @@ function running(id: ServiceId, value: boolean) {
 
 export function select(next: Scenario, os: Platform) {
   resetData();
+  seedMail();
   scenario = next; platform = os;
   data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', pathInstalled: true };
   data.sitesError = next === 'Saved sites unavailable' ? 'The saved site list is invalid: expected a JSON array.' : null;
@@ -97,6 +131,8 @@ export function listen(event: string, callback: (payload: unknown) => void) {
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
+  if (command === 'save_mail_attachment') return `/Users/you/Downloads/${String(args.name)}` as T;
+  if (command === 'mail_inbox') return structuredClone(mailRequest(args.request as Parameters<typeof mailRequest>[0])) as T;
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
   if (command === 'data_browser') {
     if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');

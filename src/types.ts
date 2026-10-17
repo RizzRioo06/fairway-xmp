@@ -15,3 +15,8 @@ export type Snapshot = {
 };
 export type UpdateInfo = { configured: boolean; version: string | null; notes: string | null };
 export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'preparing' | 'installing'; downloaded?: number; total?: number | null };
+export type MailAddress = { Name: string; Address: string };
+export type MailSummary = { ID: string; Read: boolean; From: MailAddress | null; To: MailAddress[] | null; Subject: string; Created: string; Snippet: string; Attachments: number };
+export type MailList = { messages: MailSummary[]; messages_count: number; messages_unread: number };
+export type MailAttachment = { PartID: string; FileName: string; ContentType: string; Size: number };
+export type MailMessage = { ID: string; From: MailAddress | null; To: MailAddress[] | null; Cc: MailAddress[] | null; Subject: string; Date: string; HTML: string; Text: string; Attachments: MailAttachment[] | null };
