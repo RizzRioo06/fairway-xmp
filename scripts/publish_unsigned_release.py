@@ -40,6 +40,27 @@ def published_name(target, name):
     return name
 
 
+def find_draft_release(repo, tag):
+    # GitHub's by-tag endpoint can return 404 for an unpublished draft.
+    releases = run_json('gh', 'api', f'repos/{repo}/releases?per_page=100')
+    matches = [release for release in releases if release['tag_name'] == tag]
+    require(len(matches) == 1, f'Expected exactly one uploaded draft for {tag}')
+    require(matches[0].get('draft') is True, f'{tag} is no longer a draft')
+    return matches[0]
+
+
+def verify_uploaded_assets(release, stage):
+    paths = [path for path in stage.iterdir() if path.is_file()]
+    assets = release.get('assets', [])
+    actual = {asset['name']: asset for asset in assets}
+    require(len(actual) == len(assets) and set(actual) == {path.name for path in paths},
+            'Uploaded release asset set does not match the tested files')
+    for path in paths:
+        asset = actual[path.name]
+        require(asset.get('digest') == 'sha256:' + sha256(path) and asset.get('size') == path.stat().st_size,
+                f'Uploaded release asset does not match the tested file: {path.name}')
+
+
 def main(signed=False):
     repo = os.environ['GH_REPO']
     run_id = os.environ['FAIRWAY_RUN_ID']
@@ -144,13 +165,12 @@ def main(signed=False):
             *sorted(stage.iterdir(), key=lambda path: path.name),
         ])
         if signed:
-            uploaded = run_json('gh', 'api', f'repos/{repo}/releases/tags/{tag}')
-            actual = {asset['name']: asset for asset in uploaded['assets']}
-            for path in stage.iterdir():
-                asset = actual.get(path.name, {})
-                require(asset.get('digest') == 'sha256:' + sha256(path) and asset.get('size') == path.stat().st_size,
-                        f'Uploaded release asset does not match the tested file: {path.name}')
-            subprocess.check_call(['gh', 'release', 'edit', tag, '--repo', repo, '--draft=false'])
+            uploaded = find_draft_release(repo, tag)
+            verify_uploaded_assets(uploaded, stage)
+            subprocess.check_call([
+                'gh', 'api', '--method', 'PATCH', f'repos/{repo}/releases/{uploaded["id"]}',
+                '--silent', '-F', 'draft=false', '-F', 'prerelease=true', '-f', 'make_latest=false',
+            ])
             print('Versioned release published. Publish the beta feed as the final step using publish_beta_feed.py.')
         print(f'Published {tag} from {run["url"]}')
 
