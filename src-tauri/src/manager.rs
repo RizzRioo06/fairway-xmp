@@ -79,6 +79,19 @@ impl Manager {
                 }
             }
         }
+        #[cfg(unix)]
+        if let Ok(pid) = fs::read_to_string(manager.layout.data.join("mail.pid")) {
+            if let Ok(pid) = pid.trim().parse::<u32>() {
+                let exe = manager.layout.exe("mailpit", "mailpit");
+                if process::matches_command(pid, &exe, &manager.mail_args()) {
+                    manager
+                        .processes
+                        .insert("mail".into(), OwnedProcess::adopt_database(pid));
+                } else if !process::pid_alive(pid) {
+                    let _ = fs::remove_file(manager.layout.data.join("mail.pid"));
+                }
+            }
+        }
         let pid_file = manager.layout.data.join("mysql.pid");
         if let Ok(text) = fs::read_to_string(&pid_file) {
             if let Ok(pid) = text.trim().parse::<u32>() {
@@ -127,6 +140,31 @@ impl Manager {
         .all(|p| p.is_file())
     }
 
+    fn mail_args(&self) -> Vec<String> {
+        vec![
+            "--listen".into(),
+            format!("127.0.0.1:{}", self.ports.mail),
+            "--smtp".into(),
+            format!("127.0.0.1:{}", self.ports.smtp),
+            "--database".into(),
+            self.layout
+                .data
+                .join("mail/mailpit.db")
+                .to_string_lossy()
+                .into_owned(),
+            // Local apps may send any SMTP login; nothing leaves this computer.
+            "--smtp-auth-accept-any".into(),
+            "--smtp-auth-allow-insecure".into(),
+            "--smtp-disable-rdns".into(),
+            "--disable-version-check".into(),
+        ]
+    }
+
+    /// The mail catcher is optional, so a runtime without it keeps every other service usable.
+    pub fn mail_available(&self) -> bool {
+        self.layout.exe("mailpit", "mailpit").is_file()
+    }
+
     pub fn snapshot(&mut self) -> Snapshot {
         let ids: Vec<String> = self.processes.keys().cloned().collect();
         for id in ids {
@@ -140,11 +178,15 @@ impl Manager {
         let mysql = self.processes.contains_key("mysql") && process::connected(self.ports.mysql);
         let nginx = self.processes.contains_key("nginx") && process::health(self.ports.website);
         let admin = nginx && php && mysql && process::health(self.ports.phpmyadmin);
+        let mail = self.processes.contains_key("mail")
+            && process::connected(self.ports.mail)
+            && process::connected(self.ports.smtp);
         let services = [
             ("php", self.ports.php, php),
             ("nginx", self.ports.website, nginx && php),
             ("mysql", self.ports.mysql, mysql),
             ("phpmyadmin", self.ports.phpmyadmin, admin),
+            ("mail", self.ports.mail, mail),
         ]
         .into_iter()
         .map(|(id, port, ready)| {
@@ -225,13 +267,7 @@ impl Manager {
     fn apply_projects(&mut self, next: Vec<ProjectConfig>) -> Result<()> {
         let previous = self.layout.registered_projects()?;
         if next.iter().any(|project| project.https)
-            && [
-                self.ports.website,
-                self.ports.phpmyadmin,
-                self.ports.mysql,
-                self.ports.php,
-            ]
-            .contains(&crate::tls::https_port())
+            && self.ports.values().contains(&crate::tls::https_port())
         {
             return Err(format!(
                 "Port {} is reserved for site HTTPS. Choose another service port.",
@@ -419,12 +455,17 @@ impl Manager {
     }
 
     pub fn start_all(&mut self) -> Result<()> {
-        self.preflight(&["php", "nginx", "mysql"])?;
+        let ids: &[&str] = if self.mail_available() {
+            &["mysql", "php", "nginx", "mail"]
+        } else {
+            &["mysql", "php", "nginx"]
+        };
+        self.preflight(ids)?;
         let before: Vec<String> = self.processes.keys().cloned().collect();
-        for id in ["mysql", "php", "nginx"] {
+        for id in ids {
             if let Err(error) = self.start(id) {
                 let mut cleanup = Vec::new();
-                for started in ["nginx", "php", "mysql"] {
+                for started in ["mail", "nginx", "php", "mysql"] {
                     if !before.iter().any(|i| i == started) {
                         if let Err(e) = self.stop(started) {
                             cleanup.push(e);
@@ -448,13 +489,8 @@ impl Manager {
         if !self.runtime_ready() {
             return Err("Fairway XMP’s PHP or database files are missing or incomplete. Reinstall Fairway XMP to restore them; your projects and database data will be kept.".into());
         }
-        let excluded = [
-            self.ports.website,
-            self.ports.phpmyadmin,
-            self.ports.mysql,
-            self.ports.php,
-            crate::tls::https_port(),
-        ];
+        let mut excluded = self.ports.values().to_vec();
+        excluded.push(crate::tls::https_port());
         for id in ids {
             if self.processes.contains_key(*id) {
                 continue;
@@ -469,6 +505,10 @@ impl Manager {
                 }
                 "mysql" => process::ensure_port(self.ports.mysql, "MySQL", &excluded)?,
                 "php" => process::ensure_port(self.ports.php, "PHP", &excluded)?,
+                "mail" => {
+                    process::ensure_port(self.ports.mail, "Mail inbox", &excluded)?;
+                    process::ensure_port(self.ports.smtp, "Mail SMTP", &excluded)?;
+                }
                 _ => return Err("Unknown service.".into()),
             }
         }
@@ -476,7 +516,7 @@ impl Manager {
     }
 
     pub fn start(&mut self, id: &str) -> Result<()> {
-        if !["php", "mysql", "nginx"].contains(&id) {
+        if !["php", "mysql", "nginx", "mail"].contains(&id) {
             return Err("Unknown service.".into());
         }
         let _ = self.snapshot();
@@ -492,6 +532,9 @@ impl Manager {
     }
 
     fn start_inner(&mut self, id: &str) -> Result<()> {
+        if id == "mail" && !self.mail_available() {
+            return Err("The mail catcher files are missing. Reinstall Fairway XMP to restore them; your projects and data will be kept.".into());
+        }
         self.preflight(&[id])?;
         self.layout.write_configs(&self.ports)?;
         if id == "nginx" {
@@ -592,6 +635,11 @@ impl Manager {
                 cmd.arg("--console");
                 cmd
             }
+            "mail" => {
+                let mut cmd = process::command(self.layout.exe("mailpit", "mailpit"));
+                cmd.args(self.mail_args());
+                cmd
+            }
             _ => return Err("Unknown service.".into()),
         };
         // MySQL's Windows runtime also resolves files relative to its working
@@ -606,6 +654,14 @@ impl Manager {
             &self.layout.data.join(format!("logs/{id}-process.log")),
             id == "mysql",
         )?;
+        // Mailpit writes no PID file; record one so a restarted Fairway can adopt it.
+        #[cfg(unix)]
+        if id == "mail" {
+            atomic_write(
+                &self.layout.data.join("mail.pid"),
+                owned.pid().to_string().as_bytes(),
+            )?;
+        }
         self.processes.insert(id.into(), owned);
         let deadline = Instant::now() + Duration::from_secs(if id == "mysql" { 60 } else { 15 });
         loop {
@@ -620,6 +676,9 @@ impl Manager {
                     process::health(self.ports.website) && process::health(self.ports.phpmyadmin)
                 }
                 "mysql" => process::connected(self.ports.mysql),
+                "mail" => {
+                    process::connected(self.ports.mail) && process::connected(self.ports.smtp)
+                }
                 _ => process::connected(self.ports.php),
             };
             if ready {
@@ -748,7 +807,7 @@ impl Manager {
     }
 
     pub fn stop(&mut self, id: &str) -> Result<()> {
-        if !["php", "mysql", "nginx"].contains(&id) {
+        if !["php", "mysql", "nginx", "mail"].contains(&id) {
             return Err("Unknown service.".into());
         }
         if id == "php" {
@@ -775,6 +834,8 @@ impl Manager {
                         .args(["-s", "quit"]);
                     process::output(cmd)?;
                 }
+                // Mailpit shuts down cleanly on SIGTERM; SIGQUIT would dump and abort.
+                "mail" => self.processes.get_mut(id).unwrap().terminate_web()?,
                 _ => {
                     #[cfg(unix)]
                     self.processes.get(id).unwrap().graceful_signal()?;
@@ -792,12 +853,15 @@ impl Manager {
         }
         self.processes.remove(id);
         self.errors.remove(id);
+        if id == "mail" {
+            let _ = fs::remove_file(self.layout.data.join("mail.pid"));
+        }
         Ok(())
     }
 
     pub fn stop_all(&mut self) -> Result<()> {
         let mut errors = Vec::new();
-        for id in ["nginx", "php", "mysql"] {
+        for id in ["mail", "nginx", "php", "mysql"] {
             if let Err(e) = self.stop(id) {
                 errors.push(format!("{id}: {e}"));
             }
@@ -814,6 +878,7 @@ impl Manager {
             "php" => &["php.log", "php-fpm.log", "php-process.log"],
             "nginx" | "phpmyadmin" => &["nginx.log", "nginx-process.log"],
             "mysql" => &["mysql.log", "mysql-process.log"],
+            "mail" => &["mail-process.log"],
             _ => return Err("Unknown log.".into()),
         };
         files

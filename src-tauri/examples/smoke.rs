@@ -67,7 +67,7 @@ fn https(layout: &Layout, host: &str) -> Result<String, String> {
 }
 
 fn free_ports() -> Result<Ports, String> {
-    let listeners = (0..4)
+    let listeners = (0..6)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)))
         .collect::<std::io::Result<Vec<_>>>()
         .map_err(|e| e.to_string())?;
@@ -80,6 +80,8 @@ fn free_ports() -> Result<Ports, String> {
         phpmyadmin: ports[1],
         mysql: ports[2],
         php: ports[3],
+        mail: ports[4],
+        smtp: ports[5],
     })
 }
 
@@ -151,20 +153,22 @@ fn main() -> Result<(), String> {
         root.join("student data"),
         runtime,
     );
-    let listeners: Vec<_> = (0..5)
+    let listeners: Vec<_> = (0..7)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)).unwrap())
         .collect();
     let ports: Vec<_> = listeners
         .iter()
         .map(|l| l.local_addr().unwrap().port())
         .collect();
-    std::env::set_var("FAIRWAY_DEV_HTTPS_PORT", ports[4].to_string());
+    std::env::set_var("FAIRWAY_DEV_HTTPS_PORT", ports[6].to_string());
     let mut manager = Manager::new(layout)?;
     let chosen = Ports {
         website: ports[0],
         phpmyadmin: ports[1],
         mysql: ports[2],
         php: ports[3],
+        mail: ports[4],
+        smtp: ports[5],
     };
     drop(listeners);
     manager.save_ports(chosen.clone())?;
@@ -230,9 +234,27 @@ fn main() -> Result<(), String> {
         composer.arg("--version");
         assert!(process::output(composer)?.contains("Composer version"));
         manager.start_all()?;
-        assert!(manager.snapshot().services.iter().all(|s| s.ready));
+        // Older runtimes (such as the alpha 1 upgrade fixture) have no Mailpit; the rest must still work.
+        let mail_available = manager.mail_available();
+        assert!(manager
+            .snapshot()
+            .services
+            .iter()
+            .all(|s| s.ready || (s.id == "mail" && !mail_available)));
         let page = http(chosen.website, "/");
         assert!(page.contains("Your environment"), "{page}");
+        if mail_available {
+            // PHP's mail() must reach the bundled catcher (sendmail on Unix, SMTP on Windows).
+            fs::write(
+                manager.layout.www.join("mail.php"),
+                "<?php var_dump(mail('student@example.com', 'Smoke mail', 'Caught locally', 'From: app@example.test'));",
+            )
+            .map_err(|e| e.to_string())?;
+            let sent = http(chosen.website, "/mail.php");
+            assert!(sent.contains("bool(true)"), "{sent}");
+            let inbox = http(chosen.mail, "/api/v1/messages");
+            assert!(inbox.contains("Smoke mail"), "{inbox}");
+        }
         assert!(http_host(chosen.website, "/", "plain-project.test").contains("plain project"));
         assert!(http_host(chosen.website, "/courses/1", "shop.test")
             .contains("front controller /courses/1"));

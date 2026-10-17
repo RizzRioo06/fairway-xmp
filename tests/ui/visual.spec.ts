@@ -157,7 +157,7 @@ test('support report is reviewable and excludes private paths; old PHP versions 
   expect(data.selectedPhpVersion).toMatch(/^8\.4\./);
   expect(data.selectedPhpLegacy).toBe(false);
   expect(data.system.os).toBe('macos');
-  expect(data.services).toHaveLength(4);
+  expect(data.services).toHaveLength(5);
   expect(JSON.stringify(data)).not.toContain('/Users/');
   expect(JSON.stringify(data)).not.toContain('/opt/homebrew');
   expect(data.excluded).toContain('credentials');
@@ -373,5 +373,22 @@ test('update progress clears after a failed download and services stay available
   await expect(page.getByRole('progressbar')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Install update', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
-  await expect(page.locator('.service-card .status-label.ready')).toHaveCount(4);
+  await expect(page.locator('.service-card .status-label.ready')).toHaveCount(5);
+});
+
+test('mail runs as a service with a browser inbox', async ({ page }, info) => {
+  await page.goto('/');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Mail' })).toHaveCount(0);
+  const card = page.locator('.service-card').filter({ has: page.getByRole('heading', { name: 'Mail', exact: true }) });
+  await expect(card).toContainText('localhost:8802');
+  await capture(page, info, 'mail');
+  await card.getByRole('button', { name: 'Open Mail' }).click();
+  await expect(page.getByRole('alert')).toContainText('would open mail');
+  await card.getByRole('button', { name: 'Stop service' }).click();
+  await expect(card.getByText('Stopped', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Open Mail' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel(/Mail inbox/)).toHaveValue('8802');
+  await expect(page.getByLabel(/Mail SMTP/)).toHaveValue('11025');
 });

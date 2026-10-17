@@ -138,7 +138,7 @@ pub(crate) fn tray_action(app: &tauri::AppHandle, id: &str) {
         let state = app.state::<Shared>().inner().clone();
         let result = if id == "phpmyadmin" {
             access(state, |m| {
-                integration::open(&m.layout, "phpmyadmin", m.ports.website, m.ports.phpmyadmin)
+                integration::open(&m.layout, "phpmyadmin", &m.ports)
             })
             .await
         } else {
@@ -478,7 +478,7 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
 #[tauri::command]
 async fn open_target(state: State<'_, Shared>, target: String) -> Result<()> {
     access(state.inner().clone(), move |m| {
-        integration::open(&m.layout, &target, m.ports.website, m.ports.phpmyadmin)
+        integration::open(&m.layout, &target, &m.ports)
     })
     .await
 }
@@ -691,7 +691,7 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
     ]
     .contains(&action.as_str())
     {
-        for name in ["app.pid", "mysql.pid", "nginx.pid", "php.pid"] {
+        for name in ["app.pid", "mysql.pid", "nginx.pid", "php.pid", "mail.pid"] {
             let path = layout.data.join(name);
             if let Ok(text) = std::fs::read_to_string(&path) {
                 // Nginx can leave an empty PID file after a failed start.

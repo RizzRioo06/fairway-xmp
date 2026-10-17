@@ -169,6 +169,7 @@ def collect_plan(stage, refresh=False):
     plan.append(source_input('phpmyadmin-distribution', pma['url'], pma['sha256']))
     plan.append(source_input('phpmyadmin-development', f'https://codeload.github.com/phpmyadmin/phpmyadmin/tar.gz/refs/tags/RELEASE_{MANIFEST["phpmyadmin"].replace(".", "_")}'))
     plan.append(source_input('composer', f'https://codeload.github.com/composer/composer/tar.gz/refs/tags/{MANIFEST["composer"]}'))
+    plan.append(source_input('mailpit', f'https://codeload.github.com/axllent/mailpit/tar.gz/refs/tags/v{MANIFEST["mailpit"]}'))
     certifi_version = re.search(r'certifi-([\d.]+)-', lock['ca-certificates']['url']).group(1)
     certifi = read_json(f'https://pypi.org/pypi/certifi/{certifi_version}/json')
     sdist, = [file for file in certifi['urls'] if file['packagetype'] == 'sdist']

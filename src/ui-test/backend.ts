@@ -75,7 +75,7 @@ export function select(next: Scenario, os: Platform) {
   data.os = platform === 'Windows' ? 'windows' : 'macos';
   configureCli(next !== 'CLI disabled');
   if (next === 'Running' || next === 'Partially running') running('nginx', true);
-  if (next === 'Running') running('mysql', true);
+  if (next === 'Running') { running('mysql', true); running('mail', true); }
   if (next === 'Partially running') {
     Object.assign(data.services.find(service => service.id === 'mysql')!, {
       running: true, pid: 12346, message: 'MySQL is starting. Check the logs if it does not become ready.',
@@ -113,8 +113,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (scenario === 'Port conflict' && !action.startsWith('stop')) throw new Error('Port 8800 is already in use. Choose a different website port in Settings.');
       if (!data.runtimeReady) throw new Error('Runtime files are missing.');
       if (action.endsWith('_all')) {
-        running('nginx', action === 'start_all'); running('mysql', action === 'start_all');
-      } else if (args.service === 'nginx' || args.service === 'mysql') {
+        for (const id of ['nginx', 'mysql', 'mail'] as const) running(id, action === 'start_all');
+      } else if (args.service === 'nginx' || args.service === 'mysql' || args.service === 'mail') {
         running(args.service, action !== 'stop');
       } else throw new Error('Unsupported simulated service action.');
       result = structuredClone(data); break;
@@ -123,7 +123,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (data.services.some(service => service.running)) throw new Error('Stop all services before changing settings.');
       const ports = args.ports as Ports;
       const values = Object.values(ports);
-      if (values.some(port => !Number.isInteger(port) || port < 1024 || port > 65535) || new Set(values).size !== 4) throw new Error('Choose distinct ports between 1024 and 65535.');
+      if (values.some(port => !Number.isInteger(port) || port < 1024 || port > 65535) || new Set(values).size !== values.length) throw new Error('Choose distinct ports between 1024 and 65535.');
       const version = String(args.version);
       if (!data.phpVersions[version]) throw new Error('PHP version is unavailable.');
       data.ports = { ...ports }; data.phpVersion = version;

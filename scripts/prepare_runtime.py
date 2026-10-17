@@ -162,6 +162,29 @@ def common(target, lock, refresh):
                 path.write_bytes(wheel.read(name))
 
 
+def mailpit(target, lock, refresh):
+    """Stage Mailpit's official release build; it catches mail sent by local PHP apps."""
+    version = MANIFEST['mailpit']
+    asset, key = {
+        'Darwin': ('darwin-arm64.tar.gz', 'mailpit-macos'),
+        'Windows': ('windows-amd64.zip', 'mailpit-windows'),
+        'Linux': ('linux-amd64.tar.gz', 'mailpit-linux'),
+    }[platform.system()]
+    url = f'https://github.com/axllent/mailpit/releases/download/v{version}/mailpit-{asset}'
+    expected = None
+    if refresh:
+        # GitHub publishes a SHA256 digest for each release asset.
+        release = read_json(f'https://api.github.com/repos/axllent/mailpit/releases/tags/v{version}')
+        digest = next(item['digest'] for item in release['assets'] if item['name'] == f'mailpit-{asset}')
+        expected = digest.removeprefix('sha256:')
+    archive = lock_download(key, url, expected, refresh=refresh, lock=lock)
+    with tempfile.TemporaryDirectory() as folder:
+        safe_extract(archive, Path(folder), 'zip' if asset.endswith('.zip') else 'tar')
+        executable = 'mailpit.exe' if asset.endswith('.zip') else 'mailpit'
+        copy(Path(folder) / executable, target / 'mailpit/bin' / executable)
+        copy(Path(folder) / 'LICENSE', target / 'licenses/mailpit/LICENSE')
+
+
 def windows(target, lock, refresh):
     php = MANIFEST['php']
     mysql_series = '.'.join(MANIFEST['mysql'].split('.')[:2])
@@ -428,6 +451,8 @@ def verify(target):
         ([str(target / 'nginx/bin' / ('nginx' + suffix)), '-v'], f'nginx/{MANIFEST["nginx"]}'),
         ([str(target / 'mysql/bin' / ('mysqld' + suffix)), '--no-defaults', '--version'], f'Ver {MANIFEST["mysql"]} '),
     ]
+    if 'mailpit' in MANIFEST:
+        commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version'], f' v{MANIFEST["mailpit"]} '))
     for command, expected in commands:
         output = subprocess.check_output(command, env=env, stderr=subprocess.STDOUT, text=True)
         if expected not in output:
@@ -458,6 +483,8 @@ def main():
     work.mkdir(parents=True)
     try:
         common(work, lock, refresh)
+        # Historical runtimes (such as the alpha 1 upgrade fixture) predate Mailpit.
+        if 'mailpit' in MANIFEST: mailpit(work, lock, refresh)
         if platform.system() == 'Darwin': macos(work, lock, refresh)
         elif platform.system() == 'Windows': windows(work, lock, refresh)
         elif platform.system() == 'Linux':

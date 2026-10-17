@@ -20,17 +20,18 @@ const simulation = isUiTest ? import('./ui-test/backend') : null;
 
 // Browser previews deliberately do not pretend to start real services.
 export const preview: Snapshot = {
-  ports: { website: 8800, phpmyadmin: 8801, mysql: 13306, php: 19000 },
+  ports: { website: 8800, phpmyadmin: 8801, mysql: 13306, php: 19000, mail: 8802, smtp: 11025 },
   services: [
     { id: 'nginx', running: false, ready: false, port: 8800, pid: null, message: null },
     { id: 'php', running: false, ready: false, port: 19000, pid: null, message: null },
     { id: 'mysql', running: false, ready: false, port: 13306, pid: null, message: null },
     { id: 'phpmyadmin', running: false, ready: false, port: 8801, pid: null, message: null },
+    { id: 'mail', running: false, ready: false, port: 8802, pid: null, message: null },
   ],
   documentRoot: '~/fairway/www', projects: [], sitesError: null, domainsPending: false, httpsTrusted: false, os: '', dataDir: 'Fairway XMP application data',
   runtimeReady: false, runtimeVersions: {
     php: manifest.php, mysql: manifest.mysql, nginx: manifest.nginx,
-    phpmyadmin: manifest.phpmyadmin, composer: manifest.composer,
+    phpmyadmin: manifest.phpmyadmin, composer: manifest.composer, mailpit: manifest.mailpit,
   }, pathInstalled: false,
   phpVersion: manifest.php.split('.').slice(0, 2).join('.'), phpVersions: manifest.phpVersions,
   cliPhp: null, cliComposer: null, pathPhp: null, pathComposer: null, version,

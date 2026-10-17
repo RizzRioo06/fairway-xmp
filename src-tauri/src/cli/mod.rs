@@ -92,7 +92,7 @@ pub fn run() -> Result<()> {
         args.first().map(String::as_str),
         Some("help" | "--help" | "-h")
     ) {
-        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql]\nfairway site add DOMAIN FOLDER [--name NAME] [--index]\n                             Serve FOLDER at DOMAIN.test (updates the hosts file with sudo)\nfairway site remove DOMAIN   Remove a site; its files are kept\nfairway site https DOMAIN on|off\n                             Toggle HTTPS for one site (:8443)\nfairway site hosts           Retry the hosts-file update for registered sites\nfairway logs nginx|mysql|php  Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP  Change ports while all services are stopped\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services (8.0/8.1 are legacy)\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
+        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql|mail]\nfairway site add DOMAIN FOLDER [--name NAME] [--index]\n                             Serve FOLDER at DOMAIN.test (updates the hosts file with sudo)\nfairway site remove DOMAIN   Remove a site; its files are kept\nfairway site https DOMAIN on|off\n                             Toggle HTTPS for one site (:8443)\nfairway site hosts           Retry the hosts-file update for registered sites\nfairway logs nginx|mysql|php|mail\n                             Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP [MAIL SMTP]\n                             Change ports while all services are stopped\n                             (mail inbox and SMTP default to 8802 and 11025)\nfairway php-version          Show selected PHP version\nfairway php-version 8.0–8.5  Switch PHP after stopping all services (8.0/8.1 are legacy)\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
         return Ok(());
     }
     if matches!(args.first().map(String::as_str), Some("--version" | "-V")) {
@@ -294,8 +294,8 @@ fn parse(args: &[String]) -> Result<Request> {
     let command = args.first().map(String::as_str).unwrap_or("tui");
     let service = || -> Result<String> {
         let value = args.get(1).map(String::as_str).unwrap_or("all");
-        if args.len() > 2 || !["all", "nginx", "mysql"].contains(&value) {
-            return Err("Choose all, nginx or mysql. PHP-FPM is managed by Nginx.".into());
+        if args.len() > 2 || !["all", "nginx", "mysql", "mail"].contains(&value) {
+            return Err("Choose all, nginx, mysql or mail. PHP-FPM is managed by Nginx.".into());
         }
         Ok(value.into())
     };
@@ -309,12 +309,14 @@ fn parse(args: &[String]) -> Result<Request> {
         "restart" => Ok(Request::Restart {
             service: service()?,
         }),
-        "logs" if args.len() == 2 && ["nginx", "mysql", "php"].contains(&args[1].as_str()) => {
+        "logs"
+            if args.len() == 2 && ["nginx", "mysql", "php", "mail"].contains(&args[1].as_str()) =>
+        {
             Ok(Request::Log {
                 service: args[1].clone(),
             })
         }
-        "ports" if args.len() == 5 => {
+        "ports" if args.len() == 5 || args.len() == 7 => {
             let values = args[1..]
                 .iter()
                 .map(|s| {
@@ -322,11 +324,14 @@ fn parse(args: &[String]) -> Result<Request> {
                         .map_err(|_| "Ports must be numbers from 1024 to 65535.".to_string())
                 })
                 .collect::<Result<Vec<_>>>()?;
+            let defaults = Ports::default();
             let ports = Ports {
                 website: values[0],
                 phpmyadmin: values[1],
                 mysql: values[2],
                 php: values[3],
+                mail: values.get(4).copied().unwrap_or(defaults.mail),
+                smtp: values.get(5).copied().unwrap_or(defaults.smtp),
             };
             ports.validate()?;
             Ok(Request::Ports { ports })

@@ -63,6 +63,8 @@ impl Drop for Terminal {
     }
 }
 
+const SERVICES: [&str; 3] = ["nginx", "mysql", "mail"];
+
 fn clean(text: &str) -> String {
     text.chars()
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
@@ -135,7 +137,7 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
             continue;
         }
         if matches!(key, b"\x1b[B" | b"j") {
-            selected = (selected + 1).min(1);
+            selected = (selected + 1).min(SERVICES.len() - 1);
             continue;
         }
         if key == b"Q" {
@@ -155,7 +157,7 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
         if busy {
             continue;
         }
-        let service = if selected == 0 { "nginx" } else { "mysql" }.to_string();
+        let service = SERVICES[selected].to_string();
         let request = match key {
             b"s" => Request::Start { service },
             b"x" => Request::Stop { service },
@@ -183,7 +185,7 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
             }
             b"p" => {
                 terminal.pause();
-                println!("Enter four ports: website phpMyAdmin MySQL PHP-FPM (blank cancels).");
+                println!("Enter ports: website phpMyAdmin MySQL PHP-FPM [mail-inbox SMTP] (blank cancels).");
                 let mut line = String::new();
                 let result = io::stdin().read_line(&mut line);
                 terminal.resume()?;
@@ -196,16 +198,18 @@ pub(super) fn run(layout: &Layout) -> Result<()> {
                     .map(str::parse::<u16>)
                     .collect::<std::result::Result<Vec<_>, _>>();
                 match values {
-                    Ok(values) if values.len() == 4 => Request::Ports {
+                    Ok(values) if values.len() == 4 || values.len() == 6 => Request::Ports {
                         ports: Ports {
                             website: values[0],
                             phpmyadmin: values[1],
                             mysql: values[2],
                             php: values[3],
+                            mail: values.get(4).copied().unwrap_or(Ports::default().mail),
+                            smtp: values.get(5).copied().unwrap_or(Ports::default().smtp),
                         },
                     },
                     _ => {
-                        message = "Enter four valid port numbers.".into();
+                        message = "Enter four or six valid port numbers.".into();
                         continue;
                     }
                 }
@@ -308,7 +312,7 @@ fn draw(
         String::new(),
     ];
     if let Some(snapshot) = snapshot {
-        for (index, id) in ["nginx", "mysql"].iter().enumerate() {
+        for (index, id) in SERVICES.iter().enumerate() {
             if let Some(service) = snapshot.services.iter().find(|s| s.id == *id) {
                 let (color, label) = if service.ready {
                     (32, "Ready")
@@ -334,6 +338,10 @@ fn draw(
         lines.push(format!(
             "  phpMyAdmin: http://127.0.0.1:{}/",
             snapshot.ports.phpmyadmin
+        ));
+        lines.push(format!(
+            "  Mail inbox: http://127.0.0.1:{}/  (SMTP 127.0.0.1:{})",
+            snapshot.ports.mail, snapshot.ports.smtp
         ));
         lines.push(format!(
             "  Document root: {}",

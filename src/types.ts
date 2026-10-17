@@ -1,5 +1,5 @@
-export type ServiceId = 'nginx' | 'php' | 'mysql' | 'phpmyadmin';
-export type Ports = { website: number; phpmyadmin: number; mysql: number; php: number };
+export type ServiceId = 'nginx' | 'php' | 'mysql' | 'phpmyadmin' | 'mail';
+export type Ports = { website: number; phpmyadmin: number; mysql: number; php: number; mail: number; smtp: number };
 export type ServiceStatus = {
   id: ServiceId; running: boolean; ready: boolean; port: number;
   pid: number | null; message: string | null;

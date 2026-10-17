@@ -159,6 +159,9 @@ def linux(target, lock, refresh):
     source_url = f'https://cdn.mysql.com/Downloads/MySQL-{series}/mysql-{MANIFEST["mysql"]}.tar.gz'
     archive = lock_download('mysql-linux-source', source_url, refresh=refresh, lock=lock)
     copy(archive, source_output / f'mysql-{MANIFEST["mysql"]}.tar.gz')
+    url = f'https://codeload.github.com/axllent/mailpit/tar.gz/refs/tags/v{MANIFEST["mailpit"]}'
+    archive = lock_download('mailpit-linux-source', url, refresh=refresh, lock=lock)
+    copy(archive, source_output / f'mailpit-{MANIFEST["mailpit"]}.tar.gz')
     for name in ('composer', 'ca-certificates'):
         entry = lock[name + '-linux-source']
         archive = lock_download(name + '-linux-source', entry['url'], refresh=refresh, lock=lock)

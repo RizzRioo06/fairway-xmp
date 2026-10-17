@@ -9,6 +9,7 @@ Fairway XMP bundles independently licensed software. The Fairway XMP application
 | Nginx | BSD 2-Clause; https://nginx.org/LICENSE |
 | phpMyAdmin | GPL v2 or later; https://github.com/phpmyadmin/phpmyadmin |
 | Composer | MIT; https://github.com/composer/composer |
+| Mailpit | MIT; https://github.com/axllent/mailpit |
 | Tauri | MIT / Apache 2.0; https://github.com/tauri-apps/tauri |
 | React | MIT; https://github.com/facebook/react |
 | Lucide | ISC; https://github.com/lucide-icons/lucide |

@@ -13,6 +13,7 @@
   "nginx": "1.30.5",
   "phpmyadmin": "5.2.3",
   "composer": "2.10.3",
+  "mailpit": "1.31.6",
   "minimumOS": {
     "windows": "Windows 10 22H2 x64",
     "macos": "macOS 15 arm64",

@@ -15,6 +15,14 @@
     "sha256": "803a3de1c096cc6ba4b568de3859c6debcfd95a09b80404ee2fb6a19ddd22680",
     "url": "https://codeload.github.com/composer/composer/tar.gz/refs/tags/2.10.3"
   },
+  "mailpit-linux": {
+    "sha256": "10fa12ccc610f653d4ed4df848c1817f9935dcf4e9a6a458a19ab0fa02093f91",
+    "url": "https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-linux-amd64.tar.gz"
+  },
+  "mailpit-linux-source": {
+    "sha256": "85889973cedc04644e71cabdcdaf5d77cf428c785928936cc5ab554c0d6f0a66",
+    "url": "https://codeload.github.com/axllent/mailpit/tar.gz/refs/tags/v1.31.6"
+  },
   "mysql-linux-source": {
     "sha256": "e5a676c7cb73738dc6ea33db2093806ebd512b629a139b897fcab68fcd81aaa4",
     "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2.tar.gz"
