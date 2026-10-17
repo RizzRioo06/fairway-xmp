@@ -70,6 +70,8 @@ jobs:
           retention-days: 7
       - name: Exercise real services, backup restoration and PHP versions
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/macos-smoke"
+      - name: Recover web services after a force-killed controller
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example service_recovery_smoke --no-default-features --locked
       - name: Exercise native data browser and SQL export/import
         run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- "$PWD/.runtime-work/data-browser-smoke"
       - name: Import release signing credentials

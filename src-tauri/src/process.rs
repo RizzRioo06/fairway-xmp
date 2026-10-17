@@ -388,25 +388,66 @@ fn linux_executable_matches(pid: u32, expected: &Path) -> bool {
     }
 }
 
-#[cfg(target_os = "linux")]
-pub fn matches_web(pid: u32, id: &str, layout: &crate::config::Layout) -> bool {
-    let exe = if id == "php" {
-        let Ok(exe) = layout.php_exe("php-fpm") else {
-            return false;
-        };
-        exe
-    } else {
-        layout.exe(id, "nginx")
-    };
-    if !pid_alive(pid) || !linux_executable_matches(pid, &exe) {
+#[cfg(target_os = "macos")]
+fn macos_executable_matches(pid: u32, expected: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut buffer = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let length =
+        unsafe { libc::proc_pidpath(pid as i32, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
+    if length <= 0 || length as usize > buffer.len() {
         return false;
     }
-    let Ok(bytes) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
-        return false;
+    let bytes = &buffer[..length as usize];
+    let actual = Path::new(std::ffi::OsStr::from_bytes(
+        bytes.strip_suffix(&[0]).unwrap_or(bytes),
+    ));
+    match (
+        std::fs::canonicalize(actual),
+        std::fs::canonicalize(expected),
+    ) {
+        (Ok(actual), Ok(expected)) => actual == expected,
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+pub fn matches_web(pid: u32, id: &str, layout: &crate::config::Layout) -> bool {
+    let exe = match id {
+        "php" => match layout.php_exe("php-fpm") {
+            Ok(exe) => exe,
+            Err(_) => return false,
+        },
+        "nginx" => layout.exe("nginx", "nginx"),
+        _ => return false,
     };
-    let title = String::from_utf8_lossy(&bytes)
-        .trim_end_matches('\0')
-        .to_owned();
+    if !pid_alive(pid) {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    let title = {
+        if !linux_executable_matches(pid, &exe) {
+            return false;
+        }
+        let Ok(bytes) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+            return false;
+        };
+        String::from_utf8_lossy(&bytes)
+            .trim_end_matches('\0')
+            .to_owned()
+    };
+    #[cfg(target_os = "macos")]
+    let title = {
+        if !macos_executable_matches(pid, &exe) {
+            return false;
+        }
+        let mut cmd = command("/bin/ps");
+        cmd.args(["-ww", "-p", &pid.to_string(), "-o", "command="]);
+        let Ok(title) = output(cmd) else {
+            return false;
+        };
+        title
+    };
     if id == "php" {
         title
             == format!(
@@ -494,6 +535,29 @@ mod tests {
         assert!(owned.alive());
         owned.start_time = owned.start_time.map(|stamp| stamp + 1);
         assert!(!owned.alive());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn recovered_web_process_requires_the_actual_executable() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "fairway-process-identity-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let actual = std::env::current_exe().unwrap();
+        let alias = root.join("executable alias");
+        symlink(&actual, &alias).unwrap();
+        let different = root.join("different executable");
+        std::fs::write(&different, b"not the running executable").unwrap();
+        assert!(macos_executable_matches(std::process::id(), &actual));
+        assert!(macos_executable_matches(std::process::id(), &alias));
+        assert!(!macos_executable_matches(std::process::id(), &different));
+        assert!(!macos_executable_matches(0, &actual));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(windows)]

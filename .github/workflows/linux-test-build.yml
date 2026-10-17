@@ -65,6 +65,8 @@ jobs:
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
       - name: Exercise service manager and database recovery
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/linux-smoke"
+      - name: Recover web services after a force-killed controller
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example service_recovery_smoke --no-default-features --locked
       - name: Package offline installer and corresponding sources
         run: python scripts/package_linux.py
       - name: Test installed CLI, alpha upgrade, supervisor and terminal dashboard

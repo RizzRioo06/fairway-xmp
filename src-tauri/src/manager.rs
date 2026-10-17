@@ -67,7 +67,7 @@ impl Manager {
             processes: BTreeMap::new(),
             errors: BTreeMap::new(),
         };
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         for id in ["php", "nginx"] {
             if let Ok(pid) = fs::read_to_string(manager.layout.data.join(format!("{id}.pid"))) {
                 if let Ok(pid) = pid.trim().parse::<u32>() {
