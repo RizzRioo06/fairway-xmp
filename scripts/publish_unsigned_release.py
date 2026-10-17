@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish one successful unsigned candidate run without rebuilding."""
+"""Publish exact candidate files without rebuilding, retaining the historical unsigned entry point."""
 import hashlib
 import json
 import os
@@ -61,13 +61,32 @@ def verify_uploaded_assets(release, stage):
                 f'Uploaded release asset does not match the tested file: {path.name}')
 
 
+def human_acceptance(manifest, evidence_path):
+    from release_versions import channel
+    from release_candidate import acceptance
+    require(bool(evidence_path) or channel(manifest['version']) == 'beta',
+            'RC and stable publication require completed exact-installer human acceptance evidence')
+    if not evidence_path:
+        return None
+    evidence = json.loads(Path(evidence_path).read_text())
+    acceptance(manifest, evidence)
+    return evidence
+
+
 def main(signed=False):
     repo = os.environ['GH_REPO']
     run_id = os.environ['FAIRWAY_RUN_ID']
     tag = os.environ['FAIRWAY_TAG']
     sha = os.environ['FAIRWAY_SHA']
+    require(not signed or bool(os.environ.get('FAIRWAY_NOTES')), 'Select release notes explicitly for signed releases')
     notes = Path(os.environ.get('FAIRWAY_NOTES', ROOT / 'releases/beta1-notes.md'))
     version = tag[1:] if tag.startswith('v') else tag
+    prerelease = True
+    if signed:
+        from release_versions import channel
+        prerelease = channel(version) != 'stable'
+        require(tag == f'v{version}', 'Signed release tags must start with v')
+    latest = 'false' if prerelease else 'true'
     require(notes.is_file(), 'Release notes are missing')
     run = run_json('gh', 'run', 'view', run_id, '--repo', repo, '--json', 'conclusion,headSha,url')
     require(run['conclusion'] == 'success', 'Candidate run did not succeed')
@@ -111,6 +130,7 @@ def main(signed=False):
         manifest_path = download / f'{"candidate" if signed else "unsigned-candidate"}-acceptance-{sha}' / 'candidate-manifest.json'
         manifest = json.loads(manifest_path.read_text())
         require(manifest['commit'] == sha and manifest['version'] == version, 'Candidate manifest does not match this release')
+        evidence = human_acceptance(manifest, os.environ.get('FAIRWAY_ACCEPTANCE')) if signed else None
         if signed:
             from update_feed import generate
             feed = generate(manifest, directories, repo, notes.read_text())
@@ -147,20 +167,24 @@ def main(signed=False):
             content = subprocess.check_output(['git', 'show', f'{sha}:{name}'], cwd=ROOT)
             (stage / name).write_bytes(content)
         shutil.copy2(manifest_path, stage / 'candidate-manifest.json')
+        if evidence is not None:
+            (stage / 'acceptance.json').write_text(json.dumps(evidence, indent=2) + '\n')
         files = {
             path.name: {'sha256': sha256(path), 'bytes': path.stat().st_size, **published.get(path.name, {})}
             for path in stage.iterdir() if path.is_file()
         }
         build_info = {
             'schema': 1, 'version': version, 'tag': tag, 'commit': sha, 'run': run['url'],
-            'signed': manifest['signing'] if signed else False, 'prerelease': True, 'latest': False, 'rebuilt': False, 'files': files,
+            'signed': manifest['signing'] if signed else False, 'prerelease': prerelease, 'latest': not prerelease,
+            'humanAccepted': evidence is not None, 'rebuilt': False, 'files': files,
         }
         (stage / 'BUILD-INFO.json').write_text(json.dumps(build_info, indent=2) + '\n')
         files['BUILD-INFO.json'] = {'sha256': sha256(stage / 'BUILD-INFO.json'), 'bytes': (stage / 'BUILD-INFO.json').stat().st_size}
         sums = ''.join(f"{files[name]['sha256']}  {name}\n" for name in sorted(files))
         (stage / 'SHA256SUMS.txt').write_text(sums)
         subprocess.check_call([
-            'gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', *(['--draft'] if signed else []), '--prerelease', '--latest=false',
+            'gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', *(['--draft'] if signed else []),
+            *(['--prerelease'] if prerelease else []), f'--latest={latest}',
             '--title', f'Fairway XMP {version}', '--notes-file', str(notes),
             *sorted(stage.iterdir(), key=lambda path: path.name),
         ])
@@ -169,9 +193,9 @@ def main(signed=False):
             verify_uploaded_assets(uploaded, stage)
             subprocess.check_call([
                 'gh', 'api', '--method', 'PATCH', f'repos/{repo}/releases/{uploaded["id"]}',
-                '--silent', '-F', 'draft=false', '-F', 'prerelease=true', '-f', 'make_latest=false',
+                '--silent', '-F', 'draft=false', '-F', f'prerelease={str(prerelease).lower()}', '-f', f'make_latest={latest}',
             ])
-            print('Versioned release published. Publish the beta feed as the final step using publish_beta_feed.py.')
+            print('Versioned release published. Promote updates separately using publish_release_feed.py.')
         print(f'Published {tag} from {run["url"]}')
 
 

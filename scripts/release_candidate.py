@@ -12,8 +12,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = ('windows-x64', 'macos-arm64', 'linux-x86_64')
 MANUAL_CHECKS = {
-    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart'],
-    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart'],
+    'windows-x64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'tray-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart', 'mail-catcher-and-inbox'],
+    'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart', 'mail-catcher-and-inbox'],
     'linux-x86_64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'dashboard-detach-and-shutdown'],
 }
 
@@ -102,7 +102,7 @@ def assemble(inputs, output, require_updater=False):
             raise ValueError('Candidate versions, source, runtime or lifecycle results disagree')
     if require_updater:
         if by_target['macos-arm64'].get('signing') != 'apple-notarized' or by_target['windows-x64'].get('signing') != 'updater-only':
-            raise ValueError('Beta releases require signed/notarized Mac builds and signed Windows updates')
+            raise ValueError('Release candidates require signed/notarized Mac builds and signed Windows updates')
         for target in ('macos-arm64', 'windows-x64'):
             if not by_target[target].get('updater') or by_target[target]['lifecycle'].get('updater', {}).get('status') != 'passed':
                 raise ValueError('Missing native updater evidence')

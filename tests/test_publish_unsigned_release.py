@@ -1,9 +1,16 @@
 import importlib.util
+import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import release_candidate
 
 
 spec = importlib.util.spec_from_file_location(
@@ -14,6 +21,86 @@ spec.loader.exec_module(publisher)
 
 
 class ReleaseTagTests(unittest.TestCase):
+    def test_rc_and_stable_require_completed_evidence_for_exact_installer_hashes(self):
+        for version in ['0.1.0-rc.1', '0.1.0']:
+            manifest = {'version': version, 'commit': 'a' * 40, 'candidates': {target: {
+                'installer': 'installer', 'files': {'installer': {'sha256': 'b' * 64}}}
+                for target in release_candidate.TARGETS}}
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                with self.assertRaisesRegex(RuntimeError, 'human acceptance'):
+                    publisher.human_acceptance(manifest, None)
+                evidence = {'version': version, 'commit': manifest['commit'], 'platforms': {target: {
+                    'installerSha256': 'b' * 64, 'tester': 'Test fixture', 'os': 'Test OS', 'testedAt': '2026-10-17',
+                    'checks': {check: True for check in release_candidate.MANUAL_CHECKS[target]}}
+                    for target in release_candidate.TARGETS}}
+                path = Path(temporary) / 'acceptance.json'
+                path.write_text(json.dumps(evidence))
+                self.assertEqual(publisher.human_acceptance(manifest, path), evidence)
+                evidence['platforms']['windows-x64']['checks']['mail-catcher-and-inbox'] = False
+                path.write_text(json.dumps(evidence))
+                with self.assertRaisesRegex(ValueError, 'Unfinished human checks'):
+                    publisher.human_acceptance(manifest, path)
+                evidence['platforms']['windows-x64']['installerSha256'] = 'c' * 64
+                path.write_text(json.dumps(evidence))
+                with self.assertRaisesRegex(ValueError, 'exact-installer'):
+                    publisher.human_acceptance(manifest, path)
+
+    def test_signed_publisher_uses_prerelease_flags_for_rc_and_latest_for_stable(self):
+        for version, prerelease in [('0.1.0-rc.1', True), ('0.1.0', False)]:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); fixture = root / 'fixture'; fixture.mkdir()
+                sha = 'a' * 40
+                manifest = {'version': version, 'commit': sha, 'signing': {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}, 'candidates': {}}
+                for target, suffix in [('macos-arm64', 'macos-arm64.app.tar.gz'), ('windows-x64', 'windows-x64-setup.exe'), ('linux-x86_64', 'linux-x86_64.run')]:
+                    directory = fixture / f'fairway-xmp-{target}-{version}'; directory.mkdir()
+                    installer = f'fairway-xmp-{version}-{suffix}'
+                    (directory / installer).write_bytes(b'tested bytes')
+                    updater = {'artifact': installer, 'signature': installer + '.sig'}
+                    if target != 'linux-x86_64': (directory / updater['signature']).write_text('fixture signature')
+                    files = {p.name: {'sha256': publisher.sha256(p), 'bytes': p.stat().st_size} for p in directory.iterdir()}
+                    data = {'version': version, 'commit': sha, 'installer': installer, 'files': files, 'updater': updater, 'lifecycle': {'updater': {'status': 'passed'}}}
+                    manifest['candidates'][target] = data
+                    metadata = fixture / f'candidate-metadata-{target}'; metadata.mkdir()
+                    (metadata / f'candidate-{target}.json').write_text(json.dumps(data))
+                (fixture / f'fairway-xmp-linux-x86_64-{version}-sources').mkdir()
+                macos = fixture / f'fairway-xmp-macos-arm64-{version}'
+                for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'runtime-manifest.json', 'runtime-downloads.lock.json']:
+                    (macos / name).write_text('{}')
+                metadata = fixture / f'candidate-acceptance-{sha}'; metadata.mkdir()
+                (metadata / 'candidate-manifest.json').write_text(json.dumps(manifest))
+                evidence = {'version': version, 'commit': sha, 'platforms': {target: {
+                    'installerSha256': data['files'][data['installer']]['sha256'], 'tester': 'Test fixture', 'os': 'Test OS', 'testedAt': '2026-10-17',
+                    'checks': {check: True for check in release_candidate.MANUAL_CHECKS[target]}}
+                    for target, data in manifest['candidates'].items()}}
+                accepted = root / 'acceptance.json'; accepted.write_text(json.dumps(evidence))
+                notes = root / 'notes.md'; notes.write_text('Reviewed release notes')
+                uploaded = {}; commands = []; build = {}
+                def run_json(*args):
+                    if args[:3] == ('gh', 'run', 'view'): return {'conclusion': 'success', 'headSha': sha, 'url': 'https://example.invalid/run'}
+                    return [uploaded] if uploaded else []
+                def execute(args, **kwargs):
+                    commands.append(args)
+                    if args[:3] == ['gh', 'run', 'download']:
+                        shutil.copytree(fixture, Path(args[args.index('--dir') + 1]), dirs_exist_ok=True)
+                    if args[:3] == ['gh', 'release', 'create']:
+                        paths = [arg for arg in args if isinstance(arg, Path)]
+                        build.update(json.loads(next(p for p in paths if p.name == 'BUILD-INFO.json').read_text()))
+                        self.assertTrue(any(p.name == 'acceptance.json' for p in paths))
+                        uploaded.update({'id': 42, 'tag_name': 'v' + version, 'draft': True, 'assets': [
+                            {'name': p.name, 'digest': 'sha256:' + publisher.sha256(p), 'size': p.stat().st_size} for p in paths]})
+                with mock.patch.dict(os.environ, {'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                     mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
+                     mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), mock.patch('builtins.print'):
+                    publisher.main(signed=True)
+                create = next(args for args in commands if args[:3] == ['gh', 'release', 'create'])
+                self.assertEqual('--prerelease' in create, prerelease)
+                self.assertIn('--latest=' + str(not prerelease).lower(), create)
+                patch = next(args for args in commands if args[:3] == ['gh', 'api', '--method'])
+                self.assertIn('prerelease=' + str(prerelease).lower(), patch)
+                self.assertIn('make_latest=' + str(not prerelease).lower(), patch)
+                self.assertEqual(build['prerelease'], prerelease)
+                self.assertTrue(build['humanAccepted'])
+
     def test_uploaded_draft_is_found_without_the_published_tag_endpoint(self):
         release = {'id': 42, 'tag_name': 'v0.1.0-beta.3', 'draft': True}
         with mock.patch.object(publisher, 'run_json', return_value=[release]) as api:

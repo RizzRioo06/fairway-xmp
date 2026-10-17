@@ -1,4 +1,4 @@
-name: Publish tested beta
+name: Publish tested release
 
 on:
   workflow_dispatch:
@@ -12,16 +12,29 @@ on:
         required: true
         type: string
       tag:
-        description: Existing tag identifying that commit (v0.1.0-beta.3)
+        description: Existing version tag at that commit (for example v0.1.0-rc.1)
         required: true
         type: string
+      notes_file:
+        description: Reviewed release-notes path in this checkout
+        required: true
+        type: string
+      acceptance_file:
+        description: Completed acceptance JSON path in this checkout (mandatory for RC/stable)
+        required: false
+        type: string
+      promote_updates:
+        description: Offer this accepted release through the applicable in-app update feeds
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
   actions: read
 
 concurrency:
-  group: beta-publication
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
@@ -39,18 +52,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Publish exact tested beta artifacts
+      - name: Publish exact tested release artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           FAIRWAY_RUN_ID: ${{ inputs.candidate_run }}
           FAIRWAY_TAG: ${{ inputs.tag }}
           FAIRWAY_SHA: ${{ inputs.candidate_commit }}
-          FAIRWAY_NOTES: releases/beta3-notes.md
-        run: python scripts/publish_beta_release.py
+          FAIRWAY_NOTES: ${{ inputs.notes_file }}
+          FAIRWAY_ACCEPTANCE: ${{ inputs.acceptance_file }}
+        run: python scripts/publish_release.py
       - name: Promote update feed after publishing versioned assets
+        if: inputs.promote_updates
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           FAIRWAY_TAG: ${{ inputs.tag }}
-        run: python scripts/publish_beta_feed.py
+        run: python scripts/publish_release_feed.py

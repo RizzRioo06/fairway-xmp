@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.0-beta.3 — in preparation
+## 0.1.0-rc.1 — in preparation
+
+- Built-in Mailpit catcher and in-app inbox, PHP mail integration, SMTP settings and attachment saving.
+- Safe migration of existing ports and native Mail Start/Stop tray controls.
+- Grouped sidebar with Manage Sites, View Mail and Browse Data.
+- RC/stable-aware release publication, exact-installer human acceptance gates, and separate stable/preview update endpoints.
+
+Per-site PHP remains eligible before the candidate cut. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).
+
+## 0.1.0-beta.3 — 2026-10-17
 
 - Developer ID signing, Apple notarization and stapling for the Mac app and installer.
 - In-app beta updates on Mac and Windows, with version-bound signatures, download progress, verification before service shutdown, database backup, safe installer handoff, and enabled CLI launcher refresh.

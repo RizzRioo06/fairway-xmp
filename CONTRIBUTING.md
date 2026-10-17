@@ -118,7 +118,7 @@ cargo tauri build --bundles app
 sh scripts/package_macos.sh
 ```
 
-Windows setup uses current-user NSIS hooks and an offline WebView2 prerequisite. macOS packaging creates a pkg plus the app's bundled uninstall utility. Unsigned output can be published as an explicitly labeled alpha prerelease. Stable classroom releases require distribution signing and macOS notarization. `scripts/package_macos.sh` supports `APPLE_SIGNING_IDENTITY`, `APPLE_INSTALLER_IDENTITY`, and `APPLE_NOTARY_PROFILE` for distribution signing and notarization.
+Windows setup uses current-user NSIS hooks and an offline WebView2 prerequisite. macOS packaging creates a pkg plus the app's bundled uninstall utility. Unsigned output can be published as an explicitly labeled alpha prerelease. The RC cycle retains Windows installers without Authenticode and the unverified legacy PHP provenance as disclosed limitations accepted by the release owner; Mac signing/notarization and cryptographic desktop updater signatures remain required. `scripts/package_macos.sh` supports `APPLE_SIGNING_IDENTITY`, `APPLE_INSTALLER_IDENTITY`, and `APPLE_NOTARY_PROFILE` for distribution signing and notarization.
 
 To configure a signed updater release:
 
@@ -127,11 +127,11 @@ python3 scripts/configure_release.py --public-key /path/to/updater.pub
 cargo tauri build --config artifacts/tauri.release.json
 ```
 
-Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. The default feed is `https://github.com/eimg/fairway-xmp/releases/download/beta-feed/latest.json`; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
+Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. Beta/RC builds use `beta-feed/latest.json`; stable builds use `stable-feed/latest.json` under the same GitHub release-download URL; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
 
 ## Publishing a release
 
-For new candidates, use the [beta candidate and acceptance process](docs/beta-acceptance.md). The **Release candidate** workflow orchestrates all platforms plus browser review from one commit, exercises actual installer upgrades/removal/reinstallation, verifies embedded identity, and generates an acceptance template for the exact hashes. It does not publish. Mac signing/notarization and desktop updater signatures are required by the release orchestrator; Windows Authenticode remains deferred. See [signed beta releases](docs/signed-beta-releases.md). PHP 8.0/8.1 are legacy compatibility options, and their existing Windows source-verification follow-up remains open.
+For RC scope and owner policy, see [RC preparation](docs/rc-preparation.md). For builds, use the [candidate and acceptance process](docs/beta-acceptance.md). The **Release candidate** workflow orchestrates all platforms plus browser review from one commit, exercises actual installer upgrades/removal/reinstallation, verifies embedded identity, and generates an acceptance template for the exact hashes. It does not publish. Mac signing/notarization and desktop updater signatures are required by the release orchestrator; Windows Authenticode remains deferred. See [signed beta releases](docs/signed-beta-releases.md). PHP 8.0/8.1 are legacy compatibility options, and their existing Windows source-verification follow-up remains open.
 
 For an unsigned x64 Windows installer, dispatch the **Windows installer** workflow with `gh workflow run windows-test-build.yml --ref main`. It checks the source, stages the pinned runtime, exercises real services and cleanup, and verifies an 8.4 → 9.7 database upgrade before building an NSIS installer. Confirm the resulting run uses the intended source commit before accepting its installer. The alpha 1 migration fixtures retain its exact Windows versions and download checksums; the preparer stages them into a separate folder without replacing the current runtime.
 
@@ -149,7 +149,7 @@ GPL binary releases must provide the corresponding source code, including packag
 
 The dedicated repository is [eimg/fairway-xmp](https://github.com/eimg/fairway-xmp). A stable GitHub release should include:
 
-- Signed Windows and signed/notarized macOS installers.
+- A Windows installer with signed updater metadata and a signed/notarized macOS installer. Windows Authenticode remains a disclosed exception for the current RC policy.
 - Tauri updater artifacts and their signatures.
 - A `latest.json` file with the release version, notes, publication date, and supported platform entries. Each entry needs its signature and an HTTPS URL to the corresponding release asset. Windows uses `windows-x86_64`; Apple Silicon uses `darwin-aarch64`.
 - Checksums and the corresponding source archives required by bundled components.
