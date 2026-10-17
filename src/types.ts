@@ -8,7 +8,7 @@ export type ProjectConfig = { name: string; domain: string; root: string; https:
 export type Project = ProjectConfig & { available: boolean; domainReady: boolean };
 export type Snapshot = {
   ports: Ports; services: ServiceStatus[]; documentRoot: string; projects: Project[]; sitesError: string | null; domainsPending: boolean; httpsTrusted: boolean; os: string; dataDir: string;
-  runtimeReady: boolean; runtimeVersions: Record<string, string> | null;
+  runtimeReady: boolean; runtimeVersions: Record<string, string> | null; mailAvailable: boolean;
   phpVersion: string; phpVersions: Record<string, string>;
   pathInstalled: boolean; cliPhp: string | null; cliComposer: string | null;
   pathPhp: string | null; pathComposer: string | null; version: string;

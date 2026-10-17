@@ -16,7 +16,7 @@ pub struct Ports {
     pub phpmyadmin: u16,
     pub mysql: u16,
     pub php: u16,
-    /// Mail inbox (web UI). Settings saved before the mail catcher use the defaults.
+    /// Mail inbox (web UI). Layout::ports migrates missing mail ports without collisions.
     #[serde(default = "default_mail_port")]
     pub mail: u16,
     #[serde(default = "default_smtp_port")]
@@ -325,11 +325,45 @@ impl Layout {
         let path = self.data.join("settings.json");
         match fs::read(&path) {
             Ok(bytes) => {
-                let ports: Ports = serde_json::from_slice(&bytes).map_err(|e| {
+                let mut ports: Ports = serde_json::from_slice(&bytes).map_err(|e| {
                     format!(
                         "Settings could not be read: {e}. Your original file has been preserved."
                     )
                 })?;
+                // Inspect presence after typed parsing, which also rejects duplicate,
+                // unknown and invalid fields. Only missing fields may be reassigned.
+                let saved: serde_json::Value =
+                    serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                let missing_mail = saved.get("mail").is_none();
+                let missing_smtp = saved.get("smtp").is_none();
+                if missing_mail || missing_smtp {
+                    let mut reserved = HashSet::from([
+                        ports.website,
+                        ports.phpmyadmin,
+                        ports.mysql,
+                        ports.php,
+                        crate::tls::https_port(),
+                    ]);
+                    if !missing_mail {
+                        reserved.insert(ports.mail);
+                    }
+                    if !missing_smtp {
+                        reserved.insert(ports.smtp);
+                    }
+                    for (port, missing) in [
+                        (&mut ports.mail, missing_mail),
+                        (&mut ports.smtp, missing_smtp),
+                    ] {
+                        if missing {
+                            *port = (*port..=u16::MAX)
+                                .chain(1024..*port)
+                                .find(|candidate| reserved.insert(*candidate))
+                                .ok_or("No distinct port is available for mail.")?;
+                        }
+                    }
+                    // Validate before writing so invalid existing settings stay intact.
+                    self.save_ports(&ports)?;
+                }
                 ports.validate()?;
                 Ok(ports)
             }
@@ -687,6 +721,87 @@ mod tests {
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn startup_migrates_only_missing_mail_ports_and_persists_them() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-mail-migration-{}", rand::random::<u64>()));
+        let cases = [
+            (8800, 8801, 13306, 19000, None, None, (8802, 11025)),
+            (8802, 8801, 13306, 19000, None, None, (8803, 11025)),
+            (8800, 8801, 11025, 19000, None, None, (8802, 11026)),
+            (8802, 8803, 11025, 11026, None, None, (8804, 11027)),
+            (8800, 8801, 13306, 19000, Some(11025), None, (11025, 11026)),
+            (8800, 8801, 13306, 19000, None, Some(8802), (8803, 8802)),
+        ];
+        for (index, (website, phpmyadmin, mysql, php, mail, smtp, expected)) in
+            cases.into_iter().enumerate()
+        {
+            let directory = root.join(index.to_string());
+            let layout = Layout::at(
+                directory.join("home"),
+                directory.join("data"),
+                root.join("runtime"),
+            );
+            layout.initialize().unwrap();
+            let mut saved = serde_json::json!({ "website": website, "phpmyadmin": phpmyadmin, "mysql": mysql, "php": php });
+            if let Some(mail) = mail {
+                saved["mail"] = mail.into();
+            }
+            if let Some(smtp) = smtp {
+                saved["smtp"] = smtp.into();
+            }
+            let path = layout.data.join("settings.json");
+            fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+            let manager = crate::manager::Manager::new(layout.clone()).unwrap();
+            assert_eq!((manager.ports.mail, manager.ports.smtp), expected);
+            assert_eq!(
+                (
+                    manager.ports.website,
+                    manager.ports.phpmyadmin,
+                    manager.ports.mysql,
+                    manager.ports.php
+                ),
+                (website, phpmyadmin, mysql, php)
+            );
+            let persisted: Ports = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(persisted, manager.ports);
+            assert_eq!(
+                crate::manager::Manager::new(layout).unwrap().ports,
+                persisted
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn port_migration_preserves_explicit_settings_and_invalid_files() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-mail-settings-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        layout.initialize().unwrap();
+        let path = layout.data.join("settings.json");
+        let explicit = br#"{ "website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000,"mail":9900,"smtp":9901 }"#;
+        fs::write(&path, explicit).unwrap();
+        assert_eq!(
+            (layout.ports().unwrap().mail, layout.ports().unwrap().smtp),
+            (9900, 9901)
+        );
+        assert_eq!(fs::read(&path).unwrap(), explicit);
+        for invalid in [
+            r#"{"website":8800,"website":8802,"phpmyadmin":8801,"mysql":13306,"php":19000}"#,
+            r#"{"website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000,"unknown":1}"#,
+            r#"{"website":8800,"phpmyadmin":8800,"mysql":13306,"php":19000}"#,
+            r#"{"website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000,"mail":8800}"#,
+            r#"{"website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000,"smtp":80}"#,
+            r#"{"website":8800,"phpmyadmin":8801,"mysql":13306,"php":19000,"mail":null}"#,
+        ] {
+            fs::write(&path, invalid).unwrap();
+            assert!(layout.ports().is_err());
+            assert_eq!(fs::read(&path).unwrap(), invalid.as_bytes());
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

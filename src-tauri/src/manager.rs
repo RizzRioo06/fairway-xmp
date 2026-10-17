@@ -39,6 +39,8 @@ pub struct Snapshot {
     pub data_dir: String,
     pub runtime_ready: bool,
     pub runtime_versions: serde_json::Value,
+    #[serde(default)]
+    pub mail_available: bool,
     pub php_version: String,
     pub php_versions: BTreeMap<String, String>,
     pub path_installed: bool,
@@ -230,6 +232,7 @@ impl Manager {
             os: std::env::consts::OS.into(),
             data_dir: self.layout.data.to_string_lossy().into(),
             runtime_ready: self.runtime_ready(),
+            mail_available: self.mail_available(),
             runtime_versions: fs::read(self.layout.runtime.join("manifest.json"))
                 .ok()
                 .and_then(|s| serde_json::from_slice(&s).ok())
@@ -983,6 +986,22 @@ fn copy_tree(source: &Path, target: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapshot_reports_mail_binary_availability_independently_of_its_manifest() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-mail-available-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let mut manager = Manager::new(layout).unwrap();
+        assert!(!manager.snapshot().mail_available);
+        let executable = manager.layout.exe("mailpit", "mailpit");
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        fs::write(&executable, b"test binary").unwrap();
+        assert!(manager.snapshot().mail_available);
+        fs::remove_file(executable).unwrap();
+        assert!(!manager.snapshot().mail_available);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn unreadable_sites_are_reported_and_preserved_until_repaired() {

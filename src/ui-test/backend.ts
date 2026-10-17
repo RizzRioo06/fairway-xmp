@@ -98,7 +98,7 @@ export function select(next: Scenario, os: Platform) {
   resetData();
   seedMail();
   scenario = next; platform = os;
-  data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', pathInstalled: true };
+  data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', mailAvailable: next !== 'Missing runtime', pathInstalled: true };
   data.sitesError = next === 'Saved sites unavailable' ? 'The saved site list is invalid: expected a JSON array.' : null;
   data.projects = next === 'No sites' || data.sitesError ? [] : [
     { name: 'My Shop', domain: 'shop', root: joinPath(home(), 'Code', 'shop', 'public'), https: true, indexFallback: true, available: next !== 'Missing web root', domainReady: true },

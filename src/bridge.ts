@@ -29,7 +29,7 @@ export const preview: Snapshot = {
     { id: 'mail', running: false, ready: false, port: 8802, pid: null, message: null },
   ],
   documentRoot: '~/fairway/www', projects: [], sitesError: null, domainsPending: false, httpsTrusted: false, os: '', dataDir: 'Fairway XMP application data',
-  runtimeReady: false, runtimeVersions: {
+  runtimeReady: false, mailAvailable: false, runtimeVersions: {
     php: manifest.php, mysql: manifest.mysql, nginx: manifest.nginx,
     phpmyadmin: manifest.phpmyadmin, composer: manifest.composer, mailpit: manifest.mailpit,
   }, pathInstalled: false,
