@@ -80,7 +80,7 @@ Each site has an optional **HTTPS** switch. The first time you turn it on, Fairw
 
 On Linux, use `fairway site add shop ~/code/shop/public --name "My Shop" --index`, `fairway site remove shop`, `fairway site https shop on|off`, and `fairway site hosts` to retry a hosts-file update. `fairway status` lists sites. Hosts-file and certificate changes ask for your sudo password. Browser trust stores can differ on Linux; if a browser still warns, check its certificate settings rather than bypassing the warning.
 
-Closing or minimizing the window keeps Fairway XMP and its services running. Use its macOS menu bar or Windows system tray icon to reopen the panel, start/stop all services or individual Nginx/MySQL services, open phpMyAdmin, or **Quit**. Nginx automatically manages its PHP worker; PHP CLI works without starting services. Quit gracefully stops all services before exiting.
+Closing or minimizing the window keeps Fairway XMP and its services running. Use its macOS menu bar or Windows system tray icon to reopen the panel, start/stop all services or individual Nginx/MySQL/Mail services, open phpMyAdmin, or **Quit**. Nginx automatically manages its PHP worker; PHP CLI works without starting services. Quit gracefully stops all services before exiting.
 
 ## PHP and Composer in your terminal
 
