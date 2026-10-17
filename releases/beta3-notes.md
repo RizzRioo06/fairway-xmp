@@ -3,7 +3,8 @@ Fairway XMP beta 3 adds signed, notarized Mac distribution and enables in-app be
 - Mac: the app and `.pkg` installer are signed with Developer ID and notarized by Apple. The updater archive contains the same notarized app.
 - Updates: signed, version-bound downloads are verified while services keep running. Before installation, Fairway backs up student databases, stops its services and terminal sessions, installs, and restarts. Failed downloads leave services running.
 - Sites: save project web roots, choose a local domain, enable HTTPS when needed, and open the site, folder, or terminal from its actions menu. System approval is requested when local domain or certificate trust changes require it.
-- PHP, Composer, and database launchers refresh after an app update when command-line integration is enabled.
+- Mac recovery: reopening Fairway after a crash or force quit recovers its own surviving Nginx and selected PHP-FPM services, so Stop and Start work normally. Executable and configuration checks keep unrelated processes untouched. Fixes #3.
+- PHP, Composer, and `fairway` launchers refresh after an app update when command-line integration is enabled.
 
 **Upgrading from beta 2 or earlier:** install beta 3 manually once. Those earlier apps do not contain the update feed and verification key. Future releases can be installed from beta 3's Updates page. Stop services and quit before the manual installation; projects, databases, settings, and saved sites are preserved.
 
