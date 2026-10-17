@@ -3,7 +3,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 async function open(page: Page) {
   await page.goto('/');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
-  await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Insert row', exact: true })).toBeEnabled();
 }
 async function action(page: Page, scope: 'Database' | 'Table', name: string) {
@@ -100,7 +100,7 @@ test('database switching publishes one consistent workspace and sidebar navigati
   const structure = page.getByRole('region', { name: 'Table structure', exact: true });
   await expect(structure).toBeVisible();
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
-  await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   await expect(structure).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show tables', exact: true })).toBeVisible();
   await expect(page.getByText('Loading data browser…', { exact: true })).toHaveCount(0);
@@ -111,9 +111,9 @@ test('database switching publishes one consistent workspace and sidebar navigati
 test('returning during initial database loading recovers without an empty or stuck view', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
-  await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
-  await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Table rows', exact: true })).toContainText('Student May');
   await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -121,7 +121,7 @@ test('returning during initial database loading recovers without an empty or stu
 
 test('database rows preserve exact values, pagination, and protect rows without keys and views', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   await page.getByRole('button', { name: 'Start MySQL', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Insert row', exact: true })).toBeEnabled();
   const rows = page.getByRole('region', { name: 'Table rows', exact: true });

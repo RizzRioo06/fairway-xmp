@@ -4,7 +4,7 @@ import type { Page, TestInfo } from '@playwright/test';
 const scenarios = ['Stopped', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure'];
 
 async function openSites(page: Page) {
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage Sites', exact: true }).click();
 }
 
 async function siteAction(page: Page, name: string, action: string) {
@@ -379,7 +379,7 @@ test('update progress clears after a failed download and services stay available
 test('mail inbox lists, previews, searches, and deletes caught emails', async ({ page }, info) => {
   await page.goto('/');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
-  await page.getByRole('button', { name: 'Mail', exact: true }).click();
+  await page.getByRole('button', { name: 'View Mail', exact: true }).click();
   await page.getByRole('button', { name: 'SMTP settings' }).click();
   const connection = page.getByRole('dialog', { name: 'Mail connection' });
   await expect(connection).toContainText('11025');

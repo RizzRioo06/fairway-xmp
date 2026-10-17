@@ -1,6 +1,6 @@
 # Desktop data browser
 
-The beta 2 candidate adds **Data browser** to the macOS and Windows desktop panels alongside phpMyAdmin. The existing Linux terminal edition is unchanged. Start MySQL from the browser's empty state or Environment. phpMyAdmin remains available and also needs Nginx running.
+The beta 2 candidate adds **Data browser** to the macOS and Windows desktop panels alongside phpMyAdmin. The existing Linux terminal edition is unchanged. Open it through **Browse Data** in the sidebar. Start MySQL from the browser's empty state or Environment. phpMyAdmin remains available and also needs Nginx running.
 
 ## Included
 

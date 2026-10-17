@@ -28,11 +28,11 @@ const meta = {
 type View = 'environment' | 'projects' | 'mail' | 'settings' | 'updates' | 'data' | 'terminal';
 const viewTitle: Record<View, string> = {
   environment: 'Environment',
-  projects: 'Sites',
-  mail: 'Mail',
+  projects: 'Manage Sites',
+  mail: 'View Mail',
   settings: 'Settings',
   updates: 'Updates',
-  data: 'Data browser',
+  data: 'Browse Data',
   terminal: 'Terminal',
 };
 type Notice = { text: string; kind: 'error' | 'success' } | null;
@@ -242,14 +242,20 @@ export default function App() {
       <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home">
         <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span className="brand-name">fairway<span className="brand-period">.</span><span className="brand-edition">XMP</span></span>
       </a>
-      <nav aria-label="Main navigation">
-        <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
-        <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} onClick={() => setView('projects')}><AppWindow size={18} />Sites</button>
-        <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mail')}><Mail size={18} />Mail</button>
-        {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Data browser</button>}
-        <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
-        <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
-        <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} onClick={() => setView('updates')}><ArrowDownToLine size={18} />Updates</button>
+      <nav className="sidebar-nav" aria-label="Main navigation">
+        <div className="nav-group" role="group" aria-label="Core">
+          <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
+          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
+        </div>
+        <div className="nav-group" role="group" aria-label="Tools">
+          <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} onClick={() => setView('projects')}><AppWindow size={18} />Manage Sites</button>
+          <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mail')}><Mail size={18} />View Mail</button>
+          {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Browse Data</button>}
+        </div>
+        <div className="nav-group nav-group-app" role="group" aria-label="App">
+          <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
+          <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} onClick={() => setView('updates')}><ArrowDownToLine size={18} />Updates</button>
+        </div>
       </nav>
       <div className="sidebar-bottom">
         <button className="help-button" onClick={() => setHelp(true)}><CircleHelp size={17} />Getting started<ArrowUpRight size={14} /></button>

@@ -28,7 +28,7 @@ The offline `.run` and equivalent `.tar.gz` install under `~/.local/share/fairwa
 
 Modal text fields and dropdowns use an inset keyboard focus ring. Sites and database forms share a padded scrolling body with fixed headings and action footers; focused controls, scrollbars, and buttons stay inside the modal at the 820×650 minimum size. Small controls and buttons retain a visible outer focus ring with space around it.
 
-Page headings and sidebar navigation omit decorative eyebrow captions. The desktop sidebar keeps Getting started and a centered version at the bottom; the local-learning badge and repeated product name are omitted. The XMP brand label uses normal letter spacing.
+Page headings and sidebar navigation omit decorative eyebrow captions. The desktop sidebar groups Environment and Terminal at the top, Manage Sites / View Mail / Browse Data under a subtle divider, and Settings / Updates in a group anchored above Getting started and a centered version at the bottom. Group names are available to assistive technology without visible captions; the local-learning badge and repeated product name are omitted. The XMP brand label uses normal letter spacing.
 
 Data browser navigation preserves its workspace state across sidebar visits. Database/table loading replaces catalog metadata and rows together, keeps the previous view visible and inert until ready, and uses one delayed local indicator without dimming controls or shifting layout. The native operation guard remains active. Returning during cancellation waits for the prior request before refreshing.
 
