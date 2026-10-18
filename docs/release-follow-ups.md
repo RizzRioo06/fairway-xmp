@@ -1,4 +1,4 @@
-# Follow-up work after PHP version selection
+# Release follow-up work
 
 The owner accepted the Windows MySQL CLI non-ASCII identifier limitation on 2026-10-19. It is disclosed for this RC: on non-UTF-8 system locales, unsupported backup/export names fail explicitly and updates cannot proceed without a completed backup. Broader Unicode CLI backup support remains open; normal Unicode row/query handling is retained. See [database limitations](data-browser.md#windows-backupexport-identifiers).
 

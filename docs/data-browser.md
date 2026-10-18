@@ -71,3 +71,5 @@ MySQL Server on Windows restricts file paths to the current ANSI code page ([ups
 On Windows systems whose process code page is not UTF-8, the bundled MySQL command-line clients cannot reliably receive non-ASCII database/table names. Fairway reports this explicitly instead of attempting a potentially misdirected export. Whole-environment backups require ASCII database names; table exports require ASCII database and table names. Imports require a successful target-database backup first. Unicode row values and normal in-app queries remain supported.
 
 An automatic update that cannot complete its database backup stops before installation and keeps existing services/data intact. Use ASCII schema identifiers for coursework that needs these backup/export operations. UTF-8 Windows system locales are exempt from this argument limitation, but no system locale setting is changed by Fairway. The owner accepted this disclosed RC limitation on 2026-10-19; broader Unicode CLI backup support remains a follow-up.
+
+The bundled phpMyAdmin can make a manual SQL export for Unicode identifiers. That manual export does not override the automatic updater's backup requirement.
