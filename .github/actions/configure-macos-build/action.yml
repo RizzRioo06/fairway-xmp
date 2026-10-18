@@ -1,0 +1,14 @@
+name: Configure macOS compilation
+description: Match Cargo and Tauri deployment targets so cached native dependencies can be reused.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        python - <<'PY'
+        import json, os
+        from pathlib import Path
+        target = json.loads(Path('src-tauri/tauri.conf.json').read_text())['bundle']['macOS']['minimumSystemVersion']
+        with Path(os.environ['GITHUB_ENV']).open('a') as output:
+            output.write(f'MACOSX_DEPLOYMENT_TARGET={target}\n')
+        PY
