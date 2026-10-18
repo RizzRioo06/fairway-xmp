@@ -25,6 +25,7 @@ jobs:
         with:
           workspaces: src-tauri
           shared-key: installer-complete-v1
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST MACOSX_DEPLOYMENT_TARGET
           cache-on-failure: false
           save-if: ${{ github.ref_type != 'tag' }}
       - name: Verify application version consistency
