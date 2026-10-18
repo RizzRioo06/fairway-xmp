@@ -155,7 +155,10 @@ fn verify_restore(source: &Manager, root: &std::path::Path, backup: &str) -> Res
             );
             let mut unusual = admin(&restored);
             unusual.args(["-e", "SELECT n FROM `--column-statistics=0`.proof; SELECT n FROM ` leading space`.proof;"]);
-            assert_eq!(process::output(unusual)?, "7\n9");
+            assert_eq!(
+                process::output(unusual)?.lines().collect::<Vec<_>>(),
+                ["7", "9"]
+            );
             if fairway_core::config::mysql_cli_identifier_supported("日本") {
                 let mut unicode = admin(&restored);
                 unicode.args(["-e", "SELECT n FROM `日本`.proof;"]);
