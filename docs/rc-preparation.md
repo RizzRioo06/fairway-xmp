@@ -25,7 +25,7 @@ The full source review and hardening findings are recorded in [RC source review]
 - [x] Confirm all six version locations agree using `python3 scripts/release_candidate.py version`.
 - [x] Pass local source/UI checks and resolve the concrete regressions found; fresh candidate CI is required below.
 - [x] Lock feature scope on 2026-10-18.
-- [x] Select candidate source `d13a06b8f60688306d452b8a31c4ff649a4b26d4`, tag `candidate-0.1.0-rc.1-1`; [build run 39140420384](https://github.com/eimg/fairway-xmp/actions/runs/39140420384). Later code/runtime changes require a new candidate and new acceptance evidence.
+- [ ] Select replacement candidate after the Windows Unicode-path correction. `candidate-0.1.0-rc.1-1` / [run 39140420384](https://github.com/eimg/fairway-xmp/actions/runs/39140420384) failed native Nginx startup and is superseded. Later code/runtime changes require a new candidate and new acceptance evidence.
 
 ## Build and accept
 

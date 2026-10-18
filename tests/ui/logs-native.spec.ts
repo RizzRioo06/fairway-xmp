@@ -24,6 +24,13 @@ test('global logs show real PHP failures and HTTP history from the bundled web s
     ]));
     await page.getByRole('button', { name: 'Start service', exact: true }).first().click();
     await expect(page.locator('.service-card').first()).toContainText('Running', { timeout: 20000 });
+    // Reload and graceful stop use the same Unicode data path as startup.
+    await page.evaluate(async root => {
+      const api = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__;
+      await api.invoke('save_project', { previous: 'lesson', project: { name: 'Lesson renamed', domain: 'lesson', root, https: false, indexFallback: false } });
+      await api.invoke('service_action', { service: 'nginx', action: 'stop' });
+      await api.invoke('service_action', { service: 'nginx', action: 'start' });
+    }, root);
     const config = await readFile(join(bridge.root, 'data 日本/config/nginx.conf'), 'utf8');
     const httpsPort = config.match(/listen 127\.0\.0\.1:(\d+) ssl/)![1];
     const base = `http://127.0.0.1:${snapshot.ports.website}`;

@@ -303,14 +303,8 @@ impl Manager {
             return Err(error);
         }
         let control = |args: &[&str]| {
-            let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-            cmd.arg("-e")
-                .arg(self.layout.data.join("logs/nginx.log"))
-                .arg("-p")
-                .arg(&self.layout.data)
-                .arg("-c")
-                .arg(&config)
-                .args(args);
+            let mut cmd = self.nginx_command();
+            cmd.args(args);
             process::output(cmd)
         };
         let result = control(&["-t"]).and_then(|_| {
@@ -605,23 +599,10 @@ impl Manager {
                 cmd
             }
             "nginx" => {
-                let mut check = process::command(self.layout.exe("nginx", "nginx"));
-                check
-                    .arg("-e")
-                    .arg(self.layout.data.join("logs/nginx.log"))
-                    .arg("-t")
-                    .arg("-p")
-                    .arg(&self.layout.data)
-                    .arg("-c")
-                    .arg(self.layout.data.join("config/nginx.conf"));
+                let mut check = self.nginx_command();
+                check.arg("-t");
                 process::output(check)?;
-                let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-                cmd.arg("-e")
-                    .arg(self.layout.data.join("logs/nginx.log"))
-                    .arg("-p")
-                    .arg(&self.layout.data)
-                    .arg("-c")
-                    .arg(self.layout.data.join("config/nginx.conf"));
+                let mut cmd = self.nginx_command();
                 #[cfg(not(windows))]
                 cmd.args(["-g", "daemon off;"]);
                 cmd
@@ -734,6 +715,31 @@ impl Manager {
         )
     }
 
+    fn nginx_command(&self) -> std::process::Command {
+        let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
+        cmd.current_dir(&self.layout.data);
+        // Nginx's Windows main() receives ANSI argv, while its configuration
+        // filenames use UTF-8. Keep argv ASCII and let Windows set the Unicode
+        // working directory, without requiring NTFS short-name aliases.
+        #[cfg(windows)]
+        cmd.args([
+            "-e",
+            "logs/nginx.log",
+            "-p",
+            "./",
+            "-c",
+            "config/nginx.conf",
+        ]);
+        #[cfg(not(windows))]
+        cmd.arg("-e")
+            .arg(self.layout.data.join("logs/nginx.log"))
+            .arg("-p")
+            .arg(&self.layout.data)
+            .arg("-c")
+            .arg(self.layout.data.join("config/nginx.conf"));
+        cmd
+    }
+
     fn database_command(&self, executable: &str, secure: bool) -> std::process::Command {
         let mut cmd = process::command(crate::config::windows_ansi_path(
             &self.layout.exe("mysql", executable),
@@ -828,14 +834,8 @@ impl Manager {
                     process::output(cmd)?;
                 }
                 "nginx" => {
-                    let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-                    cmd.arg("-e")
-                        .arg(self.layout.data.join("logs/nginx.log"))
-                        .arg("-p")
-                        .arg(&self.layout.data)
-                        .arg("-c")
-                        .arg(self.layout.data.join("config/nginx.conf"))
-                        .args(["-s", "quit"]);
+                    let mut cmd = self.nginx_command();
+                    cmd.args(["-s", "quit"]);
                     process::output(cmd)?;
                 }
                 // Mailpit shuts down cleanly on SIGTERM; SIGQUIT would dump and abort.

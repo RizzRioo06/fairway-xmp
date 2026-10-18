@@ -94,6 +94,19 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
         Ok(match request["command"].as_str().unwrap_or_default() {
+            "save_project" => {
+                let mut manager = manager.lock().unwrap();
+                manager.save_project(
+                    args["previous"].as_str(),
+                    serde_json::from_value(args["project"].clone()).map_err(|e| e.to_string())?,
+                )?;
+                serde_json::to_value(manager.snapshot()).unwrap()
+            }
+            "service_action" if args["action"] == "stop" && args["service"] == "nginx" => {
+                let mut manager = manager.lock().unwrap();
+                manager.stop("nginx")?;
+                serde_json::to_value(manager.snapshot()).unwrap()
+            }
             "service_action"
                 if args["action"] == "start"
                     && ["mysql", "nginx"]

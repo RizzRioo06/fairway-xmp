@@ -48,7 +48,7 @@ export async function nativeBridge(page: Page, info: TestInfo) {
       clearTimeout(timer);
       lines.close();
       await info.attach('native-request-timings', { body: JSON.stringify(timings, null, 2), contentType: 'application/json' });
-      for (const name of ['mysql.log', 'mysql-process.log', 'php.log']) {
+      for (const name of ['mysql.log', 'mysql-process.log', 'php.log', 'nginx.log', 'nginx-process.log']) {
         const log = await readFile(join(root, 'data 日本/logs', name)).catch(() => null);
         if (log) await info.attach(`native-${name}`, { body: log, contentType: 'text/plain' });
       }
