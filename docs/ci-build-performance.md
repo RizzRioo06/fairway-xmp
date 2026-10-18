@@ -2,6 +2,8 @@
 
 Routine verification runs on pull requests, `main` pushes, or manual dispatch. A newer commit cancels obsolete routine checks for the same PR/ref. Feed updates and candidate/release tags do not launch a duplicate routine build. Candidate checks still include every platform and browser review from one commit; no candidate is canceled by routine verification concurrency.
 
+Browser review and the Docker portability host use the tested Ubuntu 24.04 image explicitly. This keeps their environment stable through GitHub's [announced Ubuntu 26.04 migration](https://github.com/actions/runner-images/issues/14748). Runtime compilation continues to use Ubuntu 22.04 for the glibc 2.35 baseline.
+
 ## Runtime and dependency reuse
 
 `Warm build inputs` runs on `main` when runtime inputs, Cargo dependencies, or the relevant preparation/workflow files change. It can also be dispatched manually. It prepares the locked Windows/macOS/Linux inputs and compiles dependencies with the same Rust cache identity as the installer jobs. It covers debug test/lint profiles plus release app, updater-probe, and installer-probe variants, including Tauri's custom-protocol feature and the explicit Windows target. It does not import signing credentials, create candidate acceptance records, or publish anything. Warm-up failures are independent of routine verification and should be resolved before cutting a candidate.
