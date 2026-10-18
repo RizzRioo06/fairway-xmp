@@ -16,6 +16,10 @@ MANUAL_CHECKS = {
     'macos-arm64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'menu-bar-and-quit', 'browser-visual-review', 'data-browser-and-sql-tools', 'terminal-sessions-and-cleanup', 'sites-domains-and-https', 'in-app-update-and-restart', 'mail-catcher-and-inbox', 'troubleshooting-logs'],
     'linux-x86_64': ['install-and-first-project', 'upgrade-preserves-work', 'uninstall-reinstall-preserves-work', 'dashboard-detach-and-shutdown'],
 }
+# Only the human update into the published version depends on feed availability.
+# This list is policy, never supplied by acceptance evidence.
+POST_PUBLICATION_CHECKS = ('in-app-update-and-restart',)
+ACCEPTANCE_PHASES = ('pre-publication', 'post-publication')
 
 
 def read(path):
@@ -112,7 +116,7 @@ def assemble(inputs, output, require_updater=False):
             'knownLimitations': ['Windows installer has no Authenticode signature; first downloads can show SmartScreen. Linux updates are manual.' if require_updater else 'Unsigned installers; manual updates.', 'Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases; see docs/data-browser.md.', 'Windows non-UTF-8 system code pages require ASCII identifiers for MySQL CLI backup/export; a failed pre-update backup blocks installation and preserves data/services. See docs/data-browser.md.', 'PHP 8.0/8.1 are unsupported legacy compatibility options.', 'Exact Windows PHP 8.0/8.1 dependency build/patch provenance remains unverified; see docs/release-follow-ups.md.'],
             'candidates': by_target}
     write(output, data)
-    acceptance = {'version': version, 'commit': commit, 'platforms': {target: {
+    acceptance = {'version': version, 'commit': commit, 'postPublicationChecks': list(POST_PUBLICATION_CHECKS), 'platforms': {target: {
         'tester': '', 'os': '', 'testedAt': '', 'installerSha256': by_target[target]['files'][by_target[target]['installer']]['sha256'],
         'checks': {name: False for name in MANUAL_CHECKS[target]},
     } for target in TARGETS}}
@@ -129,17 +133,27 @@ def verify_files(candidate, directory):
             raise ValueError(f'Artifact changed or is missing: {name}')
 
 
-def acceptance(manifest, evidence):
+def acceptance(manifest, evidence, phase='post-publication'):
+    if phase not in ACCEPTANCE_PHASES:
+        raise ValueError('Unknown human acceptance phase')
     if evidence.get('commit') != manifest['commit'] or evidence.get('version') != manifest['version']:
         raise ValueError('Human acceptance is for a different candidate')
+    pending = {}
     for target in TARGETS:
         result = evidence.get('platforms', {}).get(target, {})
         candidate = manifest['candidates'][target]
         expected = candidate['files'][candidate['installer']]['sha256']
         if result.get('installerSha256') != expected or any(not isinstance(result.get(field), str) or not result[field].strip() for field in ('tester', 'os', 'testedAt')):
             raise ValueError(f'Missing exact-installer acceptance details: {target}')
-        if any(result.get('checks', {}).get(check) is not True for check in MANUAL_CHECKS[target]):
-            raise ValueError(f'Unfinished human checks: {target}')
+        for check in MANUAL_CHECKS[target]:
+            passed = result.get('checks', {}).get(check)
+            if passed is True:
+                continue
+            if phase == 'pre-publication' and check in POST_PUBLICATION_CHECKS and passed is False:
+                pending.setdefault(target, []).append(check)
+                continue
+            raise ValueError(f'Unfinished human checks: {target}: {check}')
+    return {'phase': phase, 'status': 'awaiting-post-publication' if pending else 'complete', 'pendingChecks': pending}
 
 
 def main():
@@ -157,12 +171,16 @@ def main():
     task.add_argument('--candidate', required=True); task.add_argument('--directory', required=True)
     task = commands.add_parser('check-acceptance')
     task.add_argument('--manifest', required=True); task.add_argument('--evidence', required=True)
+    task.add_argument('--phase', choices=ACCEPTANCE_PHASES, default='post-publication',
+                      help='Default requires every check; pre-publication defers only the human in-app update check')
     args = parser.parse_args()
     if args.command == 'version': print(versions())
     elif args.command == 'record': record(args.target, args.directory, args.artifact, args.lifecycle, args.output, args.signing)
     elif args.command == 'assemble': assemble(args.inputs, args.output, args.require_updater)
     elif args.command == 'verify-files': verify_files(read(args.candidate), args.directory)
-    else: acceptance(read(args.manifest), read(args.evidence)); print('Human acceptance complete for these exact installers. No release was published.')
+    else:
+        print(json.dumps(acceptance(read(args.manifest), read(args.evidence), args.phase), indent=2))
+        print('Exact-installer acceptance phase validated. No release was published.')
 
 
 if __name__ == '__main__':

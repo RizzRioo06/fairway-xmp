@@ -11,6 +11,7 @@ The release owner confirmed this scope on 2026-10-17:
 - Keep Developer ID signing, notarization and stapling for the Mac app and installer, plus signed Mac/Windows updates and existing verification checks.
 - **Defer per-site PHP.** [Issue #5](https://github.com/eimg/fairway-xmp/issues/5) closed as not planned on 2026-10-18. Global PHP selection remains the behavior for all sites, terminals and CLI tools in this RC.
 - On 2026-10-19, accept the documented Windows MySQL non-ASCII backup/export identifier limitation on non-UTF-8 system code pages. Errors must be explicit, preserve data, and block updates whose backup cannot complete. See [database limitations](data-browser.md#windows-backupexport-identifiers).
+- On 2026-10-19, move only the human in-app update/restart check after publication and feed promotion. Other exact-installer human checks and signed-updater CI remain prerequisites; unperformed update checks stay false.
 
 The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation still need to reach the release branch through normal review.
 
@@ -30,7 +31,7 @@ The full source review and hardening findings are recorded in [RC source review]
 
 ## Build and accept
 
-Before publication, resolve the [human update-test sequencing decision](rc-source-review.md#release-policy-decision-still-required). The current checker requires a human update into the exact candidate before its production feed can offer it. Other exact-installer device checks and signed-updater CI remain required; no deferred check is marked passed.
+Follow the approved [acceptance phases](beta-acceptance.md#acceptance-before-and-after-publication). Only the human update into the published candidate is deferred. Other exact-installer device checks and signed-updater CI remain required before publication; no deferred check is marked passed.
 
 Use the existing **Release candidate** workflow from the chosen commit, or a `candidate-*` tag at that commit. Windows, Apple Silicon Mac, Linux, installer lifecycles, service/restore checks, signatures, sources and browser review must use the same commit. Building does not publish.
 
@@ -43,16 +44,16 @@ Explicit RC checks:
 - Mail-only Start/Stop, tray status/actions, PHP mail(), framework SMTP, inbox search/preview/delete, and attachment saving. Check stop/restart, Quit and reopening.
 - Logs: real PHP errors/traces, failed and successful HTTP/HTTPS requests, source/search filters, pause/resume/copy, service failures, restart/replacement handling and responsive large-log reading.
 - Grouped navigation, terminal continuity and data-browser workspace continuity at normal/minimum native window sizes.
-- Actual subsequent-version update and restart, including protected Mac installation prompts and cancellation. Ordinary local builds have no updater and cannot establish this acceptance.
+- After publication and feed promotion: actual subsequent-version update and restart into this candidate, including protected Mac installation prompts and cancellation. Ordinary local builds have no updater and cannot establish this acceptance.
 - Global PHP selection, site terminal paths, existing command-line integration and switching all six bundled versions remain covered; per-site PHP is excluded.
 
-Run `python3 scripts/release_candidate.py check-acceptance --manifest /path/to/candidate-manifest.json --evidence /path/to/completed-acceptance.json` before publication.
+Run `python3 scripts/release_candidate.py check-acceptance --phase pre-publication --manifest /path/to/candidate-manifest.json --evidence /path/to/pre-publication-acceptance.json` before publication. After the human update tests, validate the completed evidence with `--phase post-publication`; omitting the phase also requires all checks. Record the dated results without replacing the published pre-publication evidence. Any failed update stops further rollout.
 
 ## Publication and channels
 
-**Publish tested release** retains the workflow file `publish-beta-release.yml`. Supply the successful candidate run ID, exact source commit, existing `v0.1.0-rc.1` tag at that commit, reviewed notes path and completed acceptance JSON path. RC/stable publication rejects missing or incomplete human evidence and mismatched installer hashes. The published files include `acceptance.json`.
+**Publish tested release** retains the workflow file `publish-beta-release.yml`. Supply the successful candidate run ID, exact source commit, existing `v0.1.0-rc.1` tag at that commit, reviewed notes path and pre-publication acceptance JSON path. RC/stable publication rejects missing evidence, unfinished pre-publication checks and mismatched installer hashes. The published files include `acceptance.json`; `BUILD-INFO.json` distinguishes pre-publication approval from full human acceptance and lists pending update checks.
 
-Notes and completed evidence may be committed after the build in a documentation-only commit. Dispatch publication from a checkout containing them; the version tag must continue identifying the exact tested application commit. Reuse accepted bytes without rebuilding or moving published tags.
+Notes, evidence and reviewed publication-policy tooling may be committed after the build without changing application/runtime inputs. Dispatch publication from a checkout containing them and the approved phase checker; the version tag must continue identifying the exact tested application commit. This policy follow-up leaves candidate 5's application/runtime unchanged. Reuse accepted bytes without rebuilding or moving published tags.
 
 Feed promotion is an explicit input, **off by default**:
 
@@ -67,4 +68,4 @@ RC releases are GitHub prereleases and never latest stable. Stable releases are 
 
 ## Pending release work
 
-Candidate build completion, exact-installer device acceptance, release version tagging, publication and feed promotion remain pending. The candidate source and build-only tag above are selected; the publication tag has not been created. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed.
+Candidate 5 passed all automated gates. Exact-installer device acceptance, release version tagging, publication and feed promotion remain pending; the human update/restart checks follow publication. The candidate source and build-only tag above are selected; the publication tag has not been created. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed. Approval of the check sequencing does not authorize publication.

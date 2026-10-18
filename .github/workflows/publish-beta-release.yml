@@ -20,11 +20,11 @@ on:
         required: true
         type: string
       acceptance_file:
-        description: Completed acceptance JSON path in this checkout (mandatory for RC/stable)
+        description: Pre-publication acceptance JSON path (RC/stable required; human update check follows publication)
         required: false
         type: string
       promote_updates:
-        description: Offer this accepted release through the applicable in-app update feeds
+        description: Offer this release in-app; then record the human update/restart check
         required: true
         default: false
         type: boolean

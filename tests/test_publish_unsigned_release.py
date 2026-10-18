@@ -36,6 +36,11 @@ class ReleaseTagTests(unittest.TestCase):
                 path = Path(temporary) / 'acceptance.json'
                 path.write_text(json.dumps(evidence))
                 self.assertEqual(publisher.human_acceptance(manifest, path), evidence)
+                for target in ('macos-arm64', 'windows-x64'):
+                    evidence['platforms'][target]['checks']['in-app-update-and-restart'] = False
+                path.write_text(json.dumps(evidence))
+                self.assertEqual(publisher.human_acceptance(manifest, path), evidence)
+                with self.assertRaises(ValueError): release_candidate.acceptance(manifest, evidence)
                 evidence['platforms']['windows-x64']['checks']['mail-catcher-and-inbox'] = False
                 path.write_text(json.dumps(evidence))
                 with self.assertRaisesRegex(ValueError, 'Unfinished human checks'):
@@ -72,14 +77,18 @@ class ReleaseTagTests(unittest.TestCase):
                     'installerSha256': data['files'][data['installer']]['sha256'], 'tester': 'Test fixture', 'os': 'Test OS', 'testedAt': '2026-10-17',
                     'checks': {check: True for check in release_candidate.MANUAL_CHECKS[target]}}
                     for target, data in manifest['candidates'].items()}}
+                for target in ('macos-arm64', 'windows-x64'):
+                    evidence['platforms'][target]['checks']['in-app-update-and-restart'] = False
                 accepted = root / 'acceptance.json'; accepted.write_text(json.dumps(evidence))
                 notes = root / 'notes.md'; notes.write_text('Reviewed release notes')
-                uploaded = {}; commands = []; build = {}
+                uploaded = {}; commands = []; build = {}; fail_signature = False
                 def run_json(*args):
                     if args[:3] == ('gh', 'run', 'view'): return {'conclusion': 'success', 'headSha': sha, 'url': 'https://example.invalid/run'}
                     return [uploaded] if uploaded else []
                 def execute(args, **kwargs):
                     commands.append(args)
+                    if args[0] == 'cargo' and fail_signature:
+                        raise subprocess.CalledProcessError(1, args)
                     if args[:3] == ['gh', 'run', 'download']:
                         shutil.copytree(fixture, Path(args[args.index('--dir') + 1]), dirs_exist_ok=True)
                     if args[:3] == ['gh', 'release', 'create']:
@@ -99,7 +108,26 @@ class ReleaseTagTests(unittest.TestCase):
                 self.assertIn('prerelease=' + str(prerelease).lower(), patch)
                 self.assertIn('make_latest=' + str(not prerelease).lower(), patch)
                 self.assertEqual(build['prerelease'], prerelease)
-                self.assertTrue(build['humanAccepted'])
+                self.assertTrue(build['prePublicationHumanAccepted'])
+                self.assertFalse(build['humanAccepted'])
+                self.assertEqual(build['humanAcceptance']['status'], 'awaiting-post-publication')
+                self.assertEqual(set(build['humanAcceptance']['pendingChecks']), {'macos-arm64', 'windows-x64'})
+                self.assertEqual(len([args for args in commands if args[0] == 'cargo']), 2)
+                # Deferring the human check must not bypass the automated drill or signature verifier.
+                for failure in ('native-drill', 'signature'):
+                    uploaded.clear(); commands.clear()
+                    fail_signature = failure == 'signature'
+                    if failure == 'native-drill':
+                        manifest['candidates']['windows-x64']['lifecycle']['updater']['status'] = 'failed'
+                    else:
+                        manifest['candidates']['windows-x64']['lifecycle']['updater']['status'] = 'passed'
+                    (metadata / 'candidate-manifest.json').write_text(json.dumps(manifest))
+                    with self.subTest(failure=failure), mock.patch.dict(os.environ, {'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                         mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
+                         mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), \
+                         self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                        publisher.main(signed=True)
+                    self.assertFalse(any(args[:3] == ['gh', 'release', 'create'] for args in commands))
 
     def test_uploaded_draft_is_found_without_the_published_tag_endpoint(self):
         release = {'id': 42, 'tag_name': 'v0.1.0-beta.3', 'draft': True}

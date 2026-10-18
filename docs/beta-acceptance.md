@@ -44,19 +44,37 @@ For this candidate, perform a short native check on the supported target OS. Rec
 7. **Desktop visual review:** inspect the same commit's browser screenshots and briefly check the installed app for native WebView differences.
 
 8. **Desktop Sites and HTTPS:** add/edit a site, check domain setup/retry, approve HTTPS trust, verify the browser URL and registered web root, and confirm saved settings survive restart and upgrade.
-9. **Desktop in-app update and restart:** from an enabled signed build, install a subsequent version through Updates; check progress, database backup, graceful service/terminal shutdown, restart, version change, preserved project/site/settings/data, and PHP/Composer/database launchers. Check the macOS administrator prompt if the installed app cannot be replaced directly. Earlier betas require the manual bootstrap install. The automated same-version reinstall drill does not mark this check complete.
+9. **Desktop in-app update and restart (after publication and feed promotion):** from an enabled signed build, install this candidate as a subsequent version through Updates; check progress, database backup, graceful service/terminal shutdown, restart, version change, preserved project/site/settings/data, and PHP/Composer/database launchers. Check approval and cancellation of the macOS administrator prompt if the installed app cannot be replaced directly. Earlier betas require the manual bootstrap install. The automated same-version reinstall drill does not mark this check complete.
 10. **Desktop mail catcher and inbox:** start/stop Mail alone and from the tray, send PHP mail() and framework SMTP mail, read/search/preview/delete messages, save an attachment, and check restart/Quit cleanup. Verify existing custom ports survive migration.
 11. **Desktop troubleshooting logs:** reproduce a PHP error and a failed HTTP/HTTPS request, open Logs, select two site addresses and verify request isolation while shared PHP stays clearly labeled, check source/search filters and successful requests with Problems only off, then pause, copy the filtered output and resume. Confirm multiline errors, service startup failures, navigation continuity and readable normal/minimum window layouts. Logs must remain usable during service operations.
 
 Set a check to true only after it passed for the exact artifact. Preserve notes/screenshots of failures separately and rebuild after a code/runtime change; old acceptance does not apply to the new hash.
 
+## Acceptance before and after publication
+
+The owner approved this sequencing on 2026-10-19: every check except desktop `in-app-update-and-restart` must pass before publication. That human check needs the published production feed. Keep it explicitly false on both desktop targets until tested; missing fields, non-boolean values and any other unfinished check still fail. Existing templates without `postPublicationChecks` metadata remain supported; the checker defines the allowed deferral, not the evidence file. All exact-installer identity fields and automated signed-updater/lifecycle gates remain mandatory.
+
+Before publication:
+
 ```sh
 python scripts/release_candidate.py check-acceptance \
+  --phase pre-publication \
+  --manifest /path/to/candidate-manifest.json \
+  --evidence /path/to/pre-publication-acceptance.json
+```
+
+The command reports pending update checks without completing them. RC/stable publication requires this pre-publication evidence. Published `acceptance.json` preserves the submitted booleans; `BUILD-INFO.json` records `prePublicationHumanAccepted`, full `humanAccepted` and the pending checks separately. The candidate manifest retains its original build-time status. When the owner authorizes publication, reuse the reviewed files unchanged, include their matching source archives and checksums, and update downloads/changelog/known limitations. Don't rebuild between acceptance and publication.
+
+After the owner-authorized release and feed promotion, test a real update into that exact version on Mac and Windows. Record dated results, including protected Mac prompt approval/cancellation, with the tester and OS. Complete only the update checks that passed in a copy of the same evidence, retaining all installer hashes and the earlier records. Then run:
+
+```sh
+python scripts/release_candidate.py check-acceptance \
+  --phase post-publication \
   --manifest /path/to/candidate-manifest.json \
   --evidence /path/to/completed-acceptance.json
 ```
 
-This rejects mismatched commits/versions/hashes, missing tester information, and unfinished checks. It reports acceptance; it never publishes. The publication workflow also requires this completed evidence for RC and stable releases. When publishing is authorized, reuse the reviewed files unchanged, include their matching source archives and checksums, and update downloads/changelog/known limitations. Don't rebuild between acceptance and publication.
+This phase requires every check; it is also the default when `--phase` is omitted. Commit the completed evidence and dated test notes in the release checkout for review, keeping the published pre-publication snapshot intact. Do not overwrite published installer bytes or claim full acceptance before this passes. If the human update fails, keep it false, record the failure, stop further rollout and investigate before another promotion/release. Neither checker command publishes anything.
 
 Before dispatching the publication workflow, create and push the release tag at the exact candidate commit using the release owner's authenticated Git access. The publisher checks that the fetched tag resolves to that commit and uses `--verify-tag`; it never moves the tag or supplies a historical `target_commitish` to the release API. GitHub's workflow token cannot satisfy the extra workflow permission that explicit historical targets can require.
 

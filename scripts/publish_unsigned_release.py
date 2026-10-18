@@ -65,11 +65,11 @@ def human_acceptance(manifest, evidence_path):
     from release_versions import channel
     from release_candidate import acceptance
     require(bool(evidence_path) or channel(manifest['version']) == 'beta',
-            'RC and stable publication require completed exact-installer human acceptance evidence')
+            'RC and stable publication require pre-publication exact-installer human acceptance evidence')
     if not evidence_path:
         return None
     evidence = json.loads(Path(evidence_path).read_text())
-    acceptance(manifest, evidence)
+    acceptance(manifest, evidence, phase='pre-publication')
     return evidence
 
 
@@ -131,6 +131,10 @@ def main(signed=False):
         manifest = json.loads(manifest_path.read_text())
         require(manifest['commit'] == sha and manifest['version'] == version, 'Candidate manifest does not match this release')
         evidence = human_acceptance(manifest, os.environ.get('FAIRWAY_ACCEPTANCE')) if signed else None
+        human_status = None
+        if evidence is not None:
+            from release_candidate import acceptance
+            human_status = acceptance(manifest, evidence, phase='pre-publication')
         if signed:
             from update_feed import generate
             feed = generate(manifest, directories, repo, notes.read_text())
@@ -176,7 +180,9 @@ def main(signed=False):
         build_info = {
             'schema': 1, 'version': version, 'tag': tag, 'commit': sha, 'run': run['url'],
             'signed': manifest['signing'] if signed else False, 'prerelease': prerelease, 'latest': not prerelease,
-            'humanAccepted': evidence is not None, 'rebuilt': False, 'files': files,
+            'prePublicationHumanAccepted': evidence is not None,
+            'humanAccepted': human_status is not None and human_status['status'] == 'complete',
+            'humanAcceptance': human_status, 'rebuilt': False, 'files': files,
         }
         (stage / 'BUILD-INFO.json').write_text(json.dumps(build_info, indent=2) + '\n')
         files['BUILD-INFO.json'] = {'sha256': sha256(stage / 'BUILD-INFO.json'), 'bytes': (stage / 'BUILD-INFO.json').stat().st_size}
