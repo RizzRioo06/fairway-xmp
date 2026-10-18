@@ -6,20 +6,22 @@ import time
 
 
 def staple(path, run=subprocess.run, sleep=time.sleep):
-    command = ['xcrun', 'stapler', 'staple', str(path)]
-    for delay in (0, 5, 15, 30):
-        if delay:
-            print(f'Retrying Apple ticket delivery in {delay} seconds…', flush=True)
-            sleep(delay)
-        result = run(command, check=False)
-        if result.returncode == 0:
-            run(['xcrun', 'stapler', 'validate', str(path)], check=True)
-            return
-        # Missing ticket/CloudKit service failures can occur just after Apple
-        # accepts a submission. Other failures must stop packaging immediately.
-        if result.returncode not in (65, 68):
+    for action in ('staple', 'validate'):
+        command = ['xcrun', 'stapler', action, str(path)]
+        for delay in (0, 5, 15, 30):
+            if delay:
+                print(f'Retrying Apple ticket {action} in {delay} seconds…', flush=True)
+                sleep(delay)
+            result = run(command, check=False)
+            if result.returncode == 0:
+                break
+            # Validation also contacts CloudKit and can lose its connection
+            # after stapling succeeded. Retry only known ticket/service errors;
+            # never let a failed validation produce a release artifact.
+            if result.returncode not in (65, 68):
+                raise subprocess.CalledProcessError(result.returncode, command)
+        else:
             raise subprocess.CalledProcessError(result.returncode, command)
-    raise subprocess.CalledProcessError(result.returncode, command)
 
 
 if __name__ == '__main__': staple(sys.argv[1])

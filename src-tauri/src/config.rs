@@ -537,6 +537,23 @@ pub fn mysql_path_supported(path: &Path) -> bool {
     }
 }
 
+pub fn mysql_cli_identifier_supported(name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetACP() -> u32;
+        }
+        // The vendor CLI receives narrow argv. Even representable ANSI bytes
+        // differ from UTF-8, which is the connection charset used for dumps.
+        name.is_ascii() || unsafe { GetACP() } == 65001
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        true
+    }
+}
+
 pub fn ini(path: &Path) -> String {
     format!(
         "\"{}\"",

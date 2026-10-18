@@ -268,6 +268,11 @@ pub fn export(
     if database.starts_with('-') {
         return Err("Database names beginning with '-' cannot be exported.".into());
     }
+    if !crate::config::mysql_cli_identifier_supported(database)
+        || table.is_some_and(|name| !crate::config::mysql_cli_identifier_supported(name))
+    {
+        return Err("The Windows MySQL client cannot export non-ASCII database or table names with the current system code page. Use ASCII identifiers before retrying. Your data has been kept.".into());
+    }
     fs::create_dir_all(layout.data.join("backups")).map_err(|e| e.to_string())?;
     let path = destination.map(Path::to_path_buf).unwrap_or_else(|| {
         layout.data.join("backups").join(format!(

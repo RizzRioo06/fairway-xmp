@@ -154,8 +154,13 @@ fn verify_restore(source: &Manager, root: &std::path::Path, backup: &str) -> Res
                 ["Student May", "1", "1", "2", "1", "2"]
             );
             let mut unusual = admin(&restored);
-            unusual.args(["-e", "SELECT n FROM `--column-statistics=0`.proof; SELECT n FROM ` leading space 日本`.proof;"]);
+            unusual.args(["-e", "SELECT n FROM `--column-statistics=0`.proof; SELECT n FROM ` leading space`.proof;"]);
             assert_eq!(process::output(unusual)?, "7\n9");
+            if fairway_core::config::mysql_cli_identifier_supported("日本") {
+                let mut unicode = admin(&restored);
+                unicode.args(["-e", "SELECT n FROM `日本`.proof;"]);
+                assert_eq!(process::output(unicode)?, "11");
+            }
             let mut invalid = admin(&restored);
             invalid.args(["-e", "INSERT INTO beta_archive.enrolments VALUES (3,999);"]);
             assert!(
@@ -441,7 +446,61 @@ fn main() -> Result<(), String> {
             manager.start("nginx")?;
             assert!(http(chosen.website, "/smoke.php").contains("classroom works"));
             process::sql(admin(&manager), "CREATE DATABASE beta_school; CREATE DATABASE beta_archive; CREATE TABLE beta_school.students (id INT PRIMARY KEY, name VARCHAR(100)); CREATE TABLE beta_school.audit (enrolment_id INT); CREATE TABLE beta_archive.enrolments (id INT PRIMARY KEY, student_id INT, FOREIGN KEY (student_id) REFERENCES beta_school.students(id)); CREATE TRIGGER beta_archive.enrolment_insert AFTER INSERT ON beta_archive.enrolments FOR EACH ROW INSERT INTO beta_school.audit VALUES (NEW.id); CREATE VIEW beta_school.student_names AS SELECT id,name FROM beta_school.students; CREATE PROCEDURE beta_school.student_count() SELECT COUNT(*) FROM beta_school.students; CREATE FUNCTION beta_school.plus_one(n INT) RETURNS INT DETERMINISTIC RETURN n+1; CREATE EVENT beta_school.disabled_cleanup ON SCHEDULE EVERY 1 DAY DISABLE DO DELETE FROM beta_school.audit WHERE enrolment_id<0; INSERT INTO beta_school.students VALUES (1,'Student May'); INSERT INTO beta_archive.enrolments VALUES (1,1);")?;
-            process::sql(admin(&manager), "CREATE DATABASE `--column-statistics=0`; CREATE TABLE `--column-statistics=0`.proof (n INT); INSERT INTO `--column-statistics=0`.proof VALUES (7); CREATE DATABASE ` leading space 日本`; CREATE TABLE ` leading space 日本`.proof (n INT); INSERT INTO ` leading space 日本`.proof VALUES (9);")?;
+            process::sql(admin(&manager), "CREATE DATABASE `--column-statistics=0`; CREATE TABLE `--column-statistics=0`.proof (n INT); INSERT INTO `--column-statistics=0`.proof VALUES (7); CREATE DATABASE ` leading space`; CREATE TABLE ` leading space`.proof (n INT); INSERT INTO ` leading space`.proof VALUES (9); CREATE DATABASE `日本`; CREATE TABLE `日本`.proof (n INT); INSERT INTO `日本`.proof VALUES (11);")?;
+            if !fairway_core::config::mysql_cli_identifier_supported("日本") {
+                process::sql(
+                    admin(&manager),
+                    "CREATE TABLE fairway.`日本` (n INT); INSERT INTO fairway.`日本` VALUES (13);",
+                )?;
+                let before = fs::read_dir(manager.layout.data.join("backups"))
+                    .map_err(|e| e.to_string())?
+                    .count();
+                assert!(manager
+                    .backup()
+                    .unwrap_err()
+                    .contains("non-ASCII database names"));
+                assert!(fairway_core::data_browser::export(
+                    &manager.layout,
+                    "日本",
+                    None,
+                    None,
+                    "all"
+                )
+                .unwrap_err()
+                .contains("non-ASCII"));
+                assert!(fairway_core::data_browser::export(
+                    &manager.layout,
+                    "fairway",
+                    Some("日本"),
+                    None,
+                    "all"
+                )
+                .unwrap_err()
+                .contains("non-ASCII"));
+                assert!(fairway_core::updates::prepare(&mut manager)
+                    .unwrap_err()
+                    .contains("update was not installed"));
+                assert!(manager
+                    .snapshot()
+                    .services
+                    .iter()
+                    .filter(|s| ["mysql", "nginx"].contains(&s.id.as_str()))
+                    .all(|s| s.running));
+                let proof = fairway_core::data_browser::execute(
+                    &manager.layout,
+                    serde_json::json!({"op":"rows","database":"日本","table":"proof"}),
+                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )?;
+                assert_eq!(proof["rows"][0]["n"], "11");
+                assert_eq!(
+                    fs::read_dir(manager.layout.data.join("backups"))
+                        .map_err(|e| e.to_string())?
+                        .count(),
+                    before
+                );
+                process::sql(admin(&manager), "DROP DATABASE `日本`;")?;
+                println!("PASS: Windows non-ASCII dump limitation is explicit, leaves data/services intact and blocks the update without a partial backup.");
+            }
             let backup = manager.backup()?;
             let sql = fs::read_to_string(&backup).map_err(|e| e.to_string())?;
             assert!(sql.contains("classroom works"));

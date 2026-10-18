@@ -65,3 +65,9 @@ Both desktop candidate workflows run this real-database example and browser inpu
 PHP startup configuration also uses compatible path aliases when available, so the database driver loads from user profiles containing Unicode characters. Project names and query/row text keep their original Unicode values.
 
 MySQL Server on Windows restricts file paths to the current ANSI code page ([upstream restriction](https://dev.mysql.com/doc/refman/9.7/en/windows-restrictions.html)). Fairway uses existing NTFS short-name aliases for MySQL configuration, data and log paths when available, without moving or renaming student data. PHP, the terminal folder picker and project paths retain their Unicode paths. When aliases are unavailable and the paths cannot be represented in the active code page, MySQL startup reports the limitation and keeps existing data intact. A filesystem with short-name aliases or paths compatible with the Windows locale is required in that case.
+
+## Windows backup/export identifiers
+
+On Windows systems whose process code page is not UTF-8, the bundled MySQL command-line clients cannot reliably receive non-ASCII database/table names. Fairway reports this explicitly instead of attempting a potentially misdirected export. Whole-environment backups require ASCII database names; table exports require ASCII database and table names. Imports require a successful target-database backup first. Unicode row values and normal in-app queries remain supported.
+
+An automatic update that cannot complete its database backup stops before installation and keeps existing services/data intact. Use ASCII schema identifiers for coursework that needs these backup/export operations. UTF-8 Windows system locales are exempt from this argument limitation, but no system locale setting is changed by Fairway. The owner accepted this disclosed RC limitation on 2026-10-19; broader Unicode CLI backup support remains a follow-up.

@@ -10,6 +10,7 @@ The release owner confirmed this scope on 2026-10-17:
 - Keep the Windows installer **without Authenticode signing**. Unknown-publisher/SmartScreen prompts remain possible. Cryptographic updater signatures remain mandatory.
 - Keep Developer ID signing, notarization and stapling for the Mac app and installer, plus signed Mac/Windows updates and existing verification checks.
 - **Defer per-site PHP.** [Issue #5](https://github.com/eimg/fairway-xmp/issues/5) closed as not planned on 2026-10-18. Global PHP selection remains the behavior for all sites, terminals and CLI tools in this RC.
+- On 2026-10-19, accept the documented Windows MySQL non-ASCII backup/export identifier limitation on non-UTF-8 system code pages. Errors must be explicit, preserve data, and block updates whose backup cannot complete. See [database limitations](data-browser.md#windows-backupexport-identifiers).
 
 The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation still need to reach the release branch through normal review.
 

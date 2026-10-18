@@ -109,7 +109,7 @@ def assemble(inputs, output, require_updater=False):
     data = {'schema': 1, 'version': version, 'commit': commit, 'status': 'awaiting-human-acceptance',
             'uiReview': {'artifact': f'ui-visual-review-{commit}'},
             'signing': {target: by_target[target].get('signing', 'unsigned') for target in TARGETS}, 'legacyPhp': ['8.0', '8.1'],
-            'knownLimitations': ['Windows installer has no Authenticode signature; first downloads can show SmartScreen. Linux updates are manual.' if require_updater else 'Unsigned installers; manual updates.', 'Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases; see docs/data-browser.md.', 'PHP 8.0/8.1 are unsupported legacy compatibility options.', 'Exact Windows PHP 8.0/8.1 dependency build/patch provenance remains unverified; see docs/release-follow-ups.md.'],
+            'knownLimitations': ['Windows installer has no Authenticode signature; first downloads can show SmartScreen. Linux updates are manual.' if require_updater else 'Unsigned installers; manual updates.', 'Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases; see docs/data-browser.md.', 'Windows non-UTF-8 system code pages require ASCII identifiers for MySQL CLI backup/export; a failed pre-update backup blocks installation and preserves data/services. See docs/data-browser.md.', 'PHP 8.0/8.1 are unsupported legacy compatibility options.', 'Exact Windows PHP 8.0/8.1 dependency build/patch provenance remains unverified; see docs/release-follow-ups.md.'],
             'candidates': by_target}
     write(output, data)
     acceptance = {'version': version, 'commit': commit, 'platforms': {target: {

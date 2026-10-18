@@ -602,9 +602,13 @@ impl Manager {
                 let mut check = self.nginx_command();
                 check.arg("-t");
                 process::output(check)?;
-                let mut cmd = self.nginx_command();
+                let cmd = self.nginx_command();
                 #[cfg(not(windows))]
-                cmd.args(["-g", "daemon off;"]);
+                let cmd = {
+                    let mut cmd = cmd;
+                    cmd.args(["-g", "daemon off;"]);
+                    cmd
+                };
                 cmd
             }
             "mysql" => {
@@ -912,6 +916,12 @@ impl Manager {
                 .map_err(|e| format!("Could not read database names for backup: {e}"))?;
             let mut names = names.unwrap_or_default();
             names.sort();
+            if names
+                .iter()
+                .any(|name| !crate::config::mysql_cli_identifier_supported(name))
+            {
+                return Err("The Windows MySQL client cannot back up non-ASCII database names with the current system code page. Use ASCII database names before retrying. Your databases have been kept.".into());
+            }
             if names.is_empty() {
                 use std::io::Write;
                 output

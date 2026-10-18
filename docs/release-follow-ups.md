@@ -1,5 +1,7 @@
 # Follow-up work after PHP version selection
 
+The owner accepted the Windows MySQL CLI non-ASCII identifier limitation on 2026-10-19. It is disclosed for this RC: on non-UTF-8 system locales, unsupported backup/export names fail explicitly and updates cannot proceed without a completed backup. Broader Unicode CLI backup support remains open; normal Unicode row/query handling is retained. See [database limitations](data-browser.md#windows-backupexport-identifiers).
+
 ## RC preparation policy — 2026-10-17
 
 The release owner accepts the existing Windows PHP 8.0/8.1 dependency-provenance gap and unsigned Windows installer as disclosed limitations for this RC cycle. They do not block publication after the other acceptance gates pass. Runtime inputs stay as-is, the provenance checklist stays open, and Authenticode remains absent. Mac signing/notarization and cryptographic Mac/Windows updater signatures remain mandatory. On 2026-10-18 the owner locked RC feature scope after per-site PHP issue #5 closed as not planned; global PHP selection is retained. See [RC preparation](rc-preparation.md).
