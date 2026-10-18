@@ -1,0 +1,19 @@
+name: Restore verified runtime downloads
+description: Reuse immutable upstream archives; preparers still check every input against its lock.
+outputs:
+  key:
+    description: Exact key to save after runtime and source preparation succeeds.
+    value: ${{ steps.downloads.outputs.cache-primary-key }}
+  cache-hit:
+    description: Whether this exact set of locked downloads was restored.
+    value: ${{ steps.downloads.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache/restore@v5
+      id: downloads
+      with:
+        path: .runtime-cache
+        key: runtime-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime-manifest.json', 'runtime*lock.json', 'tests/fixtures/runtime-alpha1-*.json', 'scripts/windows_legacy_sources.json') }}
+        restore-keys: |
+          runtime-downloads-v1-${{ runner.os }}-${{ runner.arch }}-

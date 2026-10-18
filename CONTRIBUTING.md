@@ -33,7 +33,7 @@ npm run test:ui:report                 # opens the HTML report
 
 The tests exercise Chromium and WebKit at 1080×760 and the desktop minimum 820×650. Each scenario attaches Environment, Settings, Updates, and Help screenshots to the HTML report, including Windows/macOS example paths. Interaction tests cover pending states, logs, backups, settings validation/PHP selection, and recovery from a port conflict. Failures retain screenshots, video, and traces. These are human-review screenshots and behavior assertions; there is no approved pixel-diff baseline yet. `scripts/check_ui.mjs` remains an optional legacy check for the ordinary disabled preview.
 
-The **ui-review** Actions job runs these checks on each push/PR and uploads `ui-visual-review-COMMIT` even when tests fail. Download and extract that artifact, then run `npx playwright show-report /absolute/path/to/playwright-report` to review it in your browser. A passing test run still needs your visual judgment. The candidate UI and native service checks must refer to the same source commit.
+The **ui-review** Actions job runs these checks on pull requests, pushes to `main`, and manual verification runs, and uploads `ui-visual-review-COMMIT` even when tests fail. Superseded routine verification runs are canceled; feed and tag pushes do not start routine verification. Download and extract that artifact, then run `npx playwright show-report /absolute/path/to/playwright-report` to review it in your browser. A passing test run still needs your visual judgment. The candidate UI and native service checks must refer to the same source commit.
 
 The full Windows/Linux service smoke checks currently run in their manually dispatched installer workflows. The regular Windows/macOS verification job builds and runs source checks; a green regular build alone does not confirm the full service smoke checks ran.
 
@@ -109,6 +109,16 @@ The smoke example starts real runtimes on available test ports and uses an isola
 
 ## Package
 
+For a quick local Mac visual test, stage the runtime once, then reuse it and the existing Cargo build outputs:
+
+```sh
+python3 scripts/prepare_runtime.py --verify-only
+cargo tauri build --bundles app
+open 'src-tauri/target/release/bundle/macos/Fairway XMP.app'
+```
+
+Run full runtime preparation again when its manifest, locks, notices, or preparation scripts change. A local `.app` build does not need installer packaging or Apple notarization; distribution candidates still run both.
+
 ```sh
 # Windows, on a Windows builder:
 cargo tauri build --bundles nsis
@@ -130,6 +140,8 @@ cargo tauri build --config artifacts/tauri.release.json
 Set Tauri's signing key environment variables on the builder. Updater signatures are separate from Apple/Windows distribution certificates. The release owner supplies the public key. Beta/RC builds use `beta-feed/latest.json`; stable builds use `stable-feed/latest.json` under the same GitHub release-download URL; unsigned builds link to the releases page for manual downloads. Ship all runtime resources with every release, preserve the application resource location, and verify installer/updater behavior on both OSes.
 
 ## Publishing a release
+
+See [CI and build performance](docs/ci-build-performance.md) for cache warming, candidate retries, and the measurements behind the build optimizations.
 
 For RC scope and owner policy, see [RC preparation](docs/rc-preparation.md). For builds, use the [candidate and acceptance process](docs/beta-acceptance.md). The **Release candidate** workflow orchestrates all platforms plus browser review from one commit, exercises actual installer upgrades/removal/reinstallation, verifies embedded identity, and generates an acceptance template for the exact hashes. It does not publish. Mac signing/notarization and desktop updater signatures are required by the release orchestrator; Windows Authenticode remains deferred. See [signed beta releases](docs/signed-beta-releases.md). PHP 8.0/8.1 are legacy compatibility options, and their existing Windows source-verification follow-up remains open.
 
