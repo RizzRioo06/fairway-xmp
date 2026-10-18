@@ -8,6 +8,7 @@ on:
     paths:
       - 'src-tauri/Cargo.toml'
       - 'src-tauri/Cargo.lock'
+      - 'src-tauri/tauri.conf.json'
       - 'runtime-manifest.json'
       - 'runtime*lock.json'
       - 'THIRD_PARTY_NOTICES.md'
