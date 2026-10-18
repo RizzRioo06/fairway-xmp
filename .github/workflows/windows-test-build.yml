@@ -49,6 +49,7 @@ jobs:
           workspaces: src-tauri
           shared-key: installer
           cache-on-failure: true
+          save-if: ${{ github.ref_type != 'tag' }}
       - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm run test:scripts
@@ -104,7 +105,7 @@ jobs:
           cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- $root $legacy $current
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/cache/save@v5
-        if: inputs.record_runtime_checksums != true && steps.downloads.outputs.cache-hit != 'true'
+        if: github.ref_type != 'tag' && inputs.record_runtime_checksums != true && steps.downloads.outputs.cache-hit != 'true'
         with:
           path: .runtime-cache
           key: ${{ steps.downloads.outputs.key }}

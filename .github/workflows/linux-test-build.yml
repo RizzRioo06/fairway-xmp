@@ -26,8 +26,7 @@ jobs:
           workspaces: src-tauri
           shared-key: installer
           cache-on-failure: true
-      - uses: ./.github/actions/restore-runtime-downloads
-        id: downloads
+          save-if: ${{ github.ref_type != 'tag' }}
       - name: Verify application version consistency
         id: metadata
         run: |
@@ -42,11 +41,6 @@ jobs:
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
           cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
           cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
-      - uses: actions/cache/save@v5
-        if: steps.downloads.outputs.cache-hit != 'true'
-        with:
-          path: .runtime-cache
-          key: ${{ steps.downloads.outputs.key }}
       - name: Build terminal binary
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
       - name: Exercise service manager and database recovery

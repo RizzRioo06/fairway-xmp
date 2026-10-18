@@ -24,7 +24,7 @@ runs:
       shell: bash
       run: python scripts/prepare_runtime.py --verify-only
     - uses: actions/cache/save@v5
-      if: steps.runtime.outputs.cache-hit != 'true'
+      if: github.ref_type != 'tag' && steps.runtime.outputs.cache-hit != 'true'
       with:
         path: |
           src-tauri/resources/runtime

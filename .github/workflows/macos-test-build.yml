@@ -37,6 +37,7 @@ jobs:
           workspaces: src-tauri
           shared-key: installer
           cache-on-failure: true
+          save-if: ${{ github.ref_type != 'tag' }}
       - name: Verify target and application versions
         id: metadata
         run: |
@@ -57,7 +58,7 @@ jobs:
       - name: Collect exact sources before signing or installer tests
         run: python scripts/package_sources.py --locked
       - uses: actions/cache/save@v5
-        if: steps.downloads.outputs.cache-hit != 'true'
+        if: github.ref_type != 'tag' && steps.downloads.outputs.cache-hit != 'true'
         with:
           path: .runtime-cache
           key: ${{ steps.downloads.outputs.key }}

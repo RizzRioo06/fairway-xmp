@@ -452,7 +452,7 @@ def verify(target):
         ([str(target / 'mysql/bin' / ('mysqld' + suffix)), '--no-defaults', '--version'], f'Ver {MANIFEST["mysql"]} '),
     ]
     if 'mailpit' in MANIFEST:
-        commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version'], f' v{MANIFEST["mailpit"]} '))
+        commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version', '--no-release-check'], f' v{MANIFEST["mailpit"]} '))
     for command, expected in commands:
         output = subprocess.check_output(command, env=env, stderr=subprocess.STDOUT, text=True)
         if expected not in output:
