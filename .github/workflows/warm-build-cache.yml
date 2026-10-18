@@ -48,6 +48,8 @@ jobs:
           node-version: '24'
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -78,12 +80,25 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run build
+      - name: Warm dependencies for native tests and lint
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo test --no-run --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
+            cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
+          else
+            cargo test --no-run --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
+            cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+          fi
       - name: Warm release dependency compilation
         run: |
           if [ "$RUNNER_OS" = Windows ]; then
             cargo build --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --bin fairway --target x86_64-pc-windows-msvc --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example updater_probe --target x86_64-pc-windows-msvc --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example installer_probe --no-default-features --target x86_64-pc-windows-msvc --locked
           elif [ "$RUNNER_OS" = macOS ]; then
             cargo build --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --bin fairway --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example updater_probe --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example installer_probe --no-default-features --locked
           else
             cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
           fi
