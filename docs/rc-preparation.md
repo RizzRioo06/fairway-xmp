@@ -30,6 +30,8 @@ The full source review and hardening findings are recorded in [RC source review]
 
 ## Build and accept
 
+Before publication, resolve the [human update-test sequencing decision](rc-source-review.md#release-policy-decision-still-required). The current checker requires a human update into the exact candidate before its production feed can offer it. Other exact-installer device checks and signed-updater CI remain required; no deferred check is marked passed.
+
 Use the existing **Release candidate** workflow from the chosen commit, or a `candidate-*` tag at that commit. Windows, Apple Silicon Mac, Linux, installer lifecycles, service/restore checks, signatures, sources and browser review must use the same commit. Building does not publish.
 
 Download all installers, sources, UI reports, `candidate-manifest.json` and `acceptance-template.json` from that run. Verify the files with `scripts/release_candidate.py verify-files`. Complete the [native acceptance checklist](beta-acceptance.md) against those exact installers and record tester, OS, date and SHA256. Unperformed checks stay false.
