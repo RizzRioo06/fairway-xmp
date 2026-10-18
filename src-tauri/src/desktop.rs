@@ -518,8 +518,16 @@ async fn open_target(state: State<'_, Shared>, target: String) -> Result<()> {
 }
 
 #[tauri::command]
-async fn read_log(state: State<'_, Shared>, service: String) -> Result<String> {
-    access(state.inner().clone(), move |m| m.log(&service)).await
+async fn read_logs(
+    directory: State<'_, crate::logs::LogDirectory>,
+) -> Result<crate::logs::Snapshot> {
+    let (path, permit) = directory.begin()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        crate::logs::read(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -830,6 +838,9 @@ pub fn run() {
                 std::process::id().to_string().as_bytes(),
             )
             .map_err(std::io::Error::other)?;
+            app.manage(crate::logs::LogDirectory::new(
+                manager.layout.data.join("logs"),
+            ));
             app.manage(Arc::new(Mutex::new(manager)));
             app.manage(DesktopControl::default());
             app.manage(crate::data_browser::Jobs::default());
@@ -878,7 +889,7 @@ pub fn run() {
             remove_https_trust,
             pick_folder,
             open_target,
-            read_log,
+            read_logs,
             cli_integration,
             backup_database,
             check_update,

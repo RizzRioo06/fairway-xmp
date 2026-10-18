@@ -38,6 +38,7 @@ export async function nativeBridge(page: Page, info: TestInfo) {
     bridge.__TAURI_INTERNALS__ = { invoke: bridge.nativeTerminalInvoke, transformCallback: () => 1, unregisterCallback: () => {} };
   });
   return {
+    root,
     errors: () => stderr,
     close: async () => {
       const exited = child.exitCode !== null ? Promise.resolve() : new Promise<void>(resolve => child.once('exit', () => resolve()));

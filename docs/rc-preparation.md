@@ -13,9 +13,11 @@ The release owner confirmed this scope on 2026-10-17:
 
 The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation still need to reach the release branch through normal review.
 
+The release owner additionally accepted a single global troubleshooting Logs page on 2026-10-18, with source/search filters and problems shown by default. See [the accepted log viewer design](log-viewer-consideration.md). The accepted implementation includes service shortcuts, exact-host request filtering with explicitly shared PHP, Unicode request display, and bounded reads/rendering. The final source review is complete; exact-candidate native device acceptance remains required before publication.
+
 ## Before cutting the candidate
 
-- [ ] Finish review of the grouped sidebar and release preparation.
+- [ ] Finish review of the grouped sidebar, global Logs page and release preparation.
 - [ ] Record per-site PHP as included/validated or deferred for this cut.
 - [ ] Review `releases/0.1.0-rc.1-notes.md`, limitations and update instructions.
 - [ ] Confirm all six version locations agree using `python3 scripts/release_candidate.py version`.
@@ -33,6 +35,7 @@ Explicit RC checks:
 - Beta 3 → RC upgrade preserves projects, database rows, sites/HTTPS trust, ports, PHP selection, backups and CLI integration. Automated historical alpha upgrade coverage does not replace this check.
 - Old website port 8802 or another service on 11025: existing ports survive and new mail ports remain distinct.
 - Mail-only Start/Stop, tray status/actions, PHP mail(), framework SMTP, inbox search/preview/delete, and attachment saving. Check stop/restart, Quit and reopening.
+- Logs: real PHP errors/traces, failed and successful HTTP/HTTPS requests, source/search filters, pause/resume/copy, service failures, restart/replacement handling and responsive large-log reading.
 - Grouped navigation, terminal continuity and data-browser workspace continuity at normal/minimum native window sizes.
 - Actual subsequent-version update and restart, including protected Mac installation prompts and cancellation. Ordinary local builds have no updater and cannot establish this acceptance.
 - Per-site PHP selection, simultaneous runtimes, site terminals, recovery and cleanup if that feature lands.

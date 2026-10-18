@@ -127,6 +127,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
         </> : <div className="mail-list-empty"><Mail size={22} /><p>Select an email to read it.</p></div>}</div>
       </section>}
     <div className="mail-footer">
-      <button className="secondary" disabled={!canControl || busy} onClick={logs}><ScrollText size={14} />View logs</button><button className="secondary" disabled={!ready || busy || !canControl} onClick={open}><ExternalLink size={14} />Open in browser</button></div>
+      <button className="secondary" disabled={!canControl} onClick={logs}><ScrollText size={14} />View logs</button>
+      <button className="secondary" disabled={!ready || busy || !canControl} onClick={open}><ExternalLink size={14} />Open in browser</button></div>
   </div>;
 }

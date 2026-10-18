@@ -4,7 +4,8 @@
 
 - Built-in Mailpit catcher and in-app inbox, PHP mail integration, SMTP settings and attachment saving.
 - Safe migration of existing ports and native Mail Start/Stop tray controls.
-- Grouped sidebar with Manage Sites, View Mail and Browse Data.
+- Grouped sidebar with Environment, Terminal and Logs as core services, plus Manage Sites, View Mail and Browse Data.
+- Searchable troubleshooting Logs with service shortcuts, site request filters alongside shared PHP output, readable Unicode requests, and bounded background reads and display.
 - RC/stable-aware release publication, exact-installer human acceptance gates, and separate stable/preview update endpoints.
 
 Per-site PHP remains eligible before the candidate cut. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).

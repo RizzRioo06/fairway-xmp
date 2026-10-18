@@ -212,10 +212,10 @@ test('interactive service, log, backup, and settings review', async ({ page }, i
   await expect(page.getByRole('status').filter({ hasText: 'Starting services…' })).toBeVisible();
   await capture(page, info, 'starting');
   await expect(page.getByText('All services ready', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'View Nginx logs', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Nginx logs' })).toContainText('simulated nginx log');
+  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Log entries' })).toContainText('PHP Fatal error');
   await capture(page, info, 'logs');
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await page.getByRole('button', { name: 'Back up databases', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Database backup saved:' })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();

@@ -583,6 +583,7 @@ impl Manager {
     }
 
     fn spawn_service(&mut self, id: &str) -> Result<()> {
+        crate::logs::trim_stopped(&self.layout.data.join("logs"), id)?;
         let mut cmd = match id {
             "php" => {
                 let mut cmd = process::command(self.layout.php_exe(if cfg!(windows) {

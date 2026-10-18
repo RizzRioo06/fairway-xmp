@@ -42,13 +42,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         project.join(".fairway-terminal-location"),
         b"PROJECT_FOLDER_VERIFIED",
     )?;
-    let listeners: Vec<_> = (0..6)
+    let listeners: Vec<_> = (0..7)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)))
         .collect::<Result<_, _>>()?;
     let ports: Vec<_> = listeners
         .iter()
         .map(|listener| listener.local_addr().unwrap().port())
         .collect();
+    std::env::set_var("FAIRWAY_DEV_HTTPS_PORT", ports[6].to_string());
     manager
         .save_ports(Ports {
             website: ports[0],
@@ -93,17 +94,25 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
         Ok(match request["command"].as_str().unwrap_or_default() {
-            "service_action" if args["action"] == "start" && args["service"] == "mysql" => {
+            "service_action"
+                if args["action"] == "start"
+                    && ["mysql", "nginx"]
+                        .contains(&args["service"].as_str().unwrap_or_default()) =>
+            {
                 let mut manager = manager.lock().unwrap();
-                manager.start("mysql").map_err(|error| {
-                    format!(
-                        "{error} {} {}",
-                        std::fs::read_to_string(manager.layout.data.join("logs/mysql.log"))
+                manager
+                    .start(args["service"].as_str().unwrap())
+                    .map_err(|error| {
+                        format!(
+                            "{error} {} {}",
+                            std::fs::read_to_string(manager.layout.data.join("logs/mysql.log"))
+                                .unwrap_or_default(),
+                            std::fs::read_to_string(
+                                manager.layout.data.join("logs/mysql-process.log")
+                            )
                             .unwrap_or_default(),
-                        std::fs::read_to_string(manager.layout.data.join("logs/mysql-process.log"))
-                            .unwrap_or_default(),
-                    )
-                })?;
+                        )
+                    })?;
                 serde_json::to_value(manager.snapshot()).unwrap()
             }
             "data_browser" => {
@@ -114,6 +123,10 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
                     Arc::new(AtomicBool::new(false)),
                 )?
             }
+            "read_logs" => serde_json::to_value(fairway_core::logs::read(
+                &manager.lock().unwrap().layout.data.join("logs"),
+            ))
+            .unwrap(),
             "snapshot" => serde_json::to_value(manager.lock().unwrap().snapshot()).unwrap(),
             "plugin:event|listen" => json!(1),
             "plugin:event|unlisten" => Value::Null,
