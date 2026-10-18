@@ -238,6 +238,21 @@ fn main() -> Result<(), String> {
                 l,
                 json!({"op":"drop_database","database":"browser_restored","confirmed":true}),
             )?;
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":"DROP DATABASE browser_ready; DROP DATABASE fairway;"}),
+            )?;
+            let empty = manager.backup()?;
+            assert!(std::fs::read_to_string(empty)
+                .map_err(|e| e.to_string())?
+                .contains("no student databases"));
+            fairway_core::updates::prepare(&mut manager)?;
+            assert!(manager
+                .snapshot()
+                .services
+                .iter()
+                .all(|service| !service.running));
+            println!("PASS: empty-database backup and updater preparation do not block upgrades.");
             println!("PASS: real MySQL database/table/column operations, exact BIGINT/DECIMAL, quotes/Unicode, NULL vs empty/default, stale edits, no-key/view/composite-key behavior, multi-result SQL, cancellation, SQL export/import restore, confirmation and system-schema guards.");
             Ok(())
         },

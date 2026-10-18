@@ -899,21 +899,28 @@ impl Manager {
         if !self.processes.contains_key("mysql") {
             return Err("Start MySQL before making a backup.".into());
         }
-        let (path, partial, output) = reserve_backup(&self.layout.data.join("backups"))?;
+        let (path, partial, mut output) = reserve_backup(&self.layout.data.join("backups"))?;
         let result = (|| {
             let mut cmd = self.database_command("mysqldump", true);
             // Back up student databases, not MySQL's version-dependent system schema.
             let mut list = self.database_command("mysql", true);
-            list.args(["--batch", "--skip-column-names", "-e", "SHOW DATABASES"]);
-            let names: Vec<_> = process::output(list)?
-                .lines()
-                .filter(|name| {
-                    !["mysql", "sys", "information_schema", "performance_schema"].contains(name)
-                })
-                .map(String::from)
-                .collect();
+            // JSON preserves whitespace, Unicode and control characters in names.
+            // Batch-mode escaping or trimming individual names can change them.
+            list.args(["--batch", "--raw", "--skip-column-names", "--default-character-set=utf8mb4", "-e",
+                "SELECT COALESCE(JSON_ARRAYAGG(SCHEMA_NAME), JSON_ARRAY()) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('mysql','sys','information_schema','performance_schema')"]);
+            let names: Option<Vec<String>> = serde_json::from_str(&process::output(list)?)
+                .map_err(|e| format!("Could not read database names for backup: {e}"))?;
+            let mut names = names.unwrap_or_default();
+            names.sort();
             if names.is_empty() {
-                return Err("There are no student databases to back up.".into());
+                use std::io::Write;
+                output
+                    .write_all(b"-- Fairway XMP backup: no student databases were present.\n")
+                    .map_err(|e| e.to_string())?;
+                output.sync_all().map_err(|e| e.to_string())?;
+                drop(output);
+                fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+                return Ok(path.to_string_lossy().into());
             }
             cmd.args([
                 "--single-transaction",
@@ -922,6 +929,7 @@ impl Manager {
                 "--triggers",
                 "--set-gtid-purged=OFF",
                 "--databases",
+                "--",
             ])
             .args(names)
             .stdout(Stdio::from(output))

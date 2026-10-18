@@ -92,7 +92,7 @@ export default function App() {
   const noticeRef = useRef<HTMLDivElement>(null);
   const versions = data.runtimeVersions;
   const selectedPhp = data.phpVersions[data.phpVersion] ?? versions?.php;
-  const allReady = data.services.every(service => service.ready);
+  const allReady = data.services.filter(service => service.id !== 'mail' || data.mailAvailable || service.running).every(service => service.ready);
   const anyRunning = data.services.some(service => service.running);
   const usable = canControl && data.runtimeReady && !busy;
   const databaseCliAvailable = isDesktop || isUiTest;
@@ -283,7 +283,7 @@ export default function App() {
           <div className="section-heading"><h2>Services <span>5</span></h2><span className="stack-status"><span className={`status-dot ${allReady ? 'running' : ''}`} />{allReady ? 'All services ready' : anyRunning ? 'Environment partially running' : 'All services stopped'}</span></div>
           <div className="services-grid">{(['nginx', 'php', 'mysql', 'phpmyadmin', 'mail'] as ServiceId[]).map(id => {
             const service = data.services.find(s => s.id === id)!;
-            return <ServiceCard key={id} service={service} version={id === 'php' ? selectedPhp : versions?.[meta[id].version]} disabled={!usable} busy={!!busy} onAction={serviceAction} onOpen={open} onLog={showLog} />;
+            return <ServiceCard key={id} service={service} unavailable={id === 'mail' && !data.mailAvailable && !service.running} version={id === 'php' ? selectedPhp : versions?.[meta[id].version]} disabled={!usable || (id === 'mail' && !data.mailAvailable && !service.running)} busy={!!busy} onAction={serviceAction} onOpen={open} onLog={showLog} />;
           })}</div>
           {canControl && !data.runtimeReady && <div className="notice error" role="alert">Fairway XMP’s PHP or database files are missing. Reinstall Fairway XMP to restore them. Your projects and database data will be kept.</div>}
 
@@ -385,8 +385,8 @@ export default function App() {
   </div>;
 }
 
-function ServiceCard({ service, version, disabled, busy, onAction, onOpen, onLog }: {
-  service: ServiceStatus; version?: string; disabled: boolean; busy: boolean;
+function ServiceCard({ service, version, unavailable, disabled, busy, onAction, onOpen, onLog }: {
+  service: ServiceStatus; version?: string; unavailable: boolean; disabled: boolean; busy: boolean;
   onAction: (action: string, service?: ServiceId) => void;
   onOpen: (target: string) => void; onLog: (service: ServiceId) => void;
 }) {
@@ -398,7 +398,7 @@ function ServiceCard({ service, version, disabled, busy, onAction, onOpen, onLog
     <div className="service-top"><span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span><span className={`status-label ${service.ready ? 'ready' : service.running ? 'pending' : ''}`}><span className={`status-dot ${service.ready ? 'running' : service.running ? 'pending' : ''}`} />{service.ready ? 'Running' : service.running ? 'Waiting' : 'Stopped'}</span></div>
     <div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div><p>{item.description}</p>
     <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : web ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{web && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(service.id === 'nginx' ? 'website' : service.id)}><ExternalLink size={14} /></button>}</div>
-    {service.message && <div className="service-error" role="status">{service.message}</div>}
+    {(service.message || unavailable) && <div className="service-error" role="status">{service.message || 'Mail catcher files are missing. Reinstall Fairway XMP to restore mail.'}</div>}
     <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!canControl} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>
   </section>;
 }

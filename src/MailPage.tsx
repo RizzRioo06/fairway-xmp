@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, Inbox, Mail, Paperclip, Play, ScrollText, Search, Settings2, Square, Trash2 } from 'lucide-react';
 import { canControl, invoke } from './bridge';
 import type { MailAddress, MailAttachment, MailList, MailMessage, Snapshot } from './types';
@@ -38,29 +38,44 @@ function size(bytes: number) {
 export default function MailPage({ data, busy, start, stop, logs, open, settings }: Props) {
   const mail = data.services.find(service => service.id === 'mail');
   const ready = !!mail?.ready;
-  const usable = canControl && data.runtimeReady && !busy;
+  const usable = canControl && data.runtimeReady && data.mailAvailable && !busy;
+  const unavailable = !data.mailAvailable && !mail?.running;
   const [query, setQuery] = useState('');
   const [list, setList] = useState<MailList | null>(null);
   const [selected, setSelected] = useState<MailMessage | null>(null);
   const [tab, setTab] = useState<'html' | 'text'>('html');
   const [confirmClear, setConfirmClear] = useState(false);
+  const listRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const [listError, setListError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
   const load = useCallback(async (search: string) => {
+    const request = ++listRequest.current;
     try {
-      setList(await invoke<MailList>('mail_inbox', { request: { action: 'list', query: search } }));
-      setError(null);
-    } catch (reason) { setError(message(reason)); }
+      const next = await invoke<MailList>('mail_inbox', { request: { action: 'list', query: search } });
+      if (request !== listRequest.current || search !== queryRef.current) return;
+      setList(next); setListError(null);
+    } catch (reason) { if (request === listRequest.current && search === queryRef.current) setListError(message(reason)); }
   }, []);
 
-  // New mail shows up without a manual refresh while the inbox is open.
+  // Serial polling avoids accumulating slow requests. Filter changes invalidate
+  // earlier results before they can replace the current list.
   useEffect(() => {
-    if (!ready) { setList(null); setSelected(null); return; }
-    const timer = window.setTimeout(() => { void load(query); }, query ? 300 : 0);
-    const poll = window.setInterval(() => { void load(query); }, 3000);
-    return () => { window.clearTimeout(timer); window.clearInterval(poll); };
+    if (!ready) { setList(null); setSelected(null); detailRequest.current++; return; }
+    let disposed = false;
+    let timer: number;
+    const poll = async () => {
+      await load(query);
+      if (!disposed) timer = window.setTimeout(() => { void poll(); }, 3000);
+    };
+    timer = window.setTimeout(() => { void poll(); }, query ? 300 : 0);
+    return () => { disposed = true; listRequest.current++; window.clearTimeout(timer); };
   }, [ready, query, load]);
+  useEffect(() => () => { detailRequest.current++; }, []);
 
   // Close the preview when its email was deleted elsewhere, such as in the browser inbox.
   useEffect(() => {
@@ -68,25 +83,33 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   }, [list, selected, query]);
 
   async function show(id: string) {
+    const request = ++detailRequest.current;
+    setError(null);
     try {
       const opened = await invoke<MailMessage>('mail_inbox', { request: { action: 'message', id } });
+      if (request !== detailRequest.current) return;
       setSelected(opened); setTab(opened.HTML ? 'html' : 'text'); setSaved(null);
       setList(current => current && { ...current, messages: current.messages.map(item => item.ID === id ? { ...item, Read: true } : item) });
-    } catch (reason) { setError(message(reason)); }
+    } catch (reason) { if (request === detailRequest.current) setError(message(reason)); }
   }
 
   async function remove(request: Record<string, unknown>) {
+    const detail = ++detailRequest.current;
+    setError(null);
     try {
       await invoke('mail_inbox', { request });
-      setSelected(null); setConfirmClear(false);
-      await load(query);
+      if (detail === detailRequest.current) setSelected(null);
+      setConfirmClear(false);
+      await load(queryRef.current);
     } catch (reason) { setError(message(reason)); }
   }
 
   async function save(id: string, item: MailAttachment) {
+    const detail = detailRequest.current;
+    setError(null);
     try {
       const path = await invoke<string | null>('save_mail_attachment', { id, part: item.PartID, name: item.FileName || 'attachment' });
-      if (path) setSaved(`Saved to ${path}`);
+      if (path && detail === detailRequest.current) setSaved(`Saved to ${path}`);
     } catch (reason) { setError(message(reason)); }
   }
 
@@ -98,14 +121,14 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
         {mail?.running ? <button className="primary" disabled={!canControl || busy} onClick={stop}><Square size={14} />Stop mail</button> : <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</div>
     </div>
     {mail?.message && <div className="notice error" role="alert"><span>{mail.message}</span></div>}
-    {!ready ? <section className="mail-inbox mail-empty"><Mail size={26} /><h2>{mail?.running ? 'Mail is starting…' : 'Mail is stopped.'}</h2><p>Start mail to catch the emails your apps send. <strong>Start all</strong> on Environment also starts it.</p>{!mail?.running && <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</section> :
+    {!ready ? <section className="mail-inbox mail-empty"><Mail size={26} /><h2>{mail?.running ? 'Mail is starting…' : unavailable ? 'Mail is unavailable.' : 'Mail is stopped.'}</h2>{unavailable ? <p>Mail catcher files are missing. Reinstall Fairway XMP to restore mail; your projects and data will be kept.</p> : <p>Start mail to catch the emails your apps send. <strong>Start all</strong> on Environment also starts it.</p>}{!mail?.running && !unavailable && <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</section> :
       <section className="mail-inbox mail-workspace" aria-label="Mail inbox">
         <div className="mail-list-pane">
           <label className="mail-search"><Search size={14} /><input type="search" aria-label="Search emails" placeholder="Search emails" value={query} onChange={event => setQuery(event.target.value)} /></label>
           <div className="mail-list-summary"><span>{list ? `${list.messages_count} ${list.messages_count === 1 ? 'email' : 'emails'}${unread ? ` · ${unread} unread` : ''}` : 'Loading…'}</span>
             {confirmClear ? <span className="mail-confirm"><button className="text-button" onClick={() => setConfirmClear(false)}>Cancel</button><button className="text-button danger" onClick={() => { void remove({ action: 'clear' }); }}>Delete all</button></span>
               : <button className="text-button" disabled={!list?.messages.length} onClick={() => setConfirmClear(true)}><Trash2 size={13} />Delete all</button>}</div>
-          {error && <p className="mail-error" role="alert">{error}</p>}
+          {(error || listError) && <p className="mail-error" role="alert">{error || listError}</p>}
           {list && list.messages.length === 0 ? <div className="mail-list-empty"><Inbox size={22} /><p>{query ? 'No emails match your search.' : 'No emails yet. Emails your apps send appear here.'}</p></div> :
             <ul className="mail-list" aria-label="Emails">{list?.messages.map(item => <li key={item.ID}>
               <button className={`${item.ID === selected?.ID ? 'active ' : ''}${item.Read ? '' : 'unread'}`} aria-current={item.ID === selected?.ID} onClick={() => { void show(item.ID); }}>

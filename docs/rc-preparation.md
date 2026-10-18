@@ -1,6 +1,6 @@
 # Preparing 0.1.0 RC
 
-The next target is **0.1.0-rc.1**. Preparation is open; the version bump does not freeze the source or establish candidate acceptance.
+The next target is **0.1.0-rc.1**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
 
 ## Scope and owner decisions
 
@@ -9,20 +9,23 @@ The release owner confirmed this scope on 2026-10-17:
 - Keep the current PHP 8.0/8.1 Windows inputs and collected sources as-is. Their exact dependency build/patch provenance remains **unverified**, disclosed, and open for follow-up; it is not an RC blocker.
 - Keep the Windows installer **without Authenticode signing**. Unknown-publisher/SmartScreen prompts remain possible. Cryptographic updater signatures remain mandatory.
 - Keep Developer ID signing, notarization and stapling for the Mac app and installer, plus signed Mac/Windows updates and existing verification checks.
-- Include [per-site PHP versions (#5)](https://github.com/eimg/fairway-xmp/issues/5) if an acceptable PR is reviewed, merged and validated before the candidate commit is frozen. If it misses the cut, record it as deferred and retain global PHP selection. Do not claim it is implemented in release notes before it lands.
+- **Defer per-site PHP.** [Issue #5](https://github.com/eimg/fairway-xmp/issues/5) closed as not planned on 2026-10-18. Global PHP selection remains the behavior for all sites, terminals and CLI tools in this RC.
 
 The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation still need to reach the release branch through normal review.
 
 The release owner additionally accepted a single global troubleshooting Logs page on 2026-10-18, with source/search filters and problems shown by default. See [the accepted log viewer design](log-viewer-consideration.md). The accepted implementation includes service shortcuts, exact-host request filtering with explicitly shared PHP, Unicode request display, and bounded reads/rendering. The final source review is complete; exact-candidate native device acceptance remains required before publication.
 
+The full source review and hardening findings are recorded in [RC source review](rc-source-review.md).
+
 ## Before cutting the candidate
 
-- [ ] Finish review of the grouped sidebar, global Logs page and release preparation.
-- [ ] Record per-site PHP as included/validated or deferred for this cut.
-- [ ] Review `releases/0.1.0-rc.1-notes.md`, limitations and update instructions.
-- [ ] Confirm all six version locations agree using `python3 scripts/release_candidate.py version`.
-- [ ] Pass source/UI checks and resolve release-blocking regressions.
-- [ ] Select the exact candidate commit and freeze features for it. Later code/runtime changes require a new candidate and new acceptance evidence.
+- [x] Finish source review of the grouped sidebar, global Logs page and release preparation; see the source-review findings.
+- [x] Record per-site PHP as deferred; feature intake is closed.
+- [x] Review `releases/0.1.0-rc.1-notes.md`, limitations and update instructions.
+- [x] Confirm all six version locations agree using `python3 scripts/release_candidate.py version`.
+- [x] Pass local source/UI checks and resolve the concrete regressions found; fresh candidate CI is required below.
+- [x] Lock feature scope on 2026-10-18.
+- [ ] Select the exact candidate source commit after the source hardening pass. Later code/runtime changes require a new candidate and new acceptance evidence.
 
 ## Build and accept
 
@@ -38,7 +41,7 @@ Explicit RC checks:
 - Logs: real PHP errors/traces, failed and successful HTTP/HTTPS requests, source/search filters, pause/resume/copy, service failures, restart/replacement handling and responsive large-log reading.
 - Grouped navigation, terminal continuity and data-browser workspace continuity at normal/minimum native window sizes.
 - Actual subsequent-version update and restart, including protected Mac installation prompts and cancellation. Ordinary local builds have no updater and cannot establish this acceptance.
-- Per-site PHP selection, simultaneous runtimes, site terminals, recovery and cleanup if that feature lands.
+- Global PHP selection, site terminal paths, existing command-line integration and switching all six bundled versions remain covered; per-site PHP is excluded.
 
 Run `python3 scripts/release_candidate.py check-acceptance --manifest /path/to/candidate-manifest.json --evidence /path/to/completed-acceptance.json` before publication.
 
@@ -61,4 +64,4 @@ RC releases are GitHub prereleases and never latest stable. Stable releases are 
 
 ## Pending release work
 
-Candidate freeze/build, device acceptance, optional per-site PHP inclusion, version tagging, publication and feed promotion remain pending. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed.
+Candidate source selection/build, exact-installer device acceptance, version tagging, publication and feed promotion remain pending. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed.

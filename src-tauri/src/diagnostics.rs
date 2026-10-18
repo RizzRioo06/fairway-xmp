@@ -58,7 +58,7 @@ pub fn report(snapshot: &Snapshot) -> Value {
     })).collect();
     // Select known manifest fields instead of copying arbitrary JSON into a report.
     let mut versions = serde_json::Map::new();
-    for name in ["php", "nginx", "mysql", "composer", "phpmyadmin"] {
+    for name in ["php", "nginx", "mysql", "composer", "phpmyadmin", "mailpit"] {
         let value = snapshot.runtime_versions[name].as_str().filter(|value| {
             value.len() <= 64
                 && value
@@ -94,7 +94,7 @@ mod tests {
                 "indexFallback":false,"available":true,"domainReady":true,
                 "root":"/Users/private-student/coursework/private-project"}],
             "domainsPending":false,"httpsTrusted":false,"os":"macos",
-            "runtimeReady":true,"runtimeVersions":{"php":"8.5.11","credentials":"private-secret"},
+            "runtimeReady":true,"runtimeVersions":{"php":"8.5.11","mailpit":"1.30.0","credentials":"private-secret"},
             "phpVersion":"8.5","phpVersions":{"8.5":"8.5.11"},"pathInstalled":true,
             "cliPhp":"private-launcher", "cliComposer":"private-composer", "pathPhp":null,
             "pathComposer":"/Users/private-student/other/composer","version":"0.1.0-beta.1"
@@ -117,6 +117,7 @@ mod tests {
             "other-installation"
         );
         assert_eq!(report["runtimeVersions"]["php"], "8.5.11");
+        assert_eq!(report["runtimeVersions"]["mailpit"], "1.30.0");
         assert!(report["build"]["commit"].is_string());
     }
 }

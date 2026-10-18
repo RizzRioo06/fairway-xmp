@@ -6,9 +6,10 @@
 - Safe migration of existing ports and native Mail Start/Stop tray controls.
 - Grouped sidebar with Environment, Terminal and Logs as core services, plus Manage Sites, View Mail and Browse Data.
 - Searchable troubleshooting Logs with service shortcuts, site request filters alongside shared PHP output, readable Unicode requests, and bounded background reads and display.
+- Reliability fixes for backup names and empty-database upgrades, mail response races and incomplete downloads, special-character/long paths, and bounded CLI log reading.
 - RC/stable-aware release publication, exact-installer human acceptance gates, and separate stable/preview update endpoints.
 
-Per-site PHP remains eligible before the candidate cut. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).
+Feature scope locked on 2026-10-18. Per-site PHP is deferred; all sites use the selected global PHP version. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).
 
 ## 0.1.0-beta.3 — 2026-10-17
 

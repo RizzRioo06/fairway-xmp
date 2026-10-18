@@ -17,6 +17,8 @@ pub enum Request {
 }
 
 const LIMIT: u32 = 200;
+const PREVIEW_LIMIT: u64 = 8 * 1024 * 1024;
+const ATTACHMENT_LIMIT: u64 = 64 * 1024 * 1024;
 
 pub fn execute(port: u16, request: Request) -> Result<serde_json::Value> {
     match request {
@@ -90,11 +92,12 @@ pub fn attachment(port: u16, id: &str, part: &str) -> Result<Vec<u8>> {
         "GET",
         &format!("/api/v1/message/{}/part/{part}", checked(id)?),
         "",
+        ATTACHMENT_LIMIT,
     )
 }
 
 fn call(port: u16, method: &str, path: &str, body: &str) -> Result<serde_json::Value> {
-    let payload = fetch(port, method, path, body)?;
+    let payload = fetch(port, method, path, body, PREVIEW_LIMIT)?;
     if payload.trim_ascii() == b"ok" {
         return Ok(serde_json::Value::Null);
     }
@@ -104,7 +107,7 @@ fn call(port: u16, method: &str, path: &str, body: &str) -> Result<serde_json::V
 
 // ponytail: HTTP/1.0 makes Mailpit close the connection after a plain body, so
 // no chunked decoding or client library is needed for this loopback-only API.
-fn fetch(port: u16, method: &str, path: &str, body: &str) -> Result<Vec<u8>> {
+fn fetch(port: u16, method: &str, path: &str, body: &str, limit: u64) -> Result<Vec<u8>> {
     let mut stream =
         TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_secs(2))
             .map_err(|_| "Mail is not running. Start mail to see caught emails.".to_string())?;
@@ -118,14 +121,25 @@ fn fetch(port: u16, method: &str, path: &str, body: &str) -> Result<Vec<u8>> {
     .map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();
     stream
-        .take(64 * 1024 * 1024)
+        .take(limit + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
+    parse_response(bytes, limit)
+}
+
+fn parse_response(mut bytes: Vec<u8>, limit: u64) -> Result<Vec<u8>> {
+    if bytes.len() as u64 > limit {
+        return Err("This email or attachment is too large for the built-in viewer. Open the mail inbox in your browser.".into());
+    }
     let split = bytes
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
         .ok_or("Mail returned an unexpected response.")?;
-    let head = String::from_utf8_lossy(&bytes[..split]);
+    if split > 64 * 1024 {
+        return Err("Mail returned oversized response headers.".into());
+    }
+    let head = std::str::from_utf8(&bytes[..split])
+        .map_err(|_| "Mail returned invalid response headers.")?;
     let status = head.lines().next().unwrap_or_default();
     if status.split_whitespace().nth(1) != Some("200") {
         return Err(if status.contains(" 404") {
@@ -134,6 +148,31 @@ fn fetch(port: u16, method: &str, path: &str, body: &str) -> Result<Vec<u8>> {
             format!("Mail could not complete the request ({status}).")
         });
     }
+    let mut length = None;
+    for line in head.lines().skip(1) {
+        let (name, value) = line
+            .split_once(':')
+            .ok_or("Mail returned invalid response headers.")?;
+        if name.eq_ignore_ascii_case("transfer-encoding")
+            && !value.trim().eq_ignore_ascii_case("identity")
+        {
+            return Err("Mail returned an unsupported response encoding.".into());
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            if length.is_some() {
+                return Err("Mail returned conflicting response lengths.".into());
+            }
+            length = Some(
+                value
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|_| "Mail returned an invalid response length.")?,
+            );
+        }
+    }
+    if length.is_some_and(|length| length != bytes.len() - split - 4) {
+        return Err("The mail download was incomplete. Retry before saving the attachment.".into());
+    }
     Ok(bytes.split_off(split + 4))
 }
 
@@ -141,6 +180,29 @@ fn fetch(port: u16, method: &str, path: &str, body: &str) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn responses_reject_truncation_oversize_and_unsupported_framing() {
+        let parse = |value: &str| parse_response(value.as_bytes().to_vec(), 1024);
+        assert_eq!(
+            parse("HTTP/1.0 200 OK\r\nContent-Length: 3\r\n\r\nabc").unwrap(),
+            b"abc"
+        );
+        assert!(parse("HTTP/1.0 200 OK\r\nContent-Length: 4\r\n\r\nabc")
+            .unwrap_err()
+            .contains("incomplete"));
+        assert!(parse("HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nabc").is_err());
+        assert!(
+            parse("HTTP/1.0 200 OK\r\nContent-Length: 3\r\ncontent-length: 3\r\n\r\nabc").is_err()
+        );
+        assert!(parse(
+            "HTTP/1.0 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"
+        )
+        .is_err());
+        assert!(parse_response(vec![b'x'; 1025], 1024)
+            .unwrap_err()
+            .contains("too large"));
+    }
 
     #[test]
     fn requests_are_encoded_validated_and_parsed() {
