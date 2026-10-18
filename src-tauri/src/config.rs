@@ -548,12 +548,49 @@ pub fn ini(path: &Path) -> String {
 }
 
 pub fn nginx_path(path: &Path) -> String {
+    #[cfg(windows)]
+    let resolved = nginx_long_path(path);
+    #[cfg(windows)]
+    let path = resolved.as_path();
     format!(
         "\"{}\"",
         path.to_string_lossy()
             .replace('\\', "/")
             .replace('"', "\\\"")
     )
+}
+
+#[cfg(windows)]
+fn nginx_long_path(path: &Path) -> PathBuf {
+    // Unlike MySQL, Nginx reads UTF-8 paths and rejects NTFS short-name aliases
+    // during its filename safety checks. Windows TEMP can contain RUNNER~1 (or
+    // another alias). Expand existing parents even for not-yet-created logs and
+    // temporary directories, without moving any files.
+    if !path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let mut parent = path;
+    let mut tail = Vec::new();
+    while !parent.exists() {
+        let (Some(name), Some(next)) = (parent.file_name(), parent.parent()) else {
+            return path.to_path_buf();
+        };
+        tail.push(name.to_owned());
+        parent = next;
+    }
+    let Ok(resolved) = fs::canonicalize(parent) else {
+        return path.to_path_buf();
+    };
+    let text = resolved.to_string_lossy();
+    let mut long = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{unc}"))
+    } else {
+        PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(&text))
+    };
+    for name in tail.into_iter().rev() {
+        long.push(name);
+    }
+    long
 }
 
 // Directives such as root, access_log and ssl_certificate compile variables even
@@ -695,6 +732,23 @@ mod tests {
         assert!(nginx.contains("/tmp/data/phpmyadmin"));
         assert!(!nginx.contains("listen 0.0.0.0"));
         assert_eq!(php_string("a'b\\c"), "'a\\'b\\\\c'");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn nginx_expands_short_aliases_and_keeps_unicode_for_future_files() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-Nginx 日本-{}", rand::random::<u64>()));
+        fs::create_dir_all(&root).unwrap();
+        let alias = windows_ansi_path(&root);
+        assert_eq!(
+            nginx_path(&alias.join("pending/logfile")),
+            nginx_path(&root.join("pending/logfile"))
+        );
+        let rendered = nginx_path(&root);
+        assert!(rendered.contains("Nginx 日本"));
+        assert!(!rendered.contains("//?/"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]
