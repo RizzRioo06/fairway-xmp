@@ -25,7 +25,7 @@ The full source review and hardening findings are recorded in [RC source review]
 - [x] Confirm all six version locations agree using `python3 scripts/release_candidate.py version`.
 - [x] Pass local source/UI checks and resolve the concrete regressions found; fresh candidate CI is required below.
 - [x] Lock feature scope on 2026-10-18.
-- [ ] Select the exact candidate source commit after the source hardening pass. Later code/runtime changes require a new candidate and new acceptance evidence.
+- [x] Select candidate source `d13a06b8f60688306d452b8a31c4ff649a4b26d4`, tag `candidate-0.1.0-rc.1-1`; [build run 39140420384](https://github.com/eimg/fairway-xmp/actions/runs/39140420384). Later code/runtime changes require a new candidate and new acceptance evidence.
 
 ## Build and accept
 
@@ -64,4 +64,4 @@ RC releases are GitHub prereleases and never latest stable. Stable releases are 
 
 ## Pending release work
 
-Candidate source selection/build, exact-installer device acceptance, version tagging, publication and feed promotion remain pending. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed.
+Candidate build completion, exact-installer device acceptance, release version tagging, publication and feed promotion remain pending. The candidate source and build-only tag above are selected; the publication tag has not been created. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed.
