@@ -46,3 +46,4 @@
 .terminal-expanded .terminal-host { height: auto; flex: 1; min-height: 80px; }
 @media (max-width: 900px) { .terminal-expanded { left: 180px; padding: 18px; } }
 @media (max-width: 650px) { .terminal-expanded { left: 64px; padding: 12px; } }
+.app-shell.sidebar-folded .terminal-expanded { left: 64px; }

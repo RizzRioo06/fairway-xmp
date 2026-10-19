@@ -130,6 +130,15 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(page.getByRole('button', { name: 'Insert row', exact: true })).toBeEnabled();
   const rows = page.getByRole('region', { name: 'Table rows', exact: true });
   await expect(rows).toContainText('9007199254740993');
+  await page.setViewportSize({ width: 1080, height: 1500 });
+  await expect.poll(async () => (await rows.boundingBox())!.height).toBeGreaterThan(430);
+  await expect.poll(async () => (await page.locator('.db-pagination').boundingBox())!.y).toBeLessThan(1500);
+  await page.setViewportSize({ width: 1080, height: 900 });
+  await expect.poll(async () => (await rows.boundingBox())!.height).toBeLessThan(430);
+  await expect.poll(async () => {
+    const pager = (await page.locator('.db-pagination').boundingBox())!;
+    return pager.y + pager.height;
+  }).toBeLessThanOrEqual(900);
   await expect(rows).toContainText('NULL');
   await page.getByRole('button', { name: 'View row 1', exact: true }).click();
   let view = page.getByRole('dialog', { name: 'View row', exact: true });
@@ -151,6 +160,18 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(page.getByText('1–50 of 55', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'messages_without_key', exact: true }).click();
   await expect(page.getByText(/No non-null primary or unique key/)).toBeVisible();
+  const shortTable = rows.locator('table');
+  await expect.poll(async () => {
+    const frame = (await rows.boundingBox())!;
+    const grid = (await shortTable.boundingBox())!;
+    return frame.height - grid.height;
+  }).toBeLessThan(4);
+  const actionCell = rows.locator('tbody td').first();
+  await expect(actionCell).toHaveCSS('display', 'table-cell');
+  await expect(actionCell).toHaveCSS('vertical-align', 'middle');
+  const rowBox = (await rows.locator('tbody tr').boundingBox())!;
+  const viewBox = (await rows.getByRole('button', { name: 'View row 1', exact: true }).boundingBox())!;
+  expect(Math.abs(viewBox.y + viewBox.height / 2 - (rowBox.y + rowBox.height / 2))).toBeLessThanOrEqual(1);
   await expect(rows.getByRole('button', { name: 'View row 1', exact: true })).toBeEnabled();
   await expect(rows.getByRole('button', { name: /^Edit row/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'student_names view', exact: true }).click();
@@ -170,6 +191,9 @@ test('create database/table, insert default and NULL, edit empty text, delete wi
   await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
   dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
   await dialog.getByLabel('Table name', { exact: true }).fill('students');
+  const nameColumn = dialog.locator('.db-column-card').nth(1);
+  await expect(nameColumn.getByLabel('Allow NULL', { exact: true })).not.toBeChecked();
+  await nameColumn.getByLabel('Allow NULL', { exact: true }).check();
   await capture(page, info, 'create-table');
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -217,7 +241,9 @@ test('insert offers defaults only where available and saves untouched value and 
   await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
   let dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
   await dialog.getByLabel('Table name', { exact: true }).fill('insert_modes');
-  await dialog.locator('.db-column-card').nth(1).getByLabel('Allow NULL', { exact: true }).uncheck();
+  const nameColumn = dialog.locator('.db-column-card').nth(1);
+  await expect(nameColumn.getByLabel('Allow NULL', { exact: true })).not.toBeChecked();
+  await nameColumn.getByLabel('Allow NULL', { exact: true }).uncheck();
   for (const definition of [
     { name: 'notes', type: 'VARCHAR', mode: 'none' },
     { name: 'empty_default', type: 'VARCHAR', mode: 'value', value: '' },
@@ -227,6 +253,7 @@ test('insert offers defaults only where available and saves untouched value and 
     await dialog.getByRole('button', { name: 'Add column', exact: true }).click();
     const card = dialog.locator('.db-column-card').last();
     await card.getByLabel('Column name', { exact: true }).fill(definition.name);
+    if (definition.name === 'notes') await card.getByLabel('Allow NULL', { exact: true }).check();
     await card.getByRole('combobox', { name: 'Type', exact: true }).selectOption(definition.type);
     await card.getByRole('combobox', { name: 'Default', exact: true }).selectOption(definition.mode);
     if (definition.value !== undefined) await card.getByLabel('Default value', { exact: true }).fill(definition.value);

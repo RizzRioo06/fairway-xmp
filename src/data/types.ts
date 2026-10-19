@@ -23,8 +23,8 @@ export type Definition = {
   defaultMode: 'none' | 'null' | 'value' | 'current_timestamp'; defaultValue: string;
 };
 export const columnTypes = ['INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL', 'FLOAT', 'DOUBLE', 'CHAR', 'VARCHAR', 'TEXT', 'LONGTEXT', 'BOOLEAN', 'DATE', 'DATETIME', 'TIMESTAMP', 'JSON', 'BLOB'];
-export function newColumn(name = ''): Definition {
-  return { name, type: 'VARCHAR', length: '255', scale: '2', unsigned: false, nullable: true, primary: false, autoIncrement: false, defaultMode: 'none', defaultValue: '' };
+export function newColumn(name = '', sqlite = false): Definition {
+  return { name, type: 'VARCHAR', length: '255', scale: '2', unsigned: false, nullable: sqlite, primary: false, autoIncrement: false, defaultMode: 'none', defaultValue: '' };
 }
 export function fromColumn(c: Column): Definition {
   const parts = /^(\w+)(?:\((\d+)(?:,(\d+))?\))?/i.exec(c.type);

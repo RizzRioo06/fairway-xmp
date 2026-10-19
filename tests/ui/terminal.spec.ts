@@ -197,6 +197,12 @@ test('find, text size and expanded view preserve output and keyboard input', asy
   await input.press(`${shortcut}+=`);
   await page.getByRole('button', { name: 'Expand terminal', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Restore terminal size', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Fold sidebar', exact: true }).click();
+  const sidebarBox = (await page.locator('.sidebar').boundingBox())!;
+  const expandedBox = (await page.locator('.terminal-expanded').boundingBox())!;
+  expect(sidebarBox.width).toBe(64);
+  expect(Math.abs(expandedBox.x - sidebarBox.x - sidebarBox.width)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Unfold sidebar', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await enter(page, 'echo expanded-input-works');
   await expect(output(page)).toContainText('expanded-input-works');

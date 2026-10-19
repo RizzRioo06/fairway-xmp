@@ -48,6 +48,7 @@ test('SQLite is discoverable with stopped services and shares the table editor',
   await expect(dialog.getByRole('combobox', { name: 'Type', exact: true }).first()).toHaveValue('INTEGER');
   await expect(dialog.getByRole('combobox', { name: 'Type', exact: true }).last()).toHaveValue('TEXT');
   await expect(dialog.getByLabel('Unsigned', { exact: true })).toHaveCount(0);
+  await expect(dialog.locator('.db-column-card').nth(1).getByLabel('Allow NULL', { exact: true })).toBeChecked();
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('button', { name: 'Insert row', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Insert row', exact: true });

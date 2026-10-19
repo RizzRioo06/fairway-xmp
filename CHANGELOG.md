@@ -12,6 +12,7 @@
 - SQLite-specific schema controls, safe row identity and conflict checks, guarded destructive schema changes, and native/browser regression coverage. Advanced column redesign remains in SQL; `fairway db` stays MySQL-only.
 - Main pages fill the content width beside the sidebar, with the same horizontal padding Mail and Logs already use.
 - The main sidebar can fold to icons from the workspace breadcrumb. Unfold restores the labels. Show and hide tables is the same kind of icon, placed in front of the table name.
+- Table rows use the height left in the window. A new MySQL column starts required, and a new SQLite column still allows NULL. The expanded terminal lines up with a folded sidebar.
 
 These changes require a new candidate and native acceptance; published RC 1 artifacts are unchanged.
 
