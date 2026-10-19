@@ -242,6 +242,8 @@ jobs:
           test "$(uname -m)" = arm64
           cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
       - name: Build native hosts helper
+        env:
+          CARGO_TERM_COLOR: never
         run: python scripts/build_macos_hosts_helper.py --team-id 4Q27NQ2UAF --output artifacts/hosts-helper
       - name: Build standalone desktop app with native permissions
         run: |

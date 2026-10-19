@@ -25,7 +25,9 @@ def main():
         parser.error('Expected a ten-character Apple Developer team ID')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, 'MACOSX_DEPLOYMENT_TARGET': '15.0'}
+    # CI sets CARGO_TERM_COLOR=always. Link flags are machine-readable output;
+    # ANSI reset sequences would otherwise become part of the final library name.
+    env = {**os.environ, 'MACOSX_DEPLOYMENT_TARGET': '15.0', 'CARGO_TERM_COLOR': 'never'}
     command = ['cargo', 'rustc', '--manifest-path', str(ROOT / 'src-tauri/Cargo.toml'),
                '--release', '--lib', '--no-default-features', '--features', 'native-hosts-writer',
                '--locked', '--offline', '--', '--print', 'native-static-libs']
