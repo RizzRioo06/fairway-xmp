@@ -1,6 +1,6 @@
-# Preparing 0.1.0 RC
+# 0.1.0 RC release preparation
 
-The next target is **0.1.0-rc.1**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
+**0.1.0-rc.1 was published on 2026-10-19**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
 
 ## Scope and owner decisions
 
@@ -13,7 +13,7 @@ The release owner confirmed this scope on 2026-10-17:
 - On 2026-10-19, accept the documented Windows MySQL non-ASCII backup/export identifier limitation on non-UTF-8 system code pages. Errors must be explicit, preserve data, and block updates whose backup cannot complete. See [database limitations](data-browser.md#windows-backupexport-identifiers).
 - On 2026-10-19, move only the human in-app update/restart check after publication and feed promotion. Other exact-installer human checks and signed-updater CI remain prerequisites; unperformed update checks stay false.
 
-The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation still need to reach the release branch through normal review.
+The RC preparation branch includes Mailpit, the inbox, mail port migration, native Mail tray controls, and the grouped sidebar. The sidebar and release preparation reached main through merged PR #7.
 
 The release owner additionally accepted a single global troubleshooting Logs page on 2026-10-18, with source/search filters and problems shown by default. See [the accepted log viewer design](log-viewer-consideration.md). The accepted implementation includes service shortcuts, exact-host request filtering with explicitly shared PHP, Unicode request display, and bounded reads/rendering. The final source review is complete. On 2026-10-19 the owner reported the human device tests done and passed; see the [candidate acceptance record](release-acceptance/0.1.0-rc.1.json). The record includes the owner's tested OS versions and passes pre-publication acceptance validation.
 
@@ -66,6 +66,10 @@ Promoting an RC offers it to installed beta users. Publish without promotion fir
 
 RC releases are GitHub prereleases and never latest stable. Stable releases are ordinary releases marked latest. Moving from `0.1.0-rc.N` to `0.1.0` requires a new build and acceptance because the embedded version and endpoint change.
 
-## Pending release work
+## Publication and remaining verification
 
-Candidate 5 passed all automated gates, and the owner reported the pre-publication human device checks passed on 2026-10-19. The acceptance record retains the exact installer hashes and attributes these results to the owner, not agent observation. The owner supplied macOS 27 Beta 4, Windows 11 (August 11, 2026 update, KB5121003), and Ubuntu 26.04; pre-publication acceptance validation passes. Release version tagging, publication and feed promotion remain pending; the human update/restart checks follow publication. The candidate source and build-only tag above are selected; the publication tag has not been created. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay in candidate metadata and release notes; they are not marked verified or fixed. The device-test confirmation does not authorize publication.
+Candidate 5 passed all automated gates, and the owner reported the pre-publication human device checks passed on 2026-10-19. The acceptance record retains exact installer hashes and the owner's reported macOS 27 Beta 4, Windows 11 (August 11, 2026 update, KB5121003), and Ubuntu 26.04. Pre-publication acceptance validation passes.
+
+The owner authorized merge, publication and release on 2026-10-19. [PR #7](https://github.com/eimg/fairway-xmp/pull/7) merged as `959a0d77bd0fc8d9b523502bbe727fa55ad6fff1`. [Publication run 39179960227](https://github.com/eimg/fairway-xmp/actions/runs/39179960227) published [v0.1.0-rc.1](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.1) and promoted the preview feed. The version tag identifies tested application commit `24e5c053b30eb7cca280f6ad9f5de47d8e90b489`; no application/runtime bytes were rebuilt. Published asset digests/sizes, installer hashes, acceptance evidence, signatures and the live preview feed were checked against the exact candidate.
+
+Only the human Mac/Windows in-app update/restart checks, including protected Mac prompt approval/cancellation, remain pending. Complete those against the published version and record the results before claiming full acceptance. Feature scope is locked and per-site PHP is deferred. Accepted Windows limitations stay disclosed; they are not marked verified or fixed.

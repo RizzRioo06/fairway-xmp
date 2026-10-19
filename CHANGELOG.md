@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-rc.1 — in preparation
+## 0.1.0-rc.1 — 2026-10-19
 
 - Built-in Mailpit catcher and in-app inbox, PHP mail integration, SMTP settings and attachment saving.
 - Safe migration of existing ports and native Mail Start/Stop tray controls.

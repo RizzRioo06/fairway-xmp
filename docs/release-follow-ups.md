@@ -2,6 +2,12 @@
 
 The owner accepted the Windows MySQL CLI non-ASCII identifier limitation on 2026-10-19. It is disclosed for this RC: on non-UTF-8 system locales, unsupported backup/export names fail explicitly and updates cannot proceed without a completed backup. Broader Unicode CLI backup support remains open; normal Unicode row/query handling is retained. See [database limitations](data-browser.md#windows-backupexport-identifiers).
 
+## RC 1 publication — 2026-10-19
+
+The owner authorized merging PR #7 and publishing [v0.1.0-rc.1](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.1). PR #7 merged as `959a0d77bd0fc8d9b523502bbe727fa55ad6fff1`; [publication run 39179960227](https://github.com/eimg/fairway-xmp/actions/runs/39179960227) reused the exact accepted files from candidate run [39173368612](https://github.com/eimg/fairway-xmp/actions/runs/39173368612), tested source `24e5c053b30eb7cca280f6ad9f5de47d8e90b489`, without rebuilding. The version tag identifies that tested source, while subsequent documentation records publication.
+
+All published asset digests/sizes, installer hashes, checksums, acceptance evidence and live preview metadata were verified. RC 1 remains a prerelease, and `beta-feed/latest.json` now offers it to enabled beta/RC desktop clients. [Pre-publication human acceptance](release-acceptance/0.1.0-rc.1.json) passes based on the owner's report and tested OS details. The human Mac/Windows in-app update/restart checks remain pending under the approved sequencing; publication does not complete them. Stop further rollout if those tests fail. Existing Windows and legacy PHP limitations remain disclosed.
+
 ## RC preparation policy — 2026-10-17
 
 The release owner accepts the existing Windows PHP 8.0/8.1 dependency-provenance gap and unsigned Windows installer as disclosed limitations for this RC cycle. They do not block publication after the other acceptance gates pass. Runtime inputs stay as-is, the provenance checklist stays open, and Authenticode remains absent. Mac signing/notarization and cryptographic Mac/Windows updater signatures remain mandatory. On 2026-10-18 the owner locked RC feature scope after per-site PHP issue #5 closed as not planned; global PHP selection is retained. See [RC preparation](rc-preparation.md).
