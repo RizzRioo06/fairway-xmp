@@ -109,6 +109,11 @@ function create_index($db, $table, $r, $map) {
     catch (PDOException $e) { if (($r['unique'] ?? false)===true && stripos($e->getMessage(),'UNIQUE constraint failed')!==false) throw new Exception('Cannot create this unique index because existing values contain duplicates. No index was created.'); throw $e; }
     return ['message'=>($r['unique'] ?? false)===true?'Unique index created.':'Index created.'];
 }
+function index_snapshot($value) {
+    // Native JSON maps reorder object keys; preserve values and ordered list positions.
+    if (is_array($value)) { ksort($value); foreach ($value as &$part) $part=index_snapshot($part); unset($part); }
+    return $value;
+}
 function column_sql($db, $c, $adding = false) {
     $type = strtoupper($c['type'] ?? '');
     if (!in_array($type, ['INTEGER','TEXT','REAL','NUMERIC','BLOB'], true)) throw new Exception('Choose a SQLite column type.');
@@ -231,10 +236,10 @@ function run_request($db, $r) {
             if ($liveKind!=='BASE TABLE') throw new Exception('This table is read-only in forms.');
             $indexes=table_indexes($db,$table,columns($db,$table,$liveDdl),foreign_keys($db,$table));
             $live=null; foreach ($indexes as $index) if ($index['name']===($r['name']??'')) $live=$index;
-            if (!$live || $live!==($r['originalIndex']??null)) throw new Exception('This index changed or was removed. Refresh before trying again.');
+            if (!$live || index_snapshot($live)!==index_snapshot($r['originalIndex']??null)) throw new Exception('This index changed or was removed. Refresh before trying again.');
             if (!$live['removable']) throw new Exception($live['reason']);
             $db->exec('DROP INDEX ' . ident($live['name'])); $db->exec('COMMIT');
-        } catch (Throwable $e) { $db->exec('ROLLBACK'); throw $e; }
+        } catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); throw $e; }
         return ['message'=>'Index removed. A SQLite backup was saved first.'];
     }
     if ($op === 'rename_table') { $db->exec("ALTER TABLE $qt RENAME TO " . ident($r['name'] ?? '')); return ['message'=>'Table renamed.']; }

@@ -25,7 +25,7 @@ for (const engine of ['mysql', 'sqlite'] as const) test(`${engine} native index 
     await page.locator('#db-sql').fill(`CREATE TABLE teams(id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(40) NOT NULL);
       CREATE TABLE memberships(id INTEGER NOT NULL PRIMARY KEY, team_id INTEGER NOT NULL, email VARCHAR(80) NOT NULL, term VARCHAR(20) NOT NULL, CONSTRAINT fk_memberships_team FOREIGN KEY(team_id) REFERENCES teams(id) ON UPDATE RESTRICT ON DELETE CASCADE);
       INSERT INTO teams VALUES(1,'class');
-      INSERT INTO memberships VALUES(1,1,'same','a'),(2,1,'same','b'),(3,1,'third','b');`);
+      INSERT INTO memberships VALUES(1,1,'same','a'),(2,1,'same','b'),(3,1,'third','b');${engine === 'mysql' ? ' CREATE DATABASE schema_other; CREATE TABLE schema_other.cross_memberships(team_id INTEGER, FOREIGN KEY(team_id) REFERENCES schema_browser.teams(id));' : ''}`);
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
     await expect(page.getByLabel('Query results', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'memberships', exact: true }).click();
@@ -45,6 +45,7 @@ for (const engine of ['mysql', 'sqlite'] as const) test(`${engine} native index 
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(dialog).toHaveCount(0);
     const indexes = page.getByRole('region', { name: 'Indexes', exact: true });
+    if (engine === 'mysql') await expect(indexes).toContainText('Supports a foreign key');
     const unique = indexes.locator('li').filter({ has: page.getByText('uq_memberships_term_email', { exact: true }) });
     await expect(unique.locator('.db-index-parts code')).toHaveText(['term', 'email']);
     await expect(unique).toContainText('Unique');
@@ -64,6 +65,7 @@ for (const engine of ['mysql', 'sqlite'] as const) test(`${engine} native index 
     await page.getByRole('button', { name: 'teams', exact: true }).click();
     await expect(links).toContainText('Referenced by');
     await expect(links).toContainText('memberships.team_id → teams.id');
+    if (engine === 'mysql') await expect(links).toContainText('schema_other.cross_memberships.team_id → teams.id');
     await expect(links.getByRole('button')).toHaveCount(0);
     const screenshot = info.outputPath(`${engine}-schema-details.png`);
     await page.screenshot({ path: screenshot, fullPage: true });

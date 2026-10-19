@@ -19,7 +19,8 @@ export default function SchemaDetails({ structure, database, sqlite, writable, b
   return <>
     <section className="db-schema-section" aria-label="Indexes">
       <div className="db-row-tools"><h3>Indexes <span>{indexes.length}</span></h3><button className="secondary" disabled={blocked || !writable || !canCreate} onClick={onCreate}><Plus size={14} />Index</button></div>
-      {indexes.length ? <ul className="db-index-list">{indexes.map(index => <li key={index.name} className="db-index-item">
+      {writable && !canCreate && <p className="db-hint">These column types require SQL for index definitions.</p>}
+      {indexes.length ? <ul className="db-index-list">{indexes.map(index => <li key={`${index.primary ? 'primary' : 'index'}:${index.name}`} className="db-index-item">
         <div className="db-index-heading"><strong>{index.name}</strong><span className="db-index-kind">{index.primary ? 'Primary key' : index.unique ? 'Unique' : 'Index'}</span>{index.removable && <button className="db-danger-text" disabled={blocked || !writable} aria-label={`Remove index ${index.name}`} onClick={() => onRemove(index)}>Remove</button>}</div>
         <p className="db-index-parts">{index.parts.map((part, i) => <code key={i}>{part.name ?? part.expression ?? '(expression)'}{part.prefix !== null ? `(${part.prefix})` : ''}{part.direction === 'DESC' ? ' DESC' : ''}{part.collation && part.collation !== 'BINARY' ? ` COLLATE ${part.collation}` : ''}</code>)}</p>
         <p className="db-hint">{[index.type, index.details, index.reason].filter(Boolean).join(' · ')}</p>

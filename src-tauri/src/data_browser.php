@@ -79,6 +79,11 @@ function create_index($db, $schema, $table, $r, $map) {
     catch (PDOException $e) { if (($r['unique'] ?? false) === true && (int)($e->errorInfo[1] ?? 0)===1062) throw new Exception('Cannot create this unique index because existing values contain duplicates. No index was created.'); throw $e; }
     return ['message'=>($r['unique'] ?? false) === true ? 'Unique index created.' : 'Index created.'];
 }
+function index_snapshot($value) {
+    // Native JSON maps reorder object keys; preserve values and ordered list positions.
+    if (is_array($value)) { ksort($value); foreach ($value as &$part) $part=index_snapshot($part); unset($part); }
+    return $value;
+}
 function column_sql($db, $c) {
     $type = strtoupper($c['type'] ?? '');
     $types = ['INT','BIGINT','SMALLINT','TINYINT','DECIMAL','FLOAT','DOUBLE','CHAR','VARCHAR','TEXT','LONGTEXT','BOOLEAN','DATE','DATETIME','TIMESTAMP','JSON','BLOB'];
@@ -189,7 +194,7 @@ function run_request($db, $r) {
         if (($r['confirmed'] ?? false)!==true) throw new Exception('Confirm index removal first.');
         $indexes=table_indexes($db,$schema,$table,foreign_keys($db,$schema,$table),$columns);
         $live=null; foreach ($indexes as $index) if ($index['name']===($r['name']??'')) $live=$index;
-        if (!$live || $live!==($r['originalIndex']??null)) throw new Exception('This index changed or was removed. Refresh before trying again.');
+        if (!$live || index_snapshot($live)!==index_snapshot($r['originalIndex']??null)) throw new Exception('This index changed or was removed. Refresh before trying again.');
         if (!$live['removable']) throw new Exception($live['reason']);
         $db->exec('DROP INDEX ' . ident($live['name']) . " ON $qt"); return ['message'=>'Index removed. A database backup was saved first.'];
     }

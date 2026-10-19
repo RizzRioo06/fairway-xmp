@@ -29,7 +29,7 @@ class SQLiteBrowserTests(unittest.TestCase):
         request = dict(op=op, path=str(self.path), **args)
         result = subprocess.run(
             self.php_command(),
-            input=json.dumps(dict(request=request)), text=True, capture_output=True,
+            input=json.dumps(dict(request=request), sort_keys=True), text=True, capture_output=True,
             env={**os.environ, 'MIBS': '', 'PHP_INI_SCAN_DIR': ''}, timeout=35,
         )
         self.assertEqual(result.stderr, '')
@@ -192,6 +192,11 @@ class SQLiteBrowserTests(unittest.TestCase):
             self.call('drop_index', table='t', name=quoted, originalIndex=index)
         self.call('drop_index', table='t', name=quoted, originalIndex=index, confirmed=True)
         self.assertEqual(self.call('structure', table='t')['indexes'], [])
+        self.assertEqual(self.call('structure', table='t')['key'], [])
+        self.assertEqual(self.call('rows', table='t')['total'], '4')
+        self.sql("CREATE TABLE nulls(a TEXT,b TEXT); INSERT INTO nulls VALUES(NULL,'same'),(NULL,'same')")
+        self.call('create_index', table='nulls', name='unique_nulls', indexColumns=['a','b'], unique=True)
+        self.assertEqual(self.call('structure', table='nulls')['key'], [])
         self.call('create_index', table='t', name='idx_a', indexColumns=['a'], unique=False)
         old = self.call('structure', table='t')['indexes'][0]
         self.sql('DROP INDEX idx_a; CREATE INDEX idx_a ON t(b)')

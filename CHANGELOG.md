@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- MySQL/SQLite Structure now shows indexes and incoming/outgoing foreign keys. Create ordinary or composite unique indexes with ordered columns; remove supported indexes with confirmation and a protective backup. Primary, constraint-owned, advanced and relationship-dependent definitions stay protected in forms. Foreign-key inspection is read-only; filtering stays in SQL.
+
 - SQLite project files in the desktop Data browser: a visible Open SQLite file action, recent paths, shared table/row editing and SQL workspace, and consistent file backups without starting services or installing an editor extension.
 - SQLite-specific schema controls, safe row identity and conflict checks, guarded destructive schema changes, and native/browser regression coverage. Advanced column redesign remains in SQL; `fairway db` stays MySQL-only.
 

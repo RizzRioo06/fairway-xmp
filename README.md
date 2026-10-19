@@ -99,6 +99,8 @@ On macOS, Fairway remembers roughly 1,000 commands privately on your device, sep
 
 The next unreleased desktop update also lets you choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits. This addition is not included in the existing RC 1 download.
 
+The unreleased **Structure** tab also supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
+
 Fairway includes PHP 8.0 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.0` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. PHP 8.0 and 8.1 are end of life; use newer versions for internet-facing projects.
 
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.
