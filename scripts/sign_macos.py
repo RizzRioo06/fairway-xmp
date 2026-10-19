@@ -13,6 +13,10 @@ ENTITLEMENTS = Path(__file__).resolve().parents[1] / 'packaging/macos/php.entitl
 
 def signing_command(file, identity, app):
     command = ['codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', identity]
+    # Nested tools otherwise inherit the enclosing app's identifier. Native XPC
+    # authenticates this exact helper identity in both directions.
+    if file == app / 'Contents/Library/HelperTools/dev.fairway.environment.hosts-helper':
+        command.extend(['--identifier', 'dev.fairway.environment.hosts-helper'])
     try:
         parts = file.relative_to(app / 'Contents/Resources/runtime').parts
     except ValueError:

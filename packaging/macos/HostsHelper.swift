@@ -13,11 +13,16 @@ func freeError(_ error: UnsafeMutablePointer<CChar>)
 
 final class HostsService: NSObject, FairwayHostsProtocol {
     private let writes = DispatchQueue(label: "Fairway hosts writes")
+    private let pending = DispatchSemaphore(value: 4)
     func synchronize(_ request: Data, reply: @escaping (String?) -> Void) {
         guard !request.isEmpty, request.count <= 65536 else {
             reply("Invalid address request size."); return
         }
+        guard pending.wait(timeout: .now()) == .success else {
+            reply("Address helper is busy. Try again."); return
+        }
         writes.async {
+            defer { self.pending.signal() }
             let error = request.withUnsafeBytes { bytes in
                 applyHosts(bytes.bindMemory(to: UInt8.self).baseAddress!, request.count)
             }
