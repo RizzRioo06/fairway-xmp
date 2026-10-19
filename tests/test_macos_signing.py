@@ -11,6 +11,15 @@ import sign_macos
 
 
 class SigningTests(unittest.TestCase):
+    def test_xpc_helper_has_its_exact_peer_identifier(self):
+        app = Path('/build/Fairway XMP.app')
+        helper_id = 'dev.fairway.environment.hosts-helper'
+        helper = app / 'Contents/Library/HelperTools' / helper_id
+        command = sign_macos.signing_command(helper, 'Developer ID', app)
+        self.assertEqual(command[command.index('--identifier') + 1], helper_id)
+        self.assertNotIn('--entitlements', command)
+        self.assertNotIn('--identifier', sign_macos.signing_command(app, 'Developer ID', app))
+
     def test_only_php_interpreters_receive_the_jit_entitlement(self):
         app = Path('/build/Fairway XMP.app')
         runtime = app / 'Contents/Resources/runtime'

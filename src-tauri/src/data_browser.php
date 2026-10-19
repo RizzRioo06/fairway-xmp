@@ -37,6 +37,53 @@ function stable_key($db, $schema, $table, $columns) {
     }
     return [];
 }
+function foreign_keys($db, $schema, $table) {
+    $raw = rows($db, 'SELECT k.CONSTRAINT_NAME AS name, k.TABLE_SCHEMA AS db, k.TABLE_NAME AS tbl, k.COLUMN_NAME AS col, k.REFERENCED_TABLE_SCHEMA AS refDb, k.REFERENCED_TABLE_NAME AS refTable, k.REFERENCED_COLUMN_NAME AS refCol, r.UPDATE_RULE AS onUpdate, r.DELETE_RULE AS onDelete FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.TABLE_NAME=k.TABLE_NAME AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE (k.TABLE_SCHEMA=? AND k.TABLE_NAME=?) OR (k.REFERENCED_TABLE_SCHEMA=? AND k.REFERENCED_TABLE_NAME=?) ORDER BY k.TABLE_SCHEMA,k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION', [$schema,$table,$schema,$table]);
+    $groups = [];
+    foreach ($raw as $part) {
+        $id = json_encode([$part['db'],$part['tbl'],$part['name']]);
+        if (!isset($groups[$id])) $groups[$id] = ['name'=>$part['name'],'database'=>$part['db'],'table'=>$part['tbl'],'columns'=>[],'referencedDatabase'=>$part['refDb'],'referencedTable'=>$part['refTable'],'referencedColumns'=>[],'onUpdate'=>$part['onUpdate'],'onDelete'=>$part['onDelete']];
+        $groups[$id]['columns'][] = $part['col']; $groups[$id]['referencedColumns'][] = $part['refCol'];
+    }
+    return ['foreignKeys'=>array_values(array_filter($groups,fn($fk)=>$fk['database']===$schema && $fk['table']===$table)), 'referencedBy'=>array_values(array_filter($groups,fn($fk)=>$fk['referencedDatabase']===$schema && $fk['referencedTable']===$table))];
+}
+function table_indexes($db, $schema, $table, $links, $columns) {
+    $raw = rows($db, 'SELECT INDEX_NAME AS name, NON_UNIQUE AS nonUnique, COLUMN_NAME AS col, EXPRESSION AS expr, COLLATION AS direction, SUB_PART AS prefix, INDEX_TYPE AS type, IS_VISIBLE AS visible, INDEX_COMMENT AS comment FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY (INDEX_NAME=\'PRIMARY\') DESC,INDEX_NAME,SEQ_IN_INDEX', [$schema,$table]);
+    $groups = [];
+    foreach ($raw as $part) {
+        $name = $part['name'];
+        if (!isset($groups[$name])) $groups[$name] = ['name'=>$name,'unique'=>!(int)$part['nonUnique'],'primary'=>$name==='PRIMARY','type'=>$part['type'],'parts'=>[],'details'=>implode(' · ',array_filter([$part['visible']==='NO'?'Invisible':'',$part['comment']])),'sql'=>null,'removable'=>true,'reason'=>''];
+        $groups[$name]['parts'][] = ['name'=>$part['col'],'expression'=>$part['expr'],'direction'=>$part['direction']==='D'?'DESC':'ASC','prefix'=>$part['prefix'],'collation'=>null];
+        if ($part['expr'] !== null || $part['prefix'] !== null || $part['type'] !== 'BTREE' || $part['visible'] !== 'YES') $groups[$name]['reason'] = 'Advanced index; manage it in SQL.';
+    }
+    foreach ($groups as &$index) {
+        if ($index['primary']) $index['reason'] = 'Primary key; manage it in SQL.';
+        $names = array_map(fn($part)=>strtolower($part['name'] ?? ''),$index['parts']);
+        foreach ($columns as $c) if (stripos($c['extra'],'auto_increment')!==false && ($names[0]??null)===strtolower($c['name'])) $index['reason'] = 'Supports an automatic ID; manage it in SQL.';
+        foreach ([[$links['foreignKeys'],'columns'],[$links['referencedBy'],'referencedColumns']] as [$keys,$field]) foreach ($keys as $fk) if (array_slice($names,0,count($fk[$field]))===array_map('strtolower',$fk[$field])) $index['reason'] = 'Supports a foreign key; manage it in SQL.';
+        $index['removable'] = $index['reason']==='';
+    }
+    unset($index); return array_values($groups);
+}
+function create_index($db, $schema, $table, $r, $map) {
+    $name = $r['name'] ?? ''; $qn = ident($name);
+    if (strcasecmp($name,'PRIMARY')===0) throw new Exception('Primary keys are managed separately.');
+    $parts = $r['indexColumns'] ?? [];
+    if (!is_array($parts) || count($parts)<1 || count($parts)>16) throw new Exception('Choose 1–16 index columns in order.');
+    $seen=[]; foreach ($parts as $part) {
+        if (!is_string($part) || !isset($map[$part]) || in_array(strtolower($part),$seen,true)) throw new Exception('Choose existing, distinct index columns.');
+        if ($map[$part]['generated'] || $map[$part]['binary'] || preg_match('/^(.*text|json)\b/i',$map[$part]['type'])) throw new Exception('Use SQL for indexes on text, JSON, binary or generated columns.');
+        $seen[]=strtolower($part);
+    }
+    try { $db->exec('CREATE ' . (($r['unique'] ?? false) === true ? 'UNIQUE ' : '') . "INDEX $qn ON " . ident($table) . ' (' . implode(',',array_map('ident',$parts)) . ')'); }
+    catch (PDOException $e) { if (($r['unique'] ?? false) === true && (int)($e->errorInfo[1] ?? 0)===1062) throw new Exception('Cannot create this unique index because existing values contain duplicates. No index was created.'); throw $e; }
+    return ['message'=>($r['unique'] ?? false) === true ? 'Unique index created.' : 'Index created.'];
+}
+function index_snapshot($value) {
+    // Native JSON maps reorder object keys; preserve values and ordered list positions.
+    if (is_array($value)) { ksort($value); foreach ($value as &$part) $part=index_snapshot($part); unset($part); }
+    return $value;
+}
 function column_sql($db, $c) {
     $type = strtoupper($c['type'] ?? '');
     $types = ['INT','BIGINT','SMALLINT','TINYINT','DECIMAL','FLOAT','DOUBLE','CHAR','VARCHAR','TEXT','LONGTEXT','BOOLEAN','DATE','DATETIME','TIMESTAMP','JSON','BLOB'];
@@ -125,7 +172,7 @@ function run_request($db, $r) {
     }
     $columns=table_columns($db,$schema,$table); $map=array_column($columns,null,'name');
     $key=stable_key($db,$schema,$table,$columns); $kind=table_kind($db,$schema,$table);
-    if ($op === 'structure') { $ddl=rows($db,"SHOW CREATE TABLE $qt"); return ['columns'=>$columns,'key'=>$key,'kind'=>$kind,'sql'=>array_values($ddl[0])[1]]; }
+    if ($op === 'structure') { $ddl=rows($db,"SHOW CREATE TABLE $qt"); $links=foreign_keys($db,$schema,$table); return array_merge(['columns'=>$columns,'key'=>$key,'kind'=>$kind,'sql'=>array_values($ddl[0])[1],'indexes'=>table_indexes($db,$schema,$table,$links,$columns)],$links); }
     if ($op === 'rows') {
         $where=''; $args=[];
         if (($r['filterColumn'] ?? '') !== '' && ($r['filterValue'] ?? '') !== '') {
@@ -142,6 +189,15 @@ function run_request($db, $r) {
         return ['columns'=>$columns,'key'=>$key,'kind'=>$kind,'rows'=>$s->fetchAll(PDO::FETCH_ASSOC),'total'=>(string)$total,'offset'=>$offset,'limit'=>$limit];
     }
     if ($kind !== 'BASE TABLE') throw new Exception('Views are read-only in the data browser. Use the query editor for advanced changes.');
+    if ($op === 'create_index') return create_index($db,$schema,$table,$r,$map);
+    if ($op === 'drop_index') {
+        if (($r['confirmed'] ?? false)!==true) throw new Exception('Confirm index removal first.');
+        $indexes=table_indexes($db,$schema,$table,foreign_keys($db,$schema,$table),$columns);
+        $live=null; foreach ($indexes as $index) if ($index['name']===($r['name']??'')) $live=$index;
+        if (!$live || index_snapshot($live)!==index_snapshot($r['originalIndex']??null)) throw new Exception('This index changed or was removed. Refresh before trying again.');
+        if (!$live['removable']) throw new Exception($live['reason']);
+        $db->exec('DROP INDEX ' . ident($live['name']) . " ON $qt"); return ['message'=>'Index removed. A database backup was saved first.'];
+    }
     if ($op === 'rename_table') { $db->exec("RENAME TABLE $qt TO " . ident($r['name'] ?? '')); return ['message'=>'Table renamed.']; }
     if ($op === 'drop_table') { $db->exec("DROP TABLE $qt"); return ['message'=>'Table deleted. A database backup was saved first.']; }
     if ($op === 'add_column' || $op === 'change_column') {

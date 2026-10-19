@@ -4,7 +4,17 @@ export type Column = {
   extra: string; columnKey: string; expression: string; binary: boolean; generated: boolean;
 };
 export type Table = { name: string; kind: string };
-export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string };
+export type TableIndex = {
+  name: string; unique: boolean; primary: boolean; type: string;
+  parts: { name: string | null; expression: string | null; direction: string; prefix: string | null; collation: string | null }[];
+  details: string; sql: string | null; removable: boolean; reason: string;
+};
+export type ForeignKey = {
+  name: string; database: string | null; table: string; columns: string[];
+  referencedDatabase: string | null; referencedTable: string; referencedColumns: (string | null)[];
+  onUpdate: string; onDelete: string;
+};
+export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string; indexes?: TableIndex[]; foreignKeys?: ForeignKey[]; referencedBy?: ForeignKey[] };
 export type Page = Structure & { rows: Row[]; total: string; offset: number; limit: number };
 export type QueryResult = { sets: { columns: string[]; rows: (string | null)[][]; affected: number; truncated: boolean }[]; elapsedMs: number };
 export type Definition = {
@@ -13,8 +23,8 @@ export type Definition = {
   defaultMode: 'none' | 'null' | 'value' | 'current_timestamp'; defaultValue: string;
 };
 export const columnTypes = ['INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL', 'FLOAT', 'DOUBLE', 'CHAR', 'VARCHAR', 'TEXT', 'LONGTEXT', 'BOOLEAN', 'DATE', 'DATETIME', 'TIMESTAMP', 'JSON', 'BLOB'];
-export function newColumn(name = ''): Definition {
-  return { name, type: 'VARCHAR', length: '255', scale: '2', unsigned: false, nullable: true, primary: false, autoIncrement: false, defaultMode: 'none', defaultValue: '' };
+export function newColumn(name = '', sqlite = false): Definition {
+  return { name, type: 'VARCHAR', length: '255', scale: '2', unsigned: false, nullable: sqlite, primary: false, autoIncrement: false, defaultMode: 'none', defaultValue: '' };
 }
 export function fromColumn(c: Column): Definition {
   const parts = /^(\w+)(?:\((\d+)(?:,(\d+))?\))?/i.exec(c.type);

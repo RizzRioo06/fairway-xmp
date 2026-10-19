@@ -12,6 +12,10 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      standalone_only:
+        description: Build a standalone permission-test ZIP without an installer
+        type: boolean
+        default: false
       signed_release:
         description: Enable signed beta updates (without Authenticode)
         type: boolean
@@ -26,6 +30,7 @@ permissions:
 
 jobs:
   build:
+    if: inputs.standalone_only != true
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -78,7 +83,7 @@ jobs:
         env:
           FAIRWAY_NATIVE_ONLY: '1'
           FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
-        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
+        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/sqlite-browser-native.spec.ts tests/ui/schema-details-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
       - name: Save native desktop browser report
         if: always()
         uses: actions/upload-artifact@v6
@@ -96,6 +101,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise native data browser and SQL export/import
         run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- .runtime-work/data-browser-smoke
+      - name: Exercise SQLite project files without services
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example sqlite_browser_smoke --no-default-features --locked -- .runtime-work/sqlite-browser-smoke
+      - name: Verify SQLite workers across staged PHP versions
+        run: python -m unittest discover -s tests -p test_sqlite_browser.py -v
       - name: Verify MySQL upgrade from alpha 1
         run: |
           $legacy = Join-Path (Get-Location) '.runtime-work/alpha1-runtime'
@@ -214,3 +223,62 @@ jobs:
           retention-days: 7
 
 # Manual installer builds. Publication reuses the tested artifact; no release creation.
+
+  standalone:
+    if: inputs.standalone_only == true
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: installer-complete-v1
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST MACOSX_DEPLOYMENT_TARGET
+          cache-on-failure: false
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - uses: ./.github/actions/restore-runtime-downloads
+        id: downloads
+      - run: python scripts/prepare_runtime.py
+      - uses: actions/cache/save@v5
+        if: steps.downloads.outputs.cache-hit != 'true'
+        with:
+          path: .runtime-cache
+          key: ${{ steps.downloads.outputs.key }}
+      - name: Exercise bundled services and backups with isolated data
+        run: |
+          cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- .runtime-work/standalone-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build standalone desktop app
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          @{ app = @{ windows = @(@{ title = 'Fairway XMP — Permissions Test'; width = 1080; height = 760; minWidth = 820; minHeight = 650 }) } } | ConvertTo-Json -Depth 5 | Set-Content artifacts/permissions-build.json -Encoding utf8
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --no-bundle --target x86_64-pc-windows-msvc --config artifacts/permissions-build.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package app, complete runtime, identity and test guide
+        run: python scripts/package_windows_standalone.py --executable src-tauri/target/x86_64-pc-windows-msvc/release/fairway.exe --output artifacts/windows-standalone
+      - uses: actions/upload-artifact@v6
+        with:
+          name: fairway-xmp-windows-permissions-${{ github.sha }}
+          path: artifacts/windows-standalone/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14

@@ -1,5 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
+async function expectStill(page: Page, position: number) {
+  const samples = await page.evaluate(async () => {
+    const positions: number[] = [];
+    for (let i = 0; i < 45; i++) {
+      await new Promise(requestAnimationFrame);
+      positions.push(window.scrollY);
+    }
+    return positions;
+  });
+  expect(samples.every(value => Math.abs(value - position) <= 1)).toBe(true);
+}
+
 const output = (page: Page) => page.locator('.terminal-tab-panel:not([hidden]) .terminal-host .xterm-rows');
 async function enter(page: Page, command: string) {
   const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
@@ -7,7 +19,7 @@ async function enter(page: Page, command: string) {
 }
 async function open(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
 }
 
@@ -55,6 +67,54 @@ test('interrupt, restart confirmation, end session, and missing runtime recovery
   await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
   await enter(page, 'composer --version');
   await expect(output(page)).toContainText('Composer version');
+});
+
+test('session failures stay visible without moving the page or the shell focus', async ({ page }) => {
+  const detail = `Could not end the session. ${'The shell is still running. '.repeat(40)}`;
+  await page.route('**/src/ui-test/terminal.ts*', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('original')) { await route.continue(); return; }
+    await route.fulfill({ contentType: 'text/javascript', body: `
+      import { terminalRequest as original } from '/src/ui-test/terminal.ts?original=true';
+      export function terminalRequest(command, args, ...rest) {
+        if (command === 'terminal_close') throw new Error(${JSON.stringify(detail)});
+        return original(command, args, ...rest);
+      }
+    ` });
+  });
+  await open(page);
+  await enter(page, 'echo keep-focus');
+  await expect(output(page)).toContainText('keep-focus');
+  const paste = page.getByRole('button', { name: 'Paste', exact: true });
+  await page.evaluate(() => {
+    document.querySelector('main')!.style.minHeight = '2400px';
+    window.scrollTo(0, 700);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('Clipboard denied'); }, readText: async () => { throw new Error('Clipboard denied'); } }, configurable: true });
+  });
+  await paste.evaluate(element => (element as HTMLElement).focus({ preventScroll: true }));
+  const position = await page.evaluate(() => window.scrollY);
+  expect(position).toBeGreaterThan(100);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Could not paste.');
+  await expect(page.locator('.terminal-notice')).toBeInViewport({ ratio: 1 });
+  await expectStill(page, position);
+  await expect(paste).toBeFocused();
+  await page.getByRole('button', { name: 'End session', exact: true }).dispatchEvent('click');
+  await page.getByRole('dialog').getByRole('button', { name: 'End session', exact: true }).click();
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Could not end the session.');
+  await expect(page.locator('.terminal-notice')).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('button', { name: 'Dismiss terminal message', exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('.terminal-notice').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(270);
+  const dimensions = await page.locator('.terminal-notice-message').evaluate(element => ({ height: element.clientHeight, content: element.scrollHeight }));
+  expect(dimensions.content).toBeGreaterThan(dimensions.height);
+  await expectStill(page, position);
+  const owner = await page.evaluate(() => document.activeElement?.closest('.sidebar') ? 'sidebar' : 'page');
+  expect(owner).toBe('page');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Could not end the session.');
 });
 
 test('production preview cannot create a shell', async ({ page }) => {
@@ -137,6 +197,12 @@ test('find, text size and expanded view preserve output and keyboard input', asy
   await input.press(`${shortcut}+=`);
   await page.getByRole('button', { name: 'Expand terminal', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Restore terminal size', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Fold sidebar', exact: true }).click();
+  const sidebarBox = (await page.locator('.sidebar').boundingBox())!;
+  const expandedBox = (await page.locator('.terminal-expanded').boundingBox())!;
+  expect(sidebarBox.width).toBe(64);
+  expect(Math.abs(expandedBox.x - sidebarBox.x - sidebarBox.width)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Unfold sidebar', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await enter(page, 'echo expanded-input-works');
   await expect(output(page)).toContainText('expanded-input-works');
@@ -224,7 +290,7 @@ test('history preference applies to new sessions without interrupting existing c
   });
   await page.goto('/');
   await page.getByLabel('Example paths').selectOption('macOS');
-  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-history-preference', 'true');
   await enter(page, 'echo history-setting-keeps-session');

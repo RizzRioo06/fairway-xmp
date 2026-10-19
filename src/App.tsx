@@ -1,6 +1,6 @@
 import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2,
+  ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2, PanelLeftClose, PanelLeftOpen,
   AppWindow, Database, Download, ExternalLink, FolderOpen, Globe, Leaf, LoaderCircle, Mail, Play,
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
@@ -51,17 +51,27 @@ function suggestDomain(name: string): string {
 }
 
 const hostsApproval: Record<string, string> = {
-  macos: 'macOS will ask for an administrator password.',
+  macos: 'macOS may ask you to approve address changes.',
   windows: 'Windows will ask for administrator permission.',
 };
 const trustApproval: Record<string, string> = {
-  macos: 'Fairway adds its local certificate to your login keychain. macOS asks for your password to approve the trust setting; an administrator account is not required.',
+  macos: 'Fairway adds its local certificate to your login keychain. macOS asks you to approve the trust setting; use Touch ID if offered, or your password. An administrator account is not required.',
   windows: 'Fairway adds its local certificate to your Windows user certificate store. Windows shows a security warning; choose Yes to continue. An administrator account is not required.',
 };
 
 export default function App() {
   const [data, setData] = useState<Snapshot>(preview);
-  const [view, setView] = useState<View>('environment');
+  const [view, setCurrentView] = useState<View>('environment');
+  const navigation = useRef({ view: 'environment' as View, id: 0 });
+  const pageId = navigation.current.id;
+
+  function setView(next: View) {
+    if (navigation.current.view !== next) {
+      navigation.current = { view: next, id: navigation.current.id + 1 };
+      setNoticeState(null);
+    }
+    setCurrentView(next);
+  }
   const [logRequest, setLogRequest] = useState<{ key: number; source: string } | null>(null);
 
   function showLog(service: ServiceId) {
@@ -75,9 +85,21 @@ export default function App() {
   const [backendBusy, setBackendBusy] = useState<string | null>(null);
   const busy = backendBusy ?? localBusy;
   const databaseBusy = backendBusy === 'Working with database…';
-  const [notice, setNotice] = useState<Notice>(null);
+  const [notice, setNoticeState] = useState<Notice>(null);
+  const lastBackendError = useRef<string | null>(null);
+  function setNotice(next: Notice) {
+    // An operation may finish after the user has left its page.
+    if (navigation.current.id === pageId) setNoticeState(next);
+  }
+  const reportBackendError = useCallback((error: unknown) => {
+    const text = message(error);
+    if (lastBackendError.current === text) return;
+    lastBackendError.current = text;
+    setNoticeState({ kind: 'error', text });
+  }, []);
   const [report, setReport] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [sidebarFolded, setSidebarFolded] = useState(false);
   const [mailSettings, setMailSettings] = useState(false);
   const [ports, setPorts] = useState<Ports>(preview.ports);
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
@@ -89,7 +111,7 @@ export default function App() {
   const [sslSetup, setSslSetup] = useState<Project | null>(null);
   const operation = useRef(false);
   const backendOperation = useRef(false);
-  const noticeRef = useRef<HTMLDivElement>(null);
+  const operationFocus = useRef<{ trigger: HTMLElement; pageId: number } | null>(null);
   const versions = data.runtimeVersions;
   const selectedPhp = data.phpVersions[data.phpVersion] ?? versions?.php;
   const allReady = data.services.filter(service => service.id !== 'mail' || data.mailAvailable || service.running).every(service => service.ready);
@@ -126,7 +148,7 @@ export default function App() {
         const current = await invoke<Snapshot>('snapshot');
         if (!disposed) setData(current);
       } catch (error) {
-        if (!disposed) setNotice({ kind: 'error', text: message(error) });
+        if (!disposed) reportBackendError(error);
       } finally { fetching = false; }
     };
     void poll();
@@ -135,7 +157,8 @@ export default function App() {
       ...(isUiTest ? [listen('ui-test-reset', payload => {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
-        setNotice(null); setUpdate(null); setUpdateProgress(null); setReport(null); setHelp(false); setCopied(null);
+        setNoticeState(null); lastBackendError.current = null;
+        setUpdate(null); setUpdateProgress(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
       listen('fairway-status', payload => setData(payload as Snapshot)),
       listen('fairway-operation-started', payload => {
@@ -148,25 +171,37 @@ export default function App() {
       listen('fairway-update-progress', payload => setUpdateProgress(payload as UpdateProgress)),
       listen('fairway-error', payload => {
         setBusy(null); operation.current = false;
-        setNotice({ kind: 'error', text: String(payload) });
+        reportBackendError(String(payload));
       }),
       listen('fairway-shutdown', () => {
         backendOperation.current = true; setBackendBusy('Stopping services before quitting…');
       }),
     ]).then(items => {
       if (disposed) items.forEach(fn => fn()); else unlisteners.push(...items);
-    }).catch(error => { if (!disposed) setNotice({ kind: 'error', text: message(error) }); });
+    }).catch(error => { if (!disposed) reportBackendError(error); });
     return () => { disposed = true; unlisteners.forEach(fn => fn()); };
   }, []);
 
-  // Results appear at the top of the page; bring them into view from lower cards.
-  useEffect(() => { noticeRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [notice]);
   useEffect(() => { setPorts(data.ports); }, [data.ports.website, data.ports.phpmyadmin, data.ports.mysql, data.ports.php, data.ports.mail, data.ports.smtp]);
   useEffect(() => { setPhpVersion(data.phpVersion); }, [data.phpVersion]);
+  useEffect(() => {
+    if (busy || !operationFocus.current) return;
+    const { trigger, pageId: origin } = operationFocus.current;
+    operationFocus.current = null;
+    // Some WebViews blur a disabled button. Wait until React has enabled it,
+    // and never take focus from navigation, a modal, or another control.
+    if (navigation.current.id === origin && document.activeElement === document.body &&
+        !document.querySelector('[aria-modal="true"]') && trigger.isConnected && !trigger.matches(':disabled')) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, [busy]);
 
   async function run(label: string, action: () => Promise<void>) {
     if (operation.current || backendOperation.current) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    operationFocus.current = trigger ? { trigger, pageId } : null;
     operation.current = true;
+    lastBackendError.current = null;
     setBusy(label); setNotice(null);
     try { await action(); }
     catch (error) { setNotice({ kind: 'error', text: message(error) }); }
@@ -205,7 +240,8 @@ export default function App() {
       const current = await invoke<Snapshot>('set_project_https', { domain: project.domain, enabled });
       setData(current);
       const saved = current.projects.find(site => site.domain === project.domain);
-      setNotice({ kind: 'success', text: enabled && saved ? siteSaveMessage(saved, current) : `HTTPS is off for ${project.domain}.test. HTTP remains enabled.` });
+      const removedTrust = !enabled && data.httpsTrusted && !current.httpsTrusted;
+      setNotice({ kind: 'success', text: enabled && saved ? siteSaveMessage(saved, current) : `HTTPS is off for ${project.domain}.test.${removedTrust ? ' Its unused certificate trust was removed.' : ''} HTTP remains enabled.` });
     });
   }
 
@@ -240,39 +276,39 @@ export default function App() {
   const mailEnv = `MAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=${data.ports.smtp}\nMAIL_USERNAME=null\nMAIL_PASSWORD=null`;
   const connection = `DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=${data.ports.mysql}\nDB_DATABASE=fairway\nDB_USERNAME=fairway\nDB_PASSWORD=fairway`;
 
-  return <div className="app-shell">
+  const foldTitle = (label: string) => sidebarFolded ? label : undefined;
+  return <div className={`app-shell${sidebarFolded ? ' sidebar-folded' : ''}`}>
     <aside className="sidebar">
-      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home">
+      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home" title={foldTitle('Fairway XMP')}>
         <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span className="brand-name">fairway<span className="brand-period">.</span><span className="brand-edition">XMP</span></span>
       </a>
       <nav className="sidebar-nav" aria-label="Main navigation">
         <div className="nav-group" role="group" aria-label="Core">
-          <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
-          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
-          <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} onClick={() => setView('logs')}><ScrollText size={18} />Logs</button>
+          <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} title={foldTitle('Environment')} onClick={() => setView('environment')}><Globe size={18} /><span className="nav-label">Environment</span></button>
+          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} /><span className="nav-label">Terminal</span></button>
+          <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} title={foldTitle('Logs')} onClick={() => setView('logs')}><ScrollText size={18} /><span className="nav-label">Logs</span></button>
         </div>
         <div className="nav-group" role="group" aria-label="Tools">
-          <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} onClick={() => setView('projects')}><AppWindow size={18} />Manage Sites</button>
-          <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mail')}><Mail size={18} />View Mail</button>
-          {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Browse Data</button>}
+          <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} title={foldTitle('Manage Sites')} onClick={() => setView('projects')}><AppWindow size={18} /><span className="nav-label">Manage Sites</span></button>
+          <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} title={foldTitle('View Mail')} onClick={() => setView('mail')}><Mail size={18} /><span className="nav-label">View Mail</span></button>
+          {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} title={foldTitle('Browse Data')} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} /><span className="nav-label">Browse Data</span></button>}
         </div>
         <div className="nav-group nav-group-app" role="group" aria-label="App">
-          <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
-          <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} onClick={() => setView('updates')}><ArrowDownToLine size={18} />Updates</button>
+          <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} title={foldTitle('Settings')} onClick={() => setView('settings')}><Settings2 size={18} /><span className="nav-label">Settings</span></button>
+          <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} title={foldTitle('Updates')} onClick={() => setView('updates')}><ArrowDownToLine size={18} /><span className="nav-label">Updates</span></button>
         </div>
       </nav>
       <div className="sidebar-bottom">
-        <button className="help-button" onClick={() => setHelp(true)}><CircleHelp size={17} />Getting started<ArrowUpRight size={14} /></button>
+        <button className="help-button" title={foldTitle('Getting started')} onClick={() => setHelp(true)}><CircleHelp size={17} /><span className="nav-label">Getting started</span><ArrowUpRight size={14} /></button>
         <div className="sidebar-footer" aria-label="App version">v{data.version}</div>
       </div>
     </aside>
 
     <main>
-      <header className="topbar"><span>Workspace <ChevronRight size={13} />{viewTitle[view]}</span><span className="local-pill"><span />Local environment</span></header>
-      <div className={view === 'mail' || view === 'logs' ? 'main-content wide' : 'main-content'}>
+      <header className="topbar"><span><button className="icon-button sidebar-fold" aria-expanded={!sidebarFolded} aria-label={sidebarFolded ? 'Unfold sidebar' : 'Fold sidebar'} title={sidebarFolded ? 'Unfold sidebar' : 'Fold sidebar'} onClick={() => setSidebarFolded(folded => !folded)}>{sidebarFolded ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button>Workspace <ChevronRight size={13} />{viewTitle[view]}</span><span className="local-pill"><span />Local environment</span></header>
+      <div className="main-content">
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
-        {notice && <div ref={noticeRef} className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
         {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></Suspense></div>}
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
 
@@ -287,15 +323,15 @@ export default function App() {
           })}</div>
           {canControl && !data.runtimeReady && <div className="notice error" role="alert">Fairway XMP’s PHP or database files are missing. Reinstall Fairway XMP to restore them. Your projects and database data will be kept.</div>}
 
-          <div className="workspace-card">
-            <div className="workspace-icon"><FolderOpen size={23} /></div>
-            <div className="workspace-details"><h2>Document root</h2><p>PHP files here open at http://127.0.0.1:{data.ports.website}/.</p><code title={data.documentRoot}>{data.documentRoot}</code></div>
-            <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('coursework')}>Open folder<ArrowUpRight size={15} /></button>
-          </div>
-
-          <div className="bottom-grid">
-            <section className="connection-card"><div className="card-title"><h2><Database size={17} />Database connection</h2><button className="icon-button" title="Copy database environment settings" aria-label="Copy database environment settings" onClick={() => { void copy(connection, 'database'); }}>{copied === 'database' ? <Check size={16} /> : <Clipboard size={16} />}</button></div><dl><div><dt>Host</dt><dd>127.0.0.1<span className="port-inline">:{data.ports.mysql}</span></dd></div><div><dt>Database</dt><dd>fairway</dd></div><div><dt>Username / password</dt><dd>fairway / fairway</dd></div></dl><button className="text-link" disabled={!data.services.find(s => s.id === 'mysql')?.ready || !!busy} onClick={() => { void run('Backing up databases…', async () => { const path = await invoke<string>('backup_database'); setNotice({ kind: 'success', text: `Database backup saved: ${path}` }); }); }}><Download size={14} />Back up databases</button></section>
-            <section className="terminal-card"><span className="terminal-symbol"><Terminal size={20} /></span><h2>Your tools, right here.</h2><p>Run PHP and Composer in the embedded terminal.<br />Ready for your projects.</p><button className="secondary" disabled={!canControl || !data.runtimeReady || !!busy} onClick={() => open('terminal')}>Open terminal<ChevronRight size={15} /></button></section>
+          <div className="section-heading workspace-heading"><h2>Workspace details</h2></div>
+          <div className="workspace-reference">
+            <section className="reference-card document-root-card">
+              <div className="card-title"><h2><FolderOpen size={17} />Document root</h2></div>
+              <p className="reference-description">PHP files here open at http://127.0.0.1:{data.ports.website}/.</p>
+              <code className="document-root-path">{data.documentRoot}</code>
+              <div className="reference-actions"><button className="text-link" disabled={!canControl || !!busy} onClick={() => open('coursework')}><FolderOpen size={14} />Open folder<ArrowUpRight size={14} /></button></div>
+            </section>
+            <section className="reference-card connection-card"><div className="card-title"><h2><Database size={17} />Database connection</h2><button className="icon-button" title="Copy database environment settings" aria-label="Copy database environment settings" onClick={() => { void copy(connection, 'database'); }}>{copied === 'database' ? <Check size={16} /> : <Clipboard size={16} />}</button></div><dl><div><dt>Host</dt><dd>127.0.0.1<span className="port-inline">:{data.ports.mysql}</span></dd></div><div><dt>Database</dt><dd>fairway</dd></div><div><dt>Username / password</dt><dd>fairway / fairway</dd></div></dl><div className="reference-actions"><button className="text-link" disabled={!data.services.find(s => s.id === 'mysql')?.ready || !!busy} onClick={() => { void run('Backing up databases…', async () => { const path = await invoke<string>('backup_database'); setNotice({ kind: 'success', text: `Database backup saved: ${path}` }); }); }}><Download size={14} />Back up databases</button></div></section>
           </div>
           <footer className="content-footer"><span><span className="status-dot running" />127.0.0.1 · Local access only</span><button onClick={() => setView('settings')}>Configure environment<Settings2 size={13} /></button></footer>
         </>}
@@ -333,7 +369,7 @@ export default function App() {
             </form>
           </section>
           <section className="settings-card cli-tools" aria-label="Command-line tools">
-            <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. “Open terminal” uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
+            <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. The embedded terminal uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
             <p>{data.pathInstalled ? 'Available in new terminals and restarted editors.' : 'Add these commands to your user PATH.'}</p>
             <div className="cli-commands" aria-label="Terminal commands"><code>php</code><code>composer</code>{databaseCliAvailable && <code>fairway db</code>}</div>
             <button className="secondary" disabled={!canControl || !!busy || (!data.pathInstalled && !data.runtimeReady)} onClick={() => { void run('Updating user PATH…', async () => {
@@ -364,6 +400,13 @@ export default function App() {
           </section>
         </>}
       </div>
+      <div className={`operation-notice${notice ? ` notice ${notice.kind}` : ''}`}>
+        <div className="operation-notice-message">
+          <div role={notice?.kind === 'success' ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice?.kind === 'success' ? notice.text : null}</div>
+          <div role={notice?.kind === 'error' ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{notice?.kind === 'error' ? notice.text : null}</div>
+        </div>
+        {notice && <button aria-label="Dismiss message" onClick={() => setNoticeState(null)}><X size={17} /></button>}
+      </div>
       {busy && !databaseBusy && <div className="operation-status" role="status"><LoaderCircle className="spin" size={16} />{busy}</div>}
     </main>
 
@@ -372,16 +415,16 @@ export default function App() {
     {help && <Modal title="Your first PHP project" onClose={() => setHelp(false)}><ol className="help-steps"><li>Click <strong>Start all</strong> and wait for the services to become ready.</li><li>Open the default web folder: <code>fairway/www</code>.</li><li>Create a folder called <code>lesson-01</code> and add an <code>index.php</code> file.</li><li>Open <code>http://127.0.0.1:{data.ports.website}/lesson-01/</code> in your browser.</li></ol><p>Log into phpMyAdmin with username <code>fairway</code> and password <code>fairway</code>. Reopen your terminal after installation to use PHP and Composer. If they are unavailable, enable them in Settings.</p><p className="settings-hint">Closing this window keeps services running. Use the Fairway XMP menu bar or system tray icon to reopen the panel, control services, or quit. Quitting stops all services.</p></Modal>}
     {projectForm && <Modal title={projectForm.previous ? 'Edit site' : 'Add site'} onClose={() => setProjectForm(null)} backdropCloses={false}><form className="project-form modal-form" onSubmit={event => { event.preventDefault(); saveProject(projectForm); }}><div className="modal-form-body">
       <label><span>Site name</span><input aria-label="Site name" disabled={!!busy} value={projectForm.name} maxLength={80} required onChange={event => { const name = event.target.value; setProjectForm({ ...projectForm, name, domain: projectForm.domainEdited ? projectForm.domain : suggestDomain(name) }); }} /></label>
-      <label><span>Domain</span><span className="domain-input"><input aria-label="Domain" aria-describedby="site-domain-help" disabled={!!busy} value={projectForm.domain} maxLength={63} required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" onChange={event => setProjectForm({ ...projectForm, domain: event.target.value.toLowerCase(), domainEdited: true })} /><span>.test</span></span><small id="site-domain-help">Use a short address with lowercase letters, numbers, and hyphens. The site name can use any language.</small></label>
-      <label><span>Web root — the folder to serve</span><span className="root-input"><input value={projectForm.root} readOnly required placeholder="Choose a folder" aria-label="Web root folder" className="root-path" onClick={() => { if (!busy) void chooseRoot(projectForm); }} onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && !busy) { event.preventDefault(); void chooseRoot(projectForm); } }} /><button type="button" className="secondary" disabled={!!busy} onClick={() => { void chooseRoot(projectForm); }}><FolderOpen size={14} />Choose…</button></span><small>Only this folder is served at the site’s <code>.test</code> address. For Laravel, choose the application’s <code>public</code> folder.</small></label>
-      {insideDocumentRoot(projectForm.root, data.documentRoot, data.os) && <p className="site-warning">This folder is inside <code>{data.documentRoot}</code>. Other project files there may also be accessible at <code>http://127.0.0.1:{data.ports.website}/</code>. Keep applications with private files outside that folder.</p>}
-      <label><span>App type</span><select aria-label="App type" aria-describedby="site-routing-help" disabled={!!busy} value={projectForm.indexFallback ? 'front-controller' : 'files'} onChange={event => setProjectForm({ ...projectForm, indexFallback: event.target.value === 'front-controller' })}><option value="files">Basic PHP / HTML — serve files directly</option><option value="front-controller">Laravel / front controller — route to index.php</option></select><small id="site-routing-help">{projectForm.indexFallback ? <>Missing paths such as <code>/about</code> route to <code>index.php</code>. For Laravel, the web root must be its <code>public</code> folder.</> : <>Each address maps to a file or folder. Choose Laravel / front controller if your app handles routes through <code>index.php</code>.</>}</small></label>
-      {projectForm.previous !== projectForm.domain && <p className="settings-hint">Saving {projectForm.previous ? `replaces ${projectForm.previous}.test with` : 'adds'} <code>{projectForm.domain || 'your-domain'}.test</code> in your computer’s hosts file, pointing to this computer. {hostsApproval[data.os] ?? 'Your computer will ask for administrator permission.'}</p>}
+      <div className="site-field"><div className="site-field-title"><label htmlFor="site-domain">Domain</label><HelpTip label="About site domains"><p>Use lowercase letters, numbers and hyphens. The site name can use any language.</p><p>Your address ends in <code>.test</code> and works only on this computer.</p></HelpTip></div><span className="domain-input"><input id="site-domain" aria-label="Domain" disabled={!!busy} value={projectForm.domain} maxLength={63} required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" onChange={event => setProjectForm({ ...projectForm, domain: event.target.value.toLowerCase(), domainEdited: true })} /><span>.test</span></span></div>
+      <div className="site-field"><div className="site-field-title"><label htmlFor="site-root">Web root</label><HelpTip label="About the web root"><p>Only this folder is served at the site’s address. For Laravel, choose the app’s <code>public</code> folder.</p></HelpTip></div><span className="root-input"><input id="site-root" value={projectForm.root} readOnly required placeholder="Choose a folder" aria-label="Web root folder" className="root-path" onClick={() => { if (!busy) void chooseRoot(projectForm); }} onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && !busy) { event.preventDefault(); void chooseRoot(projectForm); } }} /><button type="button" className="secondary" disabled={!!busy} onClick={() => { void chooseRoot(projectForm); }}><FolderOpen size={14} />Choose…</button></span></div>
+      {insideDocumentRoot(projectForm.root, data.documentRoot, data.os) && <div className="settings-hint site-inline-help"><span>Also available through localhost.</span><HelpTip label="About shared document-root access" placement="above"><p>This folder is inside <code>{data.documentRoot}</code>. Other project files may be accessible at <code>http://127.0.0.1:{data.ports.website}/</code>. Keep apps with private files outside it.</p></HelpTip></div>}
+      <div className="site-field"><div className="site-field-title"><label htmlFor="site-type">App type</label><HelpTip label="About app routing" placement="above"><p>Basic PHP / HTML serves files directly. Laravel / front controller routes missing paths to <code>index.php</code>.</p><p>For Laravel, choose its <code>public</code> folder as the web root.</p></HelpTip></div><select id="site-type" aria-label="App type" disabled={!!busy} value={projectForm.indexFallback ? 'front-controller' : 'files'} onChange={event => setProjectForm({ ...projectForm, indexFallback: event.target.value === 'front-controller' })}><option value="files">Basic PHP / HTML</option><option value="front-controller">Laravel / front controller</option></select></div>
+      {projectForm.previous !== projectForm.domain && <div className="settings-hint site-inline-help"><span>Address changes may need system approval.</span><HelpTip label="About address permissions" placement="above"><p>Saving {projectForm.previous ? `replaces ${projectForm.previous}.test with` : 'adds'} <code>{projectForm.domain || 'your-domain'}.test</code> in your computer’s hosts file, pointing to this computer.</p><p>{hostsApproval[data.os] ?? 'Your computer will ask for administrator permission.'}</p></HelpTip></div>}
       {projectForm.error && <div className="notice error" role="alert"><span>{projectForm.error}</span></div>}
       </div><div className="button-row domain-confirm-actions modal-form-actions"><button type="button" className="secondary" onClick={() => setProjectForm(null)}>Cancel</button><button type="submit" className="primary" disabled={!!busy || !projectForm.root}>{projectForm.previous ? 'Save changes' : 'Add site'}</button></div>
     </form></Modal>}
     {removing && <Modal title={`Remove ${removing.name}?`} onClose={() => setRemoving(null)}><p>Fairway stops serving <code>{removing.domain}.test</code>{removing.domainReady && <> and removes it from your computer’s hosts file. {hostsApproval[data.os] ?? 'Your computer will ask for administrator permission.'}</>}{!removing.domainReady && '.'} The folder <code>{removing.root}</code> and its files are kept.</p>{data.httpsTrusted && !data.projects.some(project => project.https && project.domain !== removing.domain) && <p>No other site uses HTTPS, so Fairway also removes its local certificate trust. Your computer may ask you to confirm.</p>}<div className="button-row domain-confirm-actions"><button className="secondary" onClick={() => setRemoving(null)}>Cancel</button><button className="primary" onClick={() => { const { domain, name } = removing; setRemoving(null); void run('Removing site…', async () => { setData(await invoke<Snapshot>('remove_project', { domain })); setNotice({ kind: 'success', text: `${name} was removed. Its files were kept.` }); }); }}>Remove site</button></div></Modal>}
-    {sslSetup && <Modal title={`Enable HTTPS for ${sslSetup.domain}.test?`} onClose={() => setSslSetup(null)}><p>HTTPS uses a local certificate that only this computer trusts. {trustApproval[data.os] ?? 'Your computer will ask you to approve trusting the certificate.'}</p><p>The site will use <code>https://{sslSetup.domain}.test:8443/</code>. HTTP remains enabled. Turning HTTPS off leaves the certificate trusted. Use <strong>Remove certificate trust</strong> when no site needs HTTPS, or uninstall Fairway to remove it.</p><div className="button-row domain-confirm-actions"><button className="secondary" onClick={() => setSslSetup(null)}>Cancel</button><button className="primary" onClick={() => { const project = sslSetup; setSslSetup(null); setHttps(project, true); }}>Enable HTTPS</button></div></Modal>}
+    {sslSetup && <Modal title={`Enable HTTPS for ${sslSetup.domain}.test?`} onClose={() => setSslSetup(null)}><p>HTTPS uses a local certificate that only this computer trusts. {trustApproval[data.os] ?? 'Your computer will ask you to approve trusting the certificate.'}</p><p>The site will use <code>https://{sslSetup.domain}.test:8443/</code>. HTTP remains enabled. Turning off HTTPS for the last site also removes the shared certificate trust. Your computer may ask you to confirm.</p><div className="button-row domain-confirm-actions"><button className="secondary" onClick={() => setSslSetup(null)}>Cancel</button><button className="primary" onClick={() => { const project = sslSetup; setSslSetup(null); setHttps(project, true); }}>Enable HTTPS</button></div></Modal>}
   </div>;
 }
 
@@ -394,12 +437,26 @@ function ServiceCard({ service, version, unavailable, disabled, busy, onAction, 
   const Icon = item.icon;
   const browser = service.id === 'phpmyadmin';
   const web = browser || service.id === 'nginx' || service.id === 'mail';
+  const status = <span className={`status-label ${service.ready ? 'ready' : service.running ? 'pending' : ''}`}><span className={`status-dot ${service.ready ? 'running' : service.running ? 'pending' : ''}`} />{service.ready ? 'Running' : service.running ? 'Waiting' : 'Stopped'}</span>;
+  const address = <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : web ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{web && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(service.id === 'nginx' ? 'website' : service.id)}><ExternalLink size={14} /></button>}</div>;
+  const error = (service.message || unavailable) && <div className="service-error" role="status">{service.message || 'Mail catcher files are missing. Reinstall Fairway XMP to restore mail.'}</div>;
+  const actions = <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!canControl} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>;
+
+  if (service.id === 'mail') return <section className="service-card service-card-mail">
+    <div className="mail-service-summary">
+      <span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span>
+      <div className="mail-service-details">
+        <div className="mail-service-heading"><div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div>{status}</div>
+        <p>{item.description}</p>
+      </div>
+    </div>
+    {address}{actions}{error}
+  </section>;
+
   return <section className="service-card">
-    <div className="service-top"><span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span><span className={`status-label ${service.ready ? 'ready' : service.running ? 'pending' : ''}`}><span className={`status-dot ${service.ready ? 'running' : service.running ? 'pending' : ''}`} />{service.ready ? 'Running' : service.running ? 'Waiting' : 'Stopped'}</span></div>
+    <div className="service-top"><span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span>{status}</div>
     <div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div><p>{item.description}</p>
-    <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : web ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{web && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(service.id === 'nginx' ? 'website' : service.id)}><ExternalLink size={14} /></button>}</div>
-    {(service.message || unavailable) && <div className="service-error" role="status">{service.message || 'Mail catcher files are missing. Reinstall Fairway XMP to restore mail.'}</div>}
-    <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!canControl} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>
+    {address}{error}{actions}
   </section>;
 }
 

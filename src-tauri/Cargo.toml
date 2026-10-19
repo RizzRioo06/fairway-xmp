@@ -32,6 +32,9 @@ default = ["desktop"]
 cli = []
 desktop = ["terminal", "dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater", "dep:tauri-plugin-dialog", "dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 terminal = ["dep:portable-pty"]
+native-macos-hosts = ["desktop"]
+native-hosts-writer = []
+native-macos-trust = ["dep:core-foundation", "dep:pem", "dep:security-framework", "dep:security-framework-sys"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true, features = [] }
@@ -52,10 +55,14 @@ time = "0.3"
 ring = "0.17"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { version = "=0.10.1", optional = true }
+pem = { version = "=4.0.0", optional = true }
+security-framework = { version = "=3.7.0", optional = true }
+security-framework-sys = { version = "=2.17.0", optional = true }
 muda = { version = "0.20", optional = true, default-features = false }
 objc2 = { version = "0.6", optional = true }
-objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = ["NSMenu", "NSMenuItem", "NSFont", "NSColor", "NSAttributedString"] }
-objc2-foundation = { version = "0.3", optional = true, default-features = false, features = ["NSString", "NSAttributedString", "NSValue"] }
+objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = ["NSApplication", "NSMenu", "NSMenuItem", "NSFont", "NSColor", "NSAttributedString"] }
+objc2-foundation = { version = "0.3", optional = true, default-features = false, features = ["NSString", "NSAttributedString", "NSValue", "NSError"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

@@ -302,7 +302,16 @@ fn main() -> Result<(), String> {
                 .iter()
                 .all(|s| s.ready || (s.id == "mail" && !mail_available)));
             let page = http(chosen.website, "/");
-            assert!(page.contains("Your environment"), "{page}");
+            assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+            assert!(page.contains("Your next idea starts here."), "{page}");
+            assert!(
+                page.contains(&format!("127.0.0.1:{}/hello/", chosen.website)),
+                "{page}"
+            );
+            assert!(
+                page.contains(&format!("PHP {}", manifest["php"].as_str().unwrap())),
+                "{page}"
+            );
             if mail_available {
                 // PHP's mail() must reach the bundled catcher (sendmail on Unix, SMTP on Windows).
                 fs::write(

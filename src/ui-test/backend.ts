@@ -31,6 +31,8 @@ function seedMail() {
 function mailRequest(request: { action: string; query?: string; id?: string; ids?: string[] }) {
   if (!data.services.find(service => service.id === 'mail')?.ready) throw new Error('Mail is not running. Start mail to see caught emails.');
   if (request.action === 'list') {
+    const forced = (window as Window & { __fairwayMailListError?: string }).__fairwayMailListError;
+    if (forced) throw new Error(forced);
     const query = (request.query ?? '').trim().toLowerCase();
     const found = mailbox.filter(item => !query || `${item.Subject} ${item.From?.Address} ${item.Text}`.toLowerCase().includes(query));
     return {
@@ -133,7 +135,13 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
-  if (command === 'save_mail_attachment') return `/Users/you/Downloads/${String(args.name)}` as T;
+  if (command === 'save_mail_attachment') {
+    const forced = (window as Window & { __fairwayMailSave?: { delay?: number; error?: string; path?: string } }).__fairwayMailSave;
+    if (forced?.delay) await new Promise(resolve => setTimeout(resolve, forced.delay));
+    if (forced?.error) throw new Error(forced.error);
+    if (forced?.path) return forced.path as T;
+    return `/Users/you/Downloads/${String(args.name)}` as T;
+  }
   if (command === 'mail_inbox') {
     const request = args.request as Parameters<typeof mailRequest>[0];
     const response = structuredClone(mailRequest(request));
@@ -142,8 +150,9 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     return response as T;
   }
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
+  if (command === 'pick_sqlite_file') return '/Users/Student May/projects/classroom/database.sqlite' as T;
   if (command === 'data_browser') {
-    if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');
+    if ((args.request as { driver?: string }).driver !== 'sqlite' && !data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');
     emit('fairway-operation-started', 'Working with database…');
     try { return structuredClone(await databaseRequest(String(args.id), args.request as Record<string, unknown>)) as T; }
     finally { emit('fairway-operation-finished', null); }
@@ -181,6 +190,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'cli_integration': configureCli(Boolean(args.enabled)); result = structuredClone(data); break;
     case 'pick_folder': return joinPath(home(), 'Code', 'new-site', 'public') as T;
     case 'save_project': {
+      const forced = (window as Window & { __fairwayProjectError?: string }).__fairwayProjectError;
+      if (forced) { delete (window as Window & { __fairwayProjectError?: string }).__fairwayProjectError; throw new Error(forced); }
       const project = args.project as ProjectConfig;
       // Match the backend's deny_unknown_fields so the form cannot send display-only fields.
       if (Object.keys(project).sort().join() !== 'domain,https,indexFallback,name,root') throw new Error(`invalid args \`project\` for command \`save_project\`: ${Object.keys(project).join(', ')}`);
@@ -202,6 +213,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (!project) throw new Error('This site is no longer registered.');
       project.https = Boolean(args.enabled);
       if (project.https) data.httpsTrusted = true;
+      else if (!data.projects.some(item => item.https)) data.httpsTrusted = false;
       result = structuredClone(data); break;
     }
     case 'remove_https_trust':

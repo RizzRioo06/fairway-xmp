@@ -3,6 +3,14 @@ name: macOS installer
 on:
   workflow_dispatch:
     inputs:
+      standalone_only:
+        description: Build a signed and notarized permission-test app ZIP without an installer
+        type: boolean
+        default: false
+      test_source_ref:
+        description: Optional exact source ref for the standalone comparison build
+        type: string
+        default: ''
       signed_release:
         description: Sign, notarize, and enable beta updates
         type: boolean
@@ -18,6 +26,7 @@ permissions:
 
 jobs:
   build:
+    if: inputs.standalone_only != true
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -71,7 +80,7 @@ jobs:
         env:
           FAIRWAY_NATIVE_ONLY: '1'
           FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
-        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
+        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/sqlite-browser-native.spec.ts tests/ui/schema-details-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
       - name: Save native desktop browser report
         if: always()
         uses: actions/upload-artifact@v6
@@ -82,12 +91,17 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
       - name: Exercise real services, backup restoration and PHP versions
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/macos-smoke"
       - name: Recover web services after a force-killed controller
         run: cargo run --manifest-path src-tauri/Cargo.toml --example service_recovery_smoke --no-default-features --locked
       - name: Exercise native data browser and SQL export/import
         run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- "$PWD/.runtime-work/data-browser-smoke"
+      - name: Exercise SQLite project files without services
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example sqlite_browser_smoke --no-default-features --locked -- "$PWD/.runtime-work/sqlite-browser-smoke"
+      - name: Verify SQLite workers across staged PHP versions
+        run: python3 -m unittest discover -s tests -p test_sqlite_browser.py -v
       - name: Prepare installer lifecycle probe and baseline before signing
         run: |
           python scripts/fetch_installer_baseline.py macos --output .runtime-work/baseline-macos.pkg
@@ -194,3 +208,115 @@ jobs:
             .runtime-work/macos-lifecycle/*.txt
           if-no-files-found: ignore
           retention-days: 7
+
+  standalone:
+    if: inputs.standalone_only == true
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.test_source_ref || github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/configure-macos-build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: installer-complete-v1
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST MACOSX_DEPLOYMENT_TARGET
+          cache-on-failure: false
+      - run: npm ci --no-audit --no-fund
+      - uses: ./.github/actions/restore-runtime-downloads
+        id: downloads
+      - run: python scripts/prepare_runtime.py
+      - uses: actions/cache/save@v5
+        if: steps.downloads.outputs.cache-hit != 'true'
+        with:
+          path: .runtime-cache
+          key: ${{ steps.downloads.outputs.key }}
+      - name: Fetch pinned Mac dependencies for the offline helper build
+        run: |
+          test "$(uname -m)" = arm64
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
+      - name: Build native hosts helper
+        env:
+          CARGO_TERM_COLOR: never
+        run: python scripts/build_macos_hosts_helper.py --team-id 4Q27NQ2UAF --output artifacts/hosts-helper
+      - name: Build standalone desktop app with native permissions
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path('artifacts/permissions-build.json').write_text(json.dumps({'app': {'windows': [{'title': 'Fairway XMP — Native Permissions Prototype', 'width': 1080, 'height': 760, 'minWidth': 820, 'minHeight': 650}]}}))
+          PY
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/permissions-build.json --no-sign
+          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
+      - name: Import Apple signing and notarization credentials
+        env:
+          APPLE_CERTIFICATES_P12: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          APPLE_CERTIFICATES_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: bash scripts/import_apple_credentials.sh
+      - name: Sign, notarize, staple and verify standalone app
+        run: |
+          app='src-tauri/target/release/bundle/macos/Fairway XMP.app'
+          python scripts/sign_macos.py "$app" 'Developer ID Application: Ei Maung (4Q27NQ2UAF)'
+          python scripts/check_signed_php.py "$app"
+          codesign --verify --strict '-R=anchor apple generic and identifier "dev.fairway.environment.hosts-helper" and certificate leaf[subject.OU] = "4Q27NQ2UAF"' "$app/Contents/Library/HelperTools/dev.fairway.environment.hosts-helper"
+          mkdir -p artifacts/macos-standalone
+          ditto -c -k --keepParent "$app" artifacts/macos-notary-upload.zip
+          xcrun notarytool submit artifacts/macos-notary-upload.zip --keychain-profile "$APPLE_NOTARY_PROFILE" --keychain "$APPLE_NOTARY_KEYCHAIN" --wait --timeout 30m | tee artifacts/macos-standalone/notarization.txt
+          python scripts/staple_macos.py "$app"
+          codesign --verify --deep --strict "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+      - name: Verify fresh native helper registration without approval or hosts writes
+        run: '"src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/MacOS/fairway" --test-native-hosts-registration'
+      - name: Diagnose failed native registration
+        if: failure()
+        run: /usr/bin/log show --last 5m --style compact --predicate 'subsystem == "com.apple.backgroundtaskmanagement" AND eventMessage CONTAINS "dev.fairway.environment.hosts-helper"'
+      - name: Package standalone app and exact build identity
+        id: metadata
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          app = Path('src-tauri/target/release/bundle/macos/Fairway XMP.app')
+          output = Path('artifacts/macos-standalone')
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          info = json.loads(subprocess.check_output([str(app / 'Contents/MacOS/fairway'), '--build-info']))
+          assert info['commit'] == commit and not info['modifiedSources']
+          info['notarization'] = 'accepted and stapled; Gatekeeper verified'
+          (output / 'BUILD-INFO.json').write_text(json.dumps(info, indent=2) + '\n')
+          # Preserve the recognizable prototype filename when extracting the test ZIP.
+          stage = Path('artifacts/macos-standalone-stage')
+          stage.mkdir()
+          prototype = stage / 'Fairway XMP Permissions Prototype.app'
+          subprocess.run(['ditto', str(app), str(prototype)], check=True)
+          archive = output / f'fairway-xmp-permissions-{commit[:8]}-macos-arm64.zip'
+          subprocess.run(['ditto', '-c', '-k', '--keepParent', str(prototype), str(archive)], check=True)
+          with archive.open('rb') as source:
+              digest = hashlib.file_digest(source, 'sha256').hexdigest()
+          (output / 'SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n')
+          (output / 'TESTING.md').write_bytes(Path('docs/permission-test-builds.md').read_bytes())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as env:
+              env.write(f'commit={commit}\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        with:
+          name: fairway-xmp-macos-permissions-${{ steps.metadata.outputs.commit }}
+          path: artifacts/macos-standalone/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary Apple credentials
+        if: always()
+        run: bash scripts/cleanup_apple_credentials.sh

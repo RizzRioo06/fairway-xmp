@@ -11,6 +11,9 @@ use time::OffsetDateTime;
 pub const HTTPS_PORT: u16 = 8443;
 const CA_NAME: &str = "Fairway XMP Local CA";
 
+#[cfg(all(target_os = "macos", feature = "native-macos-trust"))]
+mod macos_native;
+
 pub fn https_port() -> u16 {
     #[cfg(debug_assertions)]
     if let Ok(port) = std::env::var("FAIRWAY_DEV_HTTPS_PORT") {
@@ -193,6 +196,7 @@ fn verify_macos_trust(layout: &Layout) -> Result<()> {
 
 pub fn ensure_trust(layout: &Layout) -> Result<()> {
     ensure_certificate(layout)?;
+    #[cfg(not(target_os = "macos"))]
     let root = root_certificate(layout);
     #[cfg(target_os = "macos")]
     {
@@ -207,19 +211,29 @@ pub fn ensure_trust(layout: &Layout) -> Result<()> {
                     .into(),
             );
         }
-        let mut install = Command::new("/usr/bin/security");
-        install
-            .args(["add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k"])
-            .arg(keychain)
-            .arg(root);
-        run(install).map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
+        // Native Security calls and the compatibility security subprocess can
+        // both ask for keychain/trust approval. Cover either implementation.
+        #[cfg(feature = "desktop")]
+        let _authorization = crate::desktop::authorization::begin()?;
+        #[cfg(feature = "native-macos-trust")]
+        macos_native::install(&root_certificate(layout), &keychain)?;
+        #[cfg(not(feature = "native-macos-trust"))]
+        {
+            let mut install = Command::new("/usr/bin/security");
+            install
+                .args(["add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k"])
+                .arg(keychain)
+                .arg(root_certificate(layout));
+            run(install)
+                .map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
+        }
         verify_macos_trust(layout).map_err(|e| {
             format!("macOS did not trust Fairway's local certificate after installation: {e}")
         })?;
     }
     #[cfg(windows)]
     {
-        let mut install = Command::new("certutil.exe");
+        let mut install = crate::process::command("certutil.exe");
         install.args(["-user", "-addstore", "Root"]).arg(root);
         run(install).map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
     }
@@ -252,22 +266,40 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        // Delete every Fairway CA with its trust setting, including ones left by an earlier CA.
-        let mut find = Command::new("/usr/bin/security");
-        find.args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
-            .arg(macos_keychain(layout));
-        // find-certificate exits non-zero when nothing matches.
-        let found = find.output().map_err(|e| e.to_string())?;
-        for hash in String::from_utf8_lossy(&found.stdout)
-            .lines()
-            .filter_map(|line| line.strip_prefix("SHA-1 hash: "))
+        // Trust removal can prompt just like installation. The native call
+        // presents that prompt in-process, which is the path whose Touch ID
+        // dialog already receives focus. Hold the handoff across the cleanup.
+        let keychain = macos_keychain(layout);
+        if !keychain.is_file() {
+            return Err(
+                "Your macOS login keychain is unavailable. Open Keychain Access and try again."
+                    .into(),
+            );
+        }
+        #[cfg(feature = "desktop")]
+        let _authorization = crate::desktop::authorization::begin()?;
+        #[cfg(feature = "native-macos-trust")]
+        macos_native::remove(&keychain)?;
+        #[cfg(not(feature = "native-macos-trust"))]
         {
-            let mut delete = Command::new("/usr/bin/security");
-            delete
-                .args(["delete-certificate", "-t", "-Z", hash.trim()])
-                .arg(macos_keychain(layout));
-            run(delete)
-                .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;
+            // Delete every Fairway CA with its trust setting, including ones left by an earlier CA.
+            let mut find = Command::new("/usr/bin/security");
+            find.args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
+                .arg(&keychain);
+            // find-certificate exits non-zero when nothing matches.
+            let found = find.output().map_err(|e| e.to_string())?;
+            for hash in String::from_utf8_lossy(&found.stdout)
+                .lines()
+                .filter_map(|line| line.strip_prefix("SHA-1 hash: "))
+            {
+                let mut delete = Command::new("/usr/bin/security");
+                delete
+                    .args(["delete-certificate", "-t", "-Z", hash.trim()])
+                    .arg(&keychain);
+                run(delete).map_err(|e| {
+                    format!("Could not remove Fairway's local certificate trust: {e}")
+                })?;
+            }
         }
     }
     #[cfg(windows)]
@@ -279,7 +311,7 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
             .iter()
             .map(|byte| format!("{byte:02X}"))
             .collect::<String>();
-        let mut remove = Command::new("certutil.exe");
+        let mut remove = crate::process::command("certutil.exe");
         remove.args(["-user", "-delstore", "Root", &thumbprint]);
         run(remove)
             .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;

@@ -18,7 +18,7 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await dialog.getByLabel('Database name', { exact: true }).fill('native_classroom');
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.getByLabel('Database', { exact: true })).toHaveValue('native_classroom');
-    await page.getByRole('button', { name: 'Create table', exact: true }).click();
+    await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
     dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
     await dialog.getByLabel('Table name', { exact: true }).fill('students');
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();

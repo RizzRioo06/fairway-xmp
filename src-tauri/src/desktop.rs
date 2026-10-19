@@ -17,6 +17,9 @@ use std::{
 use tauri::{Emitter, Manager as _, State};
 use tauri_plugin_updater::UpdaterExt;
 
+#[cfg(target_os = "macos")]
+pub(crate) mod authorization;
+
 type Shared = Arc<Mutex<Manager>>;
 
 #[derive(Default)]
@@ -53,14 +56,26 @@ fn begin_operation(app: &tauri::AppHandle, label: &str) -> Result<DesktopOperati
 }
 
 pub(crate) fn show_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        // Check on the UI thread, including requests queued before a prompt.
+        #[cfg(target_os = "macos")]
+        if authorization::in_progress() {
+            return;
+        }
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
 }
 
 fn report_error(app: &tauri::AppHandle, error: String) {
+    // A pending-helper error follows opening System Settings. Raising Fairway
+    // here can undo that handoff even after the native call has returned.
+    // Keep Mac errors in the panel for the user's return, without activation.
+    #[cfg(not(target_os = "macos"))]
     show_window(app);
     let _ = app.emit("fairway-error", error);
 }
@@ -471,11 +486,23 @@ async fn set_project_https(
             .await
             .map_err(|e| e.to_string())??;
     }
-    access(shared, move |m| {
+    let changed_domain = domain.clone();
+    let unused_trust = access(shared.clone(), move |m| {
         m.set_project_https(&domain, enabled)?;
-        Ok(m.snapshot())
+        Ok((!enabled && m.unused_trust()?).then(|| m.layout.clone()))
     })
-    .await
+    .await?;
+    if let Some(layout) = unused_trust {
+        // The site/config change has succeeded. A cancelled cleanup leaves
+        // HTTPS off and exposes the existing unused-trust retry in the panel.
+        tauri::async_runtime::spawn_blocking(move || crate::tls::remove_trust(&layout))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| {
+                format!("HTTPS is off for {changed_domain}.test, but certificate cleanup did not finish. Choose Remove certificate trust to retry. {e}")
+            })?;
+    }
+    access(shared, |m| Ok(m.snapshot())).await
 }
 
 #[tauri::command]
@@ -493,6 +520,23 @@ async fn remove_https_trust(app: tauri::AppHandle, state: State<'_, Shared>) -> 
         .await
         .map_err(|e| e.to_string())??;
     access(shared, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn pick_sqlite_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Open SQLite file")
+            .add_filter("SQLite database (.sqlite, .db)", &["sqlite", "db", "sqlite3", "db3"])
+            .add_filter("All files", &["*"])
+            .blocking_pick_file()
+            .map(|path| path.into_path().map_err(|e| e.to_string()))
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -642,10 +686,16 @@ async fn install_update(
         "fairway-update-progress",
         serde_json::json!({"phase": "installing"}),
     );
-    let result = tauri::async_runtime::spawn_blocking(move || update.install(bytes))
-        .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r.map_err(|e| e.to_string()));
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<()> {
+        // The updater may fall back to administrator authorization for a
+        // root-owned installation. Downloads and backups do not hand off focus.
+        #[cfg(target_os = "macos")]
+        let _authorization = authorization::begin()?;
+        update.install(bytes).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
     if let Err(error) = result {
         access(state.inner().clone(), |m| {
             crate::config::atomic_write(
@@ -705,6 +755,16 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
         #[cfg(not(debug_assertions))]
         let runtime = runtime_location(&std::env::current_exe().map_err(|e| e.to_string())?)?;
         crate::data_browser::cli(&Layout::new(runtime)?, &args[2..])?;
+        return Ok(true);
+    }
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    if action == "--test-native-hosts-registration" {
+        crate::hosts::macos_native::test_registration()?;
+        return Ok(true);
+    }
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    if action == "--remove-native-hosts-helper" {
+        crate::hosts::macos_native::unregister()?;
         return Ok(true);
     }
     if action == "--build-info" {
@@ -817,6 +877,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            authorization::initialize(app.handle());
             if app.config().plugins.0.contains_key("updater") {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -888,6 +950,7 @@ pub fn run() {
             set_project_https,
             remove_https_trust,
             pick_folder,
+            pick_sqlite_file,
             open_target,
             read_logs,
             cli_integration,

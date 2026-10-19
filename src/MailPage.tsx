@@ -52,6 +52,27 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   const [listError, setListError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const operationFocus = useRef<HTMLElement | null>(null);
+  const focusGeneration = useRef(0);
+  const [settled, setSettled] = useState(0);
+  useEffect(() => {
+    if (!operationFocus.current) return;
+    const trigger = operationFocus.current;
+    operationFocus.current = null;
+    // A click can blur the control. Restore it without scrolling, and leave
+    // focus alone when the user has moved on or a dialog is open.
+    if (document.activeElement === document.body && !document.querySelector('[aria-modal="true"]') && trigger.isConnected && !trigger.matches(':disabled')) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, [settled]);
+  function beginOperation() {
+    const generation = ++focusGeneration.current;
+    operationFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return generation;
+  }
+  function finishOperation(generation: number) {
+    if (focusGeneration.current === generation) setSettled(value => value + 1);
+  }
 
   const load = useCallback(async (search: string) => {
     const request = ++listRequest.current;
@@ -83,6 +104,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   }, [list, selected, query]);
 
   async function show(id: string) {
+    const generation = beginOperation();
     const request = ++detailRequest.current;
     setError(null);
     try {
@@ -90,31 +112,44 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
       if (request !== detailRequest.current) return;
       setSelected(opened); setTab(opened.HTML ? 'html' : 'text'); setSaved(null);
       setList(current => current && { ...current, messages: current.messages.map(item => item.ID === id ? { ...item, Read: true } : item) });
-    } catch (reason) { if (request === detailRequest.current) setError(message(reason)); }
+    } catch (reason) { if (request === detailRequest.current) { setSaved(null); setError(message(reason)); } }
+    finally { finishOperation(generation); }
   }
 
   async function remove(request: Record<string, unknown>) {
+    const generation = beginOperation();
     const detail = ++detailRequest.current;
     setError(null);
     try {
       await invoke('mail_inbox', { request });
-      if (detail === detailRequest.current) setSelected(null);
+      if (detail === detailRequest.current) { setSelected(null); setSaved(null); }
       setConfirmClear(false);
       await load(queryRef.current);
-    } catch (reason) { setError(message(reason)); }
+    } catch (reason) { if (detail === detailRequest.current) setError(message(reason)); }
+    finally { finishOperation(generation); }
   }
 
   async function save(id: string, item: MailAttachment) {
+    const generation = beginOperation();
     const detail = detailRequest.current;
     setError(null);
     try {
       const path = await invoke<string | null>('save_mail_attachment', { id, part: item.PartID, name: item.FileName || 'attachment' });
       if (path && detail === detailRequest.current) setSaved(`Saved to ${path}`);
-    } catch (reason) { setError(message(reason)); }
+    } catch (reason) { if (detail === detailRequest.current) { setSaved(null); setError(message(reason)); } }
+    finally { finishOperation(generation); }
   }
 
   const unread = list?.messages_unread ?? 0;
+  const actionNotice = error ? { error: true, text: error } : saved ? { error: false, text: saved } : null;
   return <div className="mail-page">
+    <div className={`mail-notice${actionNotice ? ` notice ${actionNotice.error ? 'error' : 'success'}` : ''}`}>
+      <div className="mail-notice-message">
+        <div role={actionNotice && !actionNotice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{actionNotice && !actionNotice.error ? actionNotice.text : null}</div>
+        <div role={actionNotice?.error ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{actionNotice?.error ? actionNotice.text : null}</div>
+      </div>
+      {actionNotice && <button aria-label="Dismiss mail message" onClick={() => { setError(null); setSaved(null); }}>×</button>}
+    </div>
     <div className="page-heading"><div><h1>Mail</h1><p>Catches emails from your apps. Nothing reaches real inboxes.</p></div>
       <div className="mail-heading-actions"><span className={`status-label ${ready ? 'ready' : mail?.running ? 'pending' : ''}`}><span className={`status-dot ${ready ? 'running' : mail?.running ? 'pending' : ''}`} />{ready ? 'Running' : mail?.running ? 'Waiting' : 'Stopped'}</span>
         <button className="secondary" onClick={settings}><Settings2 size={14} />SMTP settings</button>
@@ -128,7 +163,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
           <div className="mail-list-summary"><span>{list ? `${list.messages_count} ${list.messages_count === 1 ? 'email' : 'emails'}${unread ? ` · ${unread} unread` : ''}` : 'Loading…'}</span>
             {confirmClear ? <span className="mail-confirm"><button className="text-button" onClick={() => setConfirmClear(false)}>Cancel</button><button className="text-button danger" onClick={() => { void remove({ action: 'clear' }); }}>Delete all</button></span>
               : <button className="text-button" disabled={!list?.messages.length} onClick={() => setConfirmClear(true)}><Trash2 size={13} />Delete all</button>}</div>
-          {(error || listError) && <p className="mail-error" role="alert">{error || listError}</p>}
+          {listError && <p className="mail-error" role="alert">{listError}</p>}
           {list && list.messages.length === 0 ? <div className="mail-list-empty"><Inbox size={22} /><p>{query ? 'No emails match your search.' : 'No emails yet. Emails your apps send appear here.'}</p></div> :
             <ul className="mail-list" aria-label="Emails">{list?.messages.map(item => <li key={item.ID}>
               <button className={`${item.ID === selected?.ID ? 'active ' : ''}${item.Read ? '' : 'unread'}`} aria-current={item.ID === selected?.ID} onClick={() => { void show(item.ID); }}>
@@ -142,7 +177,6 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
             <div className="mail-preview-title"><h2>{selected.Subject || '(No subject)'}</h2><button className="icon-button" title="Delete email" aria-label="Delete email" onClick={() => { void remove({ action: 'delete', ids: [selected.ID] }); }}><Trash2 size={15} /></button></div>
             <dl className="mail-meta"><div><dt>From</dt><dd>{addresses(selected.From ? [selected.From] : null)}</dd></div><div><dt>To</dt><dd>{addresses(selected.To)}</dd></div>{selected.Cc?.length ? <div><dt>Cc</dt><dd>{addresses(selected.Cc)}</dd></div> : null}<div><dt>Date</dt><dd>{new Date(selected.Date).toLocaleString()}</dd></div></dl>
             {selected.Attachments?.length ? <ul className="mail-attachments" aria-label="Attachments">{selected.Attachments.map(item => <li key={item.PartID}><button title="Save attachment" disabled={!canControl} onClick={() => { void save(selected.ID, item); }}><Download size={12} />{item.FileName || 'Attachment'}<span>{size(item.Size)}</span></button></li>)}</ul> : null}
-            {saved && <p className="mail-saved" role="status">{saved}</p>}
             <div className="mail-tabs" role="tablist">{selected.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
           </div>
           {/* Scripts, forms, and navigation stay disabled; email HTML is untrusted. */}

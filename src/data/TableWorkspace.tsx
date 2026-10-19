@@ -30,7 +30,7 @@ export default function TableWorkspace({ sidebar, children }: { sidebar: ReactNo
     drag.current = null; setResizing(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
-  const toggle = <button className={`${collapsed ? 'secondary' : 'icon-button'} db-sidebar-toggle`} aria-label={collapsed ? 'Show tables' : 'Hide tables'} title={collapsed ? 'Show tables' : 'Hide tables'} aria-expanded={!collapsed} aria-controls={sidebarId} onClick={() => setCollapsed(value => !value)}>{collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}{collapsed && <span>Show tables</span>}</button>;
+  const toggle = <button className="icon-button db-sidebar-toggle" aria-label={collapsed ? 'Show tables' : 'Hide tables'} title={collapsed ? 'Show tables' : 'Hide tables'} aria-expanded={!collapsed} aria-controls={sidebarId} onClick={() => setCollapsed(value => !value)}>{collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button>;
 
   return <div ref={container} className={`db-workspace${collapsed ? ' db-sidebar-collapsed' : ''}${resizing ? ' db-resizing' : ''}`} style={{ '--db-sidebar-width': `${width}px` } as CSSProperties}>
     <div className="db-sidebar-pane" id={sidebarId} hidden={collapsed}>{sidebar}</div>

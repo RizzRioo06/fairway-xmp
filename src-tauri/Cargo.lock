@@ -1065,6 +1065,7 @@ name = "fairway"
 version = "0.1.0-rc.1"
 dependencies = [
  "base64 0.22.1",
+ "core-foundation 0.10.1",
  "dirs 6.0.0",
  "libc",
  "minisign-verify",
@@ -1072,10 +1073,13 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "pem",
  "portable-pty",
  "rand",
  "rcgen",
  "ring",
+ "security-framework",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "tauri",

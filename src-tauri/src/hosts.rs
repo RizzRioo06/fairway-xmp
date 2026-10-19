@@ -1,6 +1,17 @@
 //! Manage only Fairway's marked entries in the system hosts file.
 use crate::config::{valid_project_name, Result};
-use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+use std::{collections::BTreeSet, fs, path::PathBuf};
+
+#[cfg(all(
+    not(windows),
+    not(all(target_os = "macos", feature = "native-macos-hosts"))
+))]
+use std::process::Command;
+
+#[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+pub mod macos_native;
+#[cfg(all(target_os = "macos", feature = "native-hosts-writer"))]
+mod macos_writer;
 
 const LEGACY_BEGIN: &str = "# >>> Fairway XMP project domains >>>";
 const LEGACY_END: &str = "# <<< Fairway XMP project domains <<<";
@@ -216,6 +227,7 @@ pub fn apply(names: &[String]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
 pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
     if names.iter().any(|name| !valid_project_name(name)) {
         return Err("Invalid site domain name.".into());
@@ -237,6 +249,8 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
             "do shell script \"{}\" with administrator privileges",
             command.replace('\\', "\\\\").replace('"', "\\\"")
         );
+        #[cfg(feature = "desktop")]
+        let _authorization = crate::desktop::authorization::begin()?;
         let status = Command::new("/usr/bin/osascript")
             .args(["-e", &script])
             .status()
@@ -271,7 +285,7 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
             .collect::<Vec<_>>()
             .join(",");
         let script = format!("$p = Start-Process -FilePath {} -ArgumentList @({args}) -Verb RunAs -Wait -PassThru; if ($p.ExitCode -ne 0) {{ exit $p.ExitCode }}", quoted(&executable.to_string_lossy()));
-        let status = Command::new("powershell.exe")
+        let status = crate::process::command("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .status()
             .map_err(|e| e.to_string())?;
@@ -284,6 +298,11 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
     } else {
         Err("Local domain setup did not update the system hosts file.".into())
     }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+pub fn ensure(names: &[String], _helper_flag: &str) -> Result<()> {
+    macos_native::ensure(names)
 }
 
 #[cfg(test)]
