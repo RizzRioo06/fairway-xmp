@@ -43,10 +43,28 @@ fn register_if_needed(service: &AnyObject) -> Result<isize> {
     if status == 0 || status == 3 {
         let mut error: Option<Retained<NSError>> = None;
         let success: bool = unsafe { msg_send![service, registerAndReturnError: &mut error] };
-        if !success {
-            return Err(format!("Cannot register address helper: {error:?}"));
-        }
+        // register can return EPERM while successfully recording a daemon
+        // that awaits approval. Consult the resulting status even on failure.
         status = unsafe { msg_send![service, status] };
+        if !success && status != 2 {
+            let detail = error.map_or_else(
+                || "No system error detail.".to_owned(),
+                |error| {
+                    format!(
+                        "{} / {}: {} ({})",
+                        error.domain(),
+                        error.code(),
+                        error.localizedDescription(),
+                        error
+                            .localizedFailureReason()
+                            .map_or_else(String::new, |s| s.to_string())
+                    )
+                },
+            );
+            return Err(format!(
+                "Cannot register address helper (status {status}): {detail}"
+            ));
+        }
     }
     Ok(status)
 }

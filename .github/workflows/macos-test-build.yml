@@ -276,6 +276,9 @@ jobs:
           spctl --assess --type execute --verbose=2 "$app"
       - name: Verify fresh native helper registration without approval or hosts writes
         run: '"src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/MacOS/fairway" --test-native-hosts-registration'
+      - name: Diagnose failed native registration
+        if: failure()
+        run: /usr/bin/log show --last 5m --style compact --predicate 'subsystem == "com.apple.backgroundtaskmanagement" AND eventMessage CONTAINS "dev.fairway.environment.hosts-helper"'
       - name: Package standalone app and exact build identity
         id: metadata
         run: |
