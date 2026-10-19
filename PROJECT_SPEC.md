@@ -46,6 +46,8 @@ That review branch also has an opt-in `native-macos-trust` Cargo feature for a l
 
 The same review branch adds an opt-in `native-macos-hosts` prototype: a bundled, Developer ID signed SMAppService LaunchDaemon with one-time macOS approval, mutually authenticated native XPC, a fixed `/etc/hosts` target, bounded validated `.test` names, serialized atomic writes and unregister-on-last-address/uninstall. It never accepts arbitrary commands or paths. `--remove-native-hosts-helper` unregisters the test helper while retaining sites/hosts entries. This machine-wide helper and its later update lifecycle require device acceptance before normal release enablement. Add/Edit site help is shortened into keyboard-accessible tips, keeping a concise permission notice and relevant shared-root warning visible.
 
+Windows hosts elevation and per-user certificate trust commands use the existing no-console process launcher. UAC/certificate confirmations and captured errors remain intact. An optional manual Windows workflow job packages the EXE plus full runtime as a standalone ZIP without installer changes; see [permission test builds](docs/permission-test-builds.md). Mac comparison apps remain standalone bundles and require notarization before SMAppService helper testing.
+
 ## Services
 
 Default loopback ports: website 8800, phpMyAdmin 8801, MySQL 13306, internal PHP FastCGI 19000, mail inbox 8802, mail SMTP 11025. Settings saved before the mail catcher keep all existing ports. On first load, missing mail ports use the defaults or the next distinct unprivileged port when a default is already configured for another service; the chosen ports are saved atomically. Explicitly saved mail ports are never reassigned, and invalid settings are preserved and reported.

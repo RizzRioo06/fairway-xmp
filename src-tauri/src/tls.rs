@@ -229,7 +229,7 @@ pub fn ensure_trust(layout: &Layout) -> Result<()> {
     }
     #[cfg(windows)]
     {
-        let mut install = Command::new("certutil.exe");
+        let mut install = crate::process::command("certutil.exe");
         install.args(["-user", "-addstore", "Root"]).arg(root);
         run(install).map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
     }
@@ -289,7 +289,7 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
             .iter()
             .map(|byte| format!("{byte:02X}"))
             .collect::<String>();
-        let mut remove = Command::new("certutil.exe");
+        let mut remove = crate::process::command("certutil.exe");
         remove.args(["-user", "-delstore", "Root", &thumbprint]);
         run(remove)
             .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;

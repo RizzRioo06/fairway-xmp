@@ -649,6 +649,25 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn background_commands_have_no_console_and_keep_captured_errors() {
+        let result = command("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", r#"
+$ErrorActionPreference = 'Stop'
+Add-Type -Namespace Fairway -Name ConsoleProbe -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();'
+if ([Fairway.ConsoleProbe]::GetConsoleWindow() -ne [IntPtr]::Zero) { exit 9 }
+[Console]::Out.Write('no-console')
+[Console]::Error.Write('captured-error')
+exit 7
+"#])
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(7));
+        assert_eq!(String::from_utf8_lossy(&result.stdout), "no-console");
+        assert_eq!(String::from_utf8_lossy(&result.stderr), "captured-error");
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn database_executable_identity_accepts_normalized_windows_paths() {
         let exe = std::env::current_exe().unwrap();
         let mixed = exe.to_string_lossy().replace('\\', "/").to_lowercase();

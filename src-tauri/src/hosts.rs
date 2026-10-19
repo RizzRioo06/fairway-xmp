@@ -2,7 +2,10 @@
 use crate::config::{valid_project_name, Result};
 use std::{collections::BTreeSet, fs, path::PathBuf};
 
-#[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
+#[cfg(all(
+    not(windows),
+    not(all(target_os = "macos", feature = "native-macos-hosts"))
+))]
 use std::process::Command;
 
 #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
@@ -280,7 +283,7 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
             .collect::<Vec<_>>()
             .join(",");
         let script = format!("$p = Start-Process -FilePath {} -ArgumentList @({args}) -Verb RunAs -Wait -PassThru; if ($p.ExitCode -ne 0) {{ exit $p.ExitCode }}", quoted(&executable.to_string_lossy()));
-        let status = Command::new("powershell.exe")
+        let status = crate::process::command("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .status()
             .map_err(|e| e.to_string())?;
