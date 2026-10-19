@@ -266,26 +266,40 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        // Deleting a certificate with its trust settings can prompt just like
-        // installation. Hold the same focus handoff for the entire cleanup.
+        // Trust removal can prompt just like installation. The native call
+        // presents that prompt in-process, which is the path whose Touch ID
+        // dialog already receives focus. Hold the handoff across the cleanup.
+        let keychain = macos_keychain(layout);
+        if !keychain.is_file() {
+            return Err(
+                "Your macOS login keychain is unavailable. Open Keychain Access and try again."
+                    .into(),
+            );
+        }
         #[cfg(feature = "desktop")]
         let _authorization = crate::desktop::authorization::begin()?;
-        // Delete every Fairway CA with its trust setting, including ones left by an earlier CA.
-        let mut find = Command::new("/usr/bin/security");
-        find.args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
-            .arg(macos_keychain(layout));
-        // find-certificate exits non-zero when nothing matches.
-        let found = find.output().map_err(|e| e.to_string())?;
-        for hash in String::from_utf8_lossy(&found.stdout)
-            .lines()
-            .filter_map(|line| line.strip_prefix("SHA-1 hash: "))
+        #[cfg(feature = "native-macos-trust")]
+        macos_native::remove(&keychain)?;
+        #[cfg(not(feature = "native-macos-trust"))]
         {
-            let mut delete = Command::new("/usr/bin/security");
-            delete
-                .args(["delete-certificate", "-t", "-Z", hash.trim()])
-                .arg(macos_keychain(layout));
-            run(delete)
-                .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;
+            // Delete every Fairway CA with its trust setting, including ones left by an earlier CA.
+            let mut find = Command::new("/usr/bin/security");
+            find.args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
+                .arg(&keychain);
+            // find-certificate exits non-zero when nothing matches.
+            let found = find.output().map_err(|e| e.to_string())?;
+            for hash in String::from_utf8_lossy(&found.stdout)
+                .lines()
+                .filter_map(|line| line.strip_prefix("SHA-1 hash: "))
+            {
+                let mut delete = Command::new("/usr/bin/security");
+                delete
+                    .args(["delete-certificate", "-t", "-Z", hash.trim()])
+                    .arg(&keychain);
+                run(delete).map_err(|e| {
+                    format!("Could not remove Fairway's local certificate trust: {e}")
+                })?;
+            }
         }
     }
     #[cfg(windows)]

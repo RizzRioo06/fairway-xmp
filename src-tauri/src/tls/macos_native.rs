@@ -9,15 +9,21 @@ use core_foundation::{
 use security_framework::{
     base::Error,
     certificate::SecCertificate,
-    item::{AddRef, ItemAddOptions, ItemAddValue, Location},
-    os::macos::keychain::SecKeychain,
+    item::{
+        AddRef, ItemAddOptions, ItemAddValue, ItemClass, ItemSearchOptions, Limit, Location,
+        Reference, SearchResult,
+    },
+    os::macos::{certificate::SecCertificateExt, keychain::SecKeychain},
     policy::SecPolicy,
     secure_transport::SslProtocolSide,
 };
 use security_framework_sys::{
-    base::{errSecDuplicateItem, errSecSuccess},
+    base::{
+        errSecDuplicateItem, errSecItemNotFound, errSecNoTrustSettings, errSecSuccess,
+        SecCertificateRef,
+    },
     trust_settings::{
-        kSecTrustSettingsDomainUser, kSecTrustSettingsResultTrustRoot,
+        kSecTrustSettingsDomainUser, kSecTrustSettingsResultTrustRoot, SecTrustSettingsDomain,
         SecTrustSettingsSetTrustSettings,
     },
 };
@@ -25,6 +31,13 @@ use std::{fs, path::Path};
 
 const USER_CANCELLED: i32 = -128;
 const AUTHORIZATION_CANCELLED: i32 = -60006;
+
+extern "C" {
+    fn SecTrustSettingsRemoveTrustSettings(
+        certificate: SecCertificateRef,
+        domain: SecTrustSettingsDomain,
+    ) -> i32;
+}
 
 fn trust_setting_keys() -> (CFString, CFString) {
     // SecTrustSettings.h defines these keys as CFSTR macros, not exported symbols.
@@ -106,6 +119,88 @@ pub(super) fn install(root: &Path, keychain: &Path) -> Result<()> {
     Ok(())
 }
 
+fn cancelled(error: Error) -> bool {
+    error.code() == USER_CANCELLED || error.code() == AUTHORIZATION_CANCELLED
+}
+
+fn removal_error(stage: &str, error: Error) -> String {
+    if cancelled(error) {
+        format!("Certificate removal was cancelled while {stage}. You can retry.")
+    } else {
+        format!("Could not {stage}: {error} (macOS error {}).", error.code())
+    }
+}
+
+/// A certificate belongs to Fairway when either its common name or its
+/// subject summary is the local CA name. `security find-certificate -c` matches
+/// the common name; older copies use the same name.
+pub(super) fn is_fairway_ca(common_name: Option<&str>, summary: &str) -> bool {
+    common_name == Some(super::CA_NAME) || summary == super::CA_NAME
+}
+
+pub(super) fn trust_settings_absent(status: i32) -> bool {
+    status == errSecNoTrustSettings || status == errSecItemNotFound
+}
+
+fn fairway_certificates(keychain: &SecKeychain) -> Result<Vec<SecCertificate>> {
+    let found = ItemSearchOptions::new()
+        .keychains(std::slice::from_ref(keychain))
+        .class(ItemClass::certificate())
+        .load_refs(true)
+        .limit(Limit::All)
+        .search();
+    let found = match found {
+        Ok(items) => items,
+        Err(error) if error.code() == errSecItemNotFound => return Ok(Vec::new()),
+        Err(error) => return Err(removal_error("find Fairway's local certificate", error)),
+    };
+    let mut certificates = Vec::new();
+    for item in found {
+        let SearchResult::Ref(Reference::Certificate(certificate)) = item else {
+            continue;
+        };
+        let summary = certificate.subject_summary();
+        let common_name = certificate.common_name().ok();
+        if is_fairway_ca(common_name.as_deref(), &summary) {
+            certificates.push(certificate);
+        }
+    }
+    Ok(certificates)
+}
+
+pub(super) fn remove(keychain_path: &Path) -> Result<()> {
+    let keychain = SecKeychain::open(keychain_path)
+        .map_err(|error| removal_error("open your login keychain", error))?;
+    for certificate in fairway_certificates(&keychain)? {
+        // SAFETY: the certificate remains alive for the call. Only the current
+        // user's trust domain is changed. This may display Apple's authorization
+        // UI; the caller already relinquished focus and runs off the UI thread.
+        let status = unsafe {
+            SecTrustSettingsRemoveTrustSettings(
+                certificate.as_concrete_TypeRef(),
+                kSecTrustSettingsDomainUser,
+            )
+        };
+        if status != errSecSuccess && !trust_settings_absent(status) {
+            return Err(removal_error(
+                "approve removal of SSL trust for the local CA",
+                Error::from_code(status),
+            ));
+        }
+        // A public certificate left after a cancelled trust change must remain
+        // until this call succeeds, so a retry can find it again.
+        if let Err(error) = certificate.delete() {
+            if error.code() != errSecItemNotFound {
+                return Err(removal_error(
+                    "remove the local CA from your login keychain",
+                    error,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,5 +243,25 @@ mod tests {
         );
         let error = native_error("open your login keychain", Error::from_code(-25293));
         assert!(error.contains("open your login keychain") && error.contains("-25293"));
+    }
+
+    #[test]
+    fn removal_selects_only_the_fairway_ca_and_preserves_cancellation() {
+        let name = super::super::CA_NAME;
+        assert!(is_fairway_ca(Some(name), name));
+        assert!(is_fairway_ca(Some(name), "other"));
+        assert!(is_fairway_ca(None, name));
+        assert!(!is_fairway_ca(Some("Another CA"), "Another CA"));
+        assert!(!is_fairway_ca(None, ""));
+        assert!(trust_settings_absent(errSecNoTrustSettings));
+        assert!(trust_settings_absent(errSecItemNotFound));
+        assert!(!trust_settings_absent(errSecSuccess));
+        let cancelled = removal_error(
+            "approve removal of SSL trust for the local CA",
+            Error::from_code(USER_CANCELLED),
+        );
+        assert!(cancelled.contains("cancelled") && cancelled.contains("retry"));
+        let failed = removal_error("open your login keychain", Error::from_code(-25293));
+        assert!(failed.contains("open your login keychain") && failed.contains("-25293"));
     }
 }
