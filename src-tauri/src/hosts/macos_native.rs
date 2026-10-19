@@ -35,6 +35,54 @@ fn helper() -> Result<PathBuf> {
     Ok(helper)
 }
 
+// A fresh service can report NotFound before its first registration (observed
+// on macOS 27). The bundle payload is checked separately; this status must not
+// prevent registration. Enabled/RequiresApproval must retain the user's choice.
+fn register_if_needed(service: &AnyObject) -> Result<isize> {
+    let mut status: isize = unsafe { msg_send![service, status] };
+    if status == 0 || status == 3 {
+        let mut error: Option<Retained<NSError>> = None;
+        let success: bool = unsafe { msg_send![service, registerAndReturnError: &mut error] };
+        if !success {
+            return Err(format!("Cannot register address helper: {error:?}"));
+        }
+        status = unsafe { msg_send![service, status] };
+    }
+    Ok(status)
+}
+
+/// Fresh, signed/notarized app smoke check. Never approves the daemon, opens
+/// Settings, connects to XPC or writes hosts. Refuses an existing registration.
+pub fn test_registration() -> Result<()> {
+    helper()?;
+    let service = service();
+    let before: isize = unsafe { msg_send![&service, status] };
+    if before != 0 && before != 3 {
+        return Err(format!(
+            "Registration smoke check requires a fresh service (status {before})."
+        ));
+    }
+    let outcome = register_if_needed(&service).and_then(|status| {
+        println!("Address helper registration: {before} -> {status}");
+        if status == 1 || status == 2 {
+            Ok(())
+        } else {
+            Err(format!(
+                "Address helper registration returned unexpected status {status}."
+            ))
+        }
+    });
+    // Even a failed status check must clean up the registration it attempted.
+    let mut error: Option<Retained<NSError>> = None;
+    let removed: bool = unsafe { msg_send![&service, unregisterAndReturnError: &mut error] };
+    if !removed {
+        return Err(format!(
+            "Registration smoke cleanup failed: {error:?}; result: {outcome:?}"
+        ));
+    }
+    outcome
+}
+
 pub fn unregister() -> Result<()> {
     let service = service();
     let status: isize = unsafe { msg_send![&service, status] };
@@ -66,15 +114,7 @@ pub fn ensure(names: &[String]) -> Result<()> {
     }
     let helper = helper()?;
     let service = service();
-    let mut status: isize = unsafe { msg_send![&service, status] };
-    if status == 0 {
-        let mut error: Option<Retained<NSError>> = None;
-        let success: bool = unsafe { msg_send![&service, registerAndReturnError: &mut error] };
-        if !success {
-            return Err(format!("Cannot register address helper: {error:?}"));
-        }
-        status = unsafe { msg_send![&service, status] };
-    }
+    let status = register_if_needed(&service)?;
     if status == 2 {
         unsafe {
             let _: () = msg_send![class!(SMAppService), openSystemSettingsLoginItems];
@@ -82,9 +122,9 @@ pub fn ensure(names: &[String]) -> Result<()> {
         return Err("Allow Fairway XMP in System Settings → General → Login Items & Extensions, then try the address change again.".into());
     }
     if status != 1 {
-        return Err(
-            "The address helper is unavailable. Reopen the complete prototype app bundle.".into(),
-        );
+        return Err(format!(
+            "macOS could not enable the address helper (status {status}). Try Set up addresses again."
+        ));
     }
     let mut child = Command::new(helper)
         .arg("--client")

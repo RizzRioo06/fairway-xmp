@@ -274,6 +274,8 @@ jobs:
           python scripts/staple_macos.py "$app"
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute --verbose=2 "$app"
+      - name: Verify fresh native helper registration without approval or hosts writes
+        run: '"src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/MacOS/fairway" --test-native-hosts-registration'
       - name: Package standalone app and exact build identity
         id: metadata
         run: |

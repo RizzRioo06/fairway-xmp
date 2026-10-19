@@ -7,6 +7,8 @@ installed app; closing its window alone leaves Fairway running.
 
 ## Windows x64
 
+The owner reported that the standalone Windows permission build works as expected.
+
 Extract the entire ZIP into a permanent test folder such as `C:\FairwayPermissions`.
 Open `Fairway XMP Permissions Test\fairway.exe`; keep its `runtime` folder beside it.
 No Setup program is required. This uses the WebView2 and Visual C++ prerequisites already
@@ -33,6 +35,10 @@ Unzip the archive and open **Fairway XMP Permissions Prototype.app** directly; d
 run an installer or overwrite the installed app. The test app is Developer ID signed
 and must be notarized/stapled before hosts testing. Its window says **Native Permissions
 Prototype**. The archive's build metadata records its notarization status.
+
+The earlier test build skipped registration when macOS reported a fresh helper as
+"not found." The corrected build registers that state as well as "not registered";
+its signed-app CI checks registration and cleanup without approval or hosts writes.
 
 Adding or renaming an address registers the native hosts helper when needed. macOS
 requires one-time administrator approval in **System Settings → General → Login Items

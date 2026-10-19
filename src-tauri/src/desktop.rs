@@ -708,6 +708,11 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
         return Ok(true);
     }
     #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    if action == "--test-native-hosts-registration" {
+        crate::hosts::macos_native::test_registration()?;
+        return Ok(true);
+    }
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
     if action == "--remove-native-hosts-helper" {
         crate::hosts::macos_native::unregister()?;
         return Ok(true);
