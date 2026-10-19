@@ -22,8 +22,8 @@ it twice. Start Nginx and confirm the address works.
 
 For HTTPS, enable it on a site and approve Windows' certificate trust confirmation.
 There should be no empty console behind that confirmation. Existing trust may skip the
-confirmation; to test fresh trust, turn HTTPS off for every site, remove certificate
-trust, then enable it again. Also test cancellation/retry and trust removal. The change
+confirmation; to test fresh trust, turn HTTPS off for every site (the last switch also removes
+certificate trust), then enable it again. Also test cancellation/retry and trust removal. The change
 suppresses console windows, while retaining Windows security confirmations and errors.
 
 When done, quit from the tray and reopen the installed app. Do not enable/disable CLI
@@ -50,6 +50,35 @@ The helper is machine-wide and modifies only Fairway's loopback `.test` entries.
 
 The native HTTPS implementation is the one already reported to work with one Touch ID
 prompt. Existing CA trust is reused. Test it independently from hosts approval.
+
+### Issue #9: authorization focus
+
+The focus test build relinquishes Fairway's active state before native keychain/trust
+authorization and suppresses Fairway's own window-focus requests until that call ends.
+The same handoff now covers removal, legacy hosts authorization and updater installation.
+It cooperatively yields to System Settings before opening Login Items, and Mac
+errors stay in Fairway's panel without raising the app over Settings. This adds no
+authentication prompt and preserves the one-time helper approval model. Actual system
+dialog focus still needs device verification; unit tests cannot establish it.
+
+The owner confirmed that enabling HTTPS focuses the Touch ID prompt in build
+`88fa366`, but removing trust did not. This follow-up covers both directions.
+
+Test HTTPS separately: turn HTTPS off for every site. The last switch now also removes
+certificate trust, so there is no second cleanup click. If cleanup is cancelled, HTTPS
+stays off and **Remove certificate trust** appears for retry. Test that retry too.
+Enable HTTPS again on an existing site. When the authorization prompt appears,
+try Touch ID immediately, without clicking the prompt first. Cancel once, retry, and
+also check the password fallback for both enabling and removal. With two HTTPS sites,
+turn one off: there must be no trust-removal prompt, and the other site must still work. Confirm Fairway does not jump in front while the
+prompt is open, and that returning to Fairway works after either outcome.
+
+For fresh helper approval, quit the previous prototype and unregister its helper
+using the command below **before moving its app bundle**. Open the new build and add
+or rename an address. Confirm Settings comes forward and its approval prompt accepts
+Touch ID without first clicking it. Return to Fairway, retry **Set up addresses**,
+then add another site: Settings must not reopen for the approved helper. Record the
+macOS version and results for HTTPS and helper approval separately.
 
 Before moving/deleting the test app or returning to RC 1, quit Fairway and unregister
 the helper. In Terminal, use the actual path to the test bundle:

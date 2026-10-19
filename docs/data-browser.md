@@ -1,8 +1,26 @@
 # Desktop data browser
 
-The beta 2 candidate adds **Data browser** to the macOS and Windows desktop panels alongside phpMyAdmin. The existing Linux terminal edition is unchanged. Open it through **Browse Data** in the sidebar. Start MySQL from the browser's empty state or Environment. phpMyAdmin remains available and also needs Nginx running.
+**Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The MySQL browser shipped in beta 2; SQLite file browsing is an unreleased addition after RC 1 and needs a fresh candidate and native acceptance before release. The existing Linux terminal edition is unchanged.
 
-## Included
+## SQLite project files
+
+Choose **Open SQLite file…** in the top toolbar. This action is always visible and works with MySQL and all other services stopped. SQLite is a Data browser capability; it has no service card, port, password, or Start/Stop control. The page description explicitly names MySQL and SQLite.
+
+Create the project file as usual (for example, Laravel's `database/database.sqlite`), then open it in Fairway. Existing unencrypted SQLite 3 databases and empty files are accepted. The picker includes an All files option for databases with other extensions. Fairway opens the original file in place; it does not import, move, or copy it. The selected filename and full path stay visible. Changes are saved directly to the file used by the project. Missing paths, folders, invalid files and encrypted files report an error; opening a missing path never creates a replacement database.
+
+The **Data source** selector switches between MySQL and up to six recent SQLite paths, remembered locally across app restarts. Returning through the sidebar keeps the current file, table, tab and query workspace. A moved/deleted file reports an error when reopened or refreshed; use Open SQLite file again to select its new location. Switching sources clears the SQL result/history and starts with an engine-specific example query.
+
+SQLite supports table creation/rename/deletion; structure and table SQL inspection; row sorting/pagination, insertion, editing and deletion; adding ordinary columns; and supported column deletion. Creation forms offer `INTEGER`, `TEXT`, `REAL`, `NUMERIC`, and `BLOB`, with NULL/default and primary-key controls. Automatic IDs require a single `INTEGER` primary key. Column deletion needs SQLite 3.35 or newer and may be refused when constraints or dependent objects require rebuilding the table. Column renames/type changes, indexes, foreign keys and advanced definitions use SQL. Existing declared types remain visible without conversion to MySQL types. SQLite storage/affinity rules apply; it does not provide MySQL's fixed-precision DECIMAL semantics.
+
+Form updates/deletes require a verified non-null primary or unique key. Nullable SQLite primary keys, partial/expression indexes and binary key columns are not treated as safe identities. Views and virtual tables are read-only in forms. Generated and binary values are read-only in row forms; BLOB storage is detected even in a TEXT column and displayed as hex. Row changes submit only edited fields and compare original values inside a write transaction, rejecting stale changes from another editor or the running project. A five-second lock wait reports busy/locked databases without silently retrying writes. Signed 64-bit integer values remain strings in the interface.
+
+**Back up SQLite file** saves a consistent `.sqlite` snapshot in Fairway's backups folder, including committed data in WAL mode. Confirmed table/column deletion must successfully back up the whole selected database first. Backups use SQLite's `VACUUM INTO`, rather than copying an active file or its sidecar files. Failed backups prevent schema deletion. Backups never overwrite an existing file; Open backups reveals the folder. Restore by opening the backup or, with the project and other database users stopped, replacing the project file through your normal file workflow. Row deletion requires confirmation but does not create an automatic backup.
+
+The SQLite SQL editor supports selection/all execution, up to ten statements and 1 MiB of SQL per run, including quoted semicolons, comments and trigger bodies. Each result displays at most 200 rows. Queries are bounded by the shared 128 MiB worker/8 MiB response limits and a 30-second worker timeout. Cancel terminates that request's worker; completed statements remain committed. Finish transactions with COMMIT or ROLLBACK in the same run; unfinished transactions roll back and report an error. SQL is an administrative tool and does not automatically back up changes. SQLite files and backups are separate from the MySQL-only `fairway db` CLI and environment/update MySQL backups. phpMyAdmin is shown only for MySQL.
+
+## MySQL
+
+Start MySQL from the browser's empty state or Environment. phpMyAdmin also needs Nginx running.
 
 - Create/delete databases; rename an **empty** database, preserving its character set and collation. MySQL has no atomic database rename. Populated schemas are refused without changing their contents; use export/import into a new database and update project connection settings. Close other applications that might create objects during a rename.
 - Create/rename/delete tables. The column form covers common integer, decimal, floating-point, character/text, Boolean, date/time, JSON, and BLOB types; length/precision/scale, unsigned, NULL, literal/NULL/current-timestamp defaults, primary keys, and integer auto-increment. Composite primary keys can be selected when creating a table. Engine, secondary indexes and foreign-key forms are deferred.
@@ -14,7 +32,7 @@ The beta 2 candidate adds **Data browser** to the macOS and Windows desktop pane
 - SQL editor with selection/all execution, Command/Ctrl+Enter, multiple result sets, affected-row counts, timing, cancellation, errors, and ten recent successful queries kept only while the page is mounted. SQL changes take effect immediately; Cancel cannot undo completed statements. The SQL heading’s question-mark tooltip holds execution/result-limit/import guidance. Each result grid scrolls internally and is capped at the smaller of 360 pixels or 45% of the window height.
 - Export a whole database from the database controls, or the selected table from its heading, to the app's backups directory. Full SQL dump import is through the CLI below, including stored-program `DELIMITER` commands.
 
-The native backend runs bundled PHP/PDO over private stdin/stdout; it adds no HTTP database endpoint. Credentials stay in the native backend. Form values use bound parameters and identifiers are validated/quoted. Numbers remain strings, including BIGINT/DECIMAL values that JavaScript cannot represent exactly. Row changes compare all original values, including case-sensitive text, to reject stale edits. A live primary/unique key is verified again before writing.
+Both database adapters run bundled PHP/PDO over private stdin/stdout; they add no HTTP database endpoint or new runtime dependency. MySQL credentials stay in the native backend. Form values use bound parameters and identifiers are validated/quoted. Numbers remain strings, including MySQL BIGINT/DECIMAL values that JavaScript cannot represent exactly. Row changes compare all original values, including case-sensitive text, to reject stale edits. A live primary/unique key is verified again before writing.
 
 Database/table/column deletion and supported column changes require confirmation and first create a full SQL export of the selected database. A failed backup prevents the change. Row deletions use a confirmation dialog and do not export the database. Arbitrary SQL is explicitly an administrative tool and does not receive automatic backups. Completed statements in a failing SQL script may already have changed data; refresh before retrying. System databases are hidden/protected by forms; the SQL editor has administrator access.
 
@@ -57,6 +75,16 @@ cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke \
 ```
 
 Use a fresh scratch directory for each run. It starts its own MySQL on free ports and shuts it down afterward. Both desktop installer workflows also run this example. Browser fixtures do not establish native correctness, and neither replaces a human check in the native WebViews before release.
+
+SQLite verification uses real project files and requires no services:
+
+```sh
+python3 -m unittest discover -s tests -p test_sqlite_browser.py -v
+cargo run --manifest-path src-tauri/Cargo.toml --example sqlite_browser_smoke \
+  --no-default-features --locked -- "$PWD/.runtime-work/sqlite-browser-smoke"
+```
+
+The Python tests use the staged runtime (or `FAIRWAY_TEST_RUNTIME`) and cover exact values, external writes, locks, keys, BLOBs, views, transaction/trigger scripts, result caps and SQLite loading across staged PHP versions. The native smoke adds missing/invalid file preservation, backup restoration, failure-before-delete guards and cancellation. `sqlite-browser.spec.ts` covers visible discovery, engine-specific forms, navigation and remembered files in Chromium/WebKit; `sqlite-browser-native.spec.ts` exercises the production UI through the Rust/PHP bridge against the original Unicode project path with MySQL stopped. The native test bridge substitutes the OS file picker with an isolated fixture path; a human must still check the actual macOS/Windows picker and native WebViews.
 
 Both desktop candidate workflows run this real-database example and browser input through the native stdio test bridge. The latter starts isolated bundled MySQL and checks database/table creation, Unicode row insertion/editing, and exact SQL results. The bridge is test-only and opens no HTTP database endpoint. Native WebView and installer acceptance still require the checks in [beta acceptance](beta-acceptance.md).
 

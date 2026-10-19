@@ -142,8 +142,9 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     return response as T;
   }
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
+  if (command === 'pick_sqlite_file') return '/Users/Student May/projects/classroom/database.sqlite' as T;
   if (command === 'data_browser') {
-    if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');
+    if ((args.request as { driver?: string }).driver !== 'sqlite' && !data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');
     emit('fairway-operation-started', 'Working with database…');
     try { return structuredClone(await databaseRequest(String(args.id), args.request as Record<string, unknown>)) as T; }
     finally { emit('fairway-operation-finished', null); }
@@ -202,6 +203,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (!project) throw new Error('This site is no longer registered.');
       project.https = Boolean(args.enabled);
       if (project.https) data.httpsTrusted = true;
+      else if (!data.projects.some(item => item.https)) data.httpsTrusted = false;
       result = structuredClone(data); break;
     }
     case 'remove_https_trust':

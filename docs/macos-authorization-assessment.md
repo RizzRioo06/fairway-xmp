@@ -50,6 +50,61 @@ The owner reported that Windows permission handling works as expected. On the fi
 
 The Add/Edit form now keeps one short approval notice and a neutral localhost note with folder-access details in its tooltip. Domain, document-root and routing explanations are available through help buttons that work with mouse, keyboard and touch; Escape dismisses a help tip before closing the dialog.
 
+## Issue #9 focus handoff implementation — 2026-10-19
+
+The opt-in native desktop build now performs AppKit handoffs on the main thread.
+Before login-keychain access and SSL trust setup it calls `NSApplication.deactivate`
+once, without identifying or activating a security-agent process, then holds a scoped
+guard that suppresses Fairway's explicit focus requests until the native call returns.
+The blocking Security calls remain on the worker thread. The guard releases on success,
+cancellation and failure without automatically reactivating Fairway.
+
+Before `SMAppService.openSystemSettingsLoginItems`, Fairway yields activation to
+`com.apple.systempreferences` on the same main-thread turn. This follows Apple's
+[cooperative activation guidance](https://developer.apple.com/documentation/appkit/passing-control-from-one-app-to-another-with-cooperative-activation).
+Unlike Settings, the Security API exposes no destination app to yield to; the one-shot
+deactivation is an experiment requiring device acceptance. Native-build error reporting
+no longer raises Fairway after opening Settings. Existing helper registration, reuse,
+certificate scope and trust verification are unchanged. No additional authentication,
+Accessibility access, simulated input or timed activation retry is introduced.
+
+Non-mutating regression tests cover scoped focus suppression and release after errors;
+they cannot prove Touch ID focus. The implementation host reports macOS 27.2
+(26B5112a); no fresh authentication or trust/hosts mutation was performed by the agent.
+The owner's actual prompt-focus, cancellation, password-fallback and helper-reuse
+results for this build remain pending. See [test steps](permission-test-builds.md#issue-9-authorization-focus).
+
+## Follow-up: removal focus and authorization audit — 2026-10-19
+
+The owner tested signed/notarized build `88fa366` and confirmed that HTTPS-enable
+Touch ID authorization focuses automatically. They reported certificate-removal
+Touch ID authorization still needed a click. This isolated the missing removal path:
+`security delete-certificate -t` was outside the scoped handoff.
+
+The shared guard now covers both native and compatibility HTTPS installation, all
+certificate-removal callers, legacy hosts elevation, and the updater's potentially
+privileged installation. Read-only trust verification, ordinary service controls,
+CLI/PATH integration and approved-helper XPC requests do not request elevation and
+retain normal focus. Settings retains the cooperative handoff for initial helper
+approval. Installer-owned authorization runs in Installer, and the standalone
+uninstaller requires Fairway to quit first; its dialogs activate themselves, and
+Finder is activated before its own deletion approval. Terminal-owned sudo prompts
+remain terminal interactions. No extra authorization or security-agent targeting
+was introduced. Folder-picker/TCC permission UI remains system-owned; no blanket
+focus manipulation is applied to ordinary file access.
+
+In the desktop app, turning off the last HTTPS site now applies the site/config
+change and removes unused shared CA trust in one operation. Other enabled HTTPS
+sites retain trust. If cleanup is cancelled or fails, HTTPS stays off and the panel
+reports that cleanup did not finish; **Remove certificate trust** remains available
+as a retry. This avoids silently re-enabling HTTPS or requiring a second cleanup
+click in the successful flow. The existing uninstall and remove-site cleanup paths
+use the same guarded trust-removal function.
+
+Device results for removal, the broader authorization paths and cancellation remain
+pending the follow-up build. No trust removal, elevation, updater installation or
+uninstall was triggered by the agent during this audit.
+
 ## Release recommendation
 
 Keep RC 1 and its published artifacts unchanged. The accompanying welcome-page proposal is independent visual/content polish. The native trust feature remains an opt-in test proposal and has a successful owner-reported HTTPS comparison. The owner has accepted the hosts background-approval and subsequent-add flow for the next release; release packaging/default-feature integration and the remaining acceptance cases still need completion. Any welcome-page or authorization implementation chosen for another RC requires a fresh candidate build and acceptance; existing RC 1 hashes do not cover it.

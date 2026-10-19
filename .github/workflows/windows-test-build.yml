@@ -83,7 +83,7 @@ jobs:
         env:
           FAIRWAY_NATIVE_ONLY: '1'
           FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
-        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
+        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/sqlite-browser-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
       - name: Save native desktop browser report
         if: always()
         uses: actions/upload-artifact@v6
@@ -101,6 +101,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise native data browser and SQL export/import
         run: cargo run --manifest-path src-tauri/Cargo.toml --example data_browser_smoke --no-default-features --locked -- .runtime-work/data-browser-smoke
+      - name: Exercise SQLite project files without services
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example sqlite_browser_smoke --no-default-features --locked -- .runtime-work/sqlite-browser-smoke
+      - name: Verify SQLite workers across staged PHP versions
+        run: python -m unittest discover -s tests -p test_sqlite_browser.py -v
       - name: Verify MySQL upgrade from alpha 1
         run: |
           $legacy = Join-Path (Get-Location) '.runtime-work/alpha1-runtime'

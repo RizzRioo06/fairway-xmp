@@ -19,6 +19,7 @@ use std::{
 };
 
 const WORKER: &str = include_str!("data_browser.php");
+const SQLITE_WORKER: &str = include_str!("data_browser_sqlite.php");
 const MAX_RESPONSE: u64 = 8 * 1024 * 1024;
 #[derive(Default)]
 pub struct Jobs(Mutex<HashMap<String, Arc<AtomicBool>>>);
@@ -52,12 +53,17 @@ impl Jobs {
     }
 }
 
-fn php(layout: &Layout) -> Result<Command> {
+fn php(layout: &Layout, sqlite: bool) -> Result<Command> {
     // Keep the worker off the command line: Windows process argument limits
     // and quoting must not depend on the size or contents of this PHP source.
-    let script = layout.data.join("config/data-browser-worker.php");
-    if fs::read(&script).ok().as_deref() != Some(WORKER.as_bytes()) {
-        crate::config::atomic_write(&script, WORKER.as_bytes())?;
+    let (filename, worker) = if sqlite {
+        ("config/data-browser-sqlite.php", SQLITE_WORKER)
+    } else {
+        ("config/data-browser-worker.php", WORKER)
+    };
+    let script = layout.data.join(filename);
+    if fs::read(&script).ok().as_deref() != Some(worker.as_bytes()) {
+        crate::config::atomic_write(&script, worker.as_bytes())?;
     }
     let mut command = Command::new(layout.php_exe("php")?);
     #[cfg(windows)]
@@ -101,6 +107,11 @@ fn connection(layout: &Layout) -> Result<()> {
     Ok(())
 }
 pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Result<Value> {
+    match request["driver"].as_str() {
+        Some("sqlite") => return execute_sqlite(layout, request, cancel),
+        None | Some("mysql") => (),
+        _ => return Err("Choose MySQL or SQLite.".into()),
+    }
     connection(layout)?;
     let op = request["op"]
         .as_str()
@@ -110,6 +121,7 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
         "drop_table",
         "drop_column",
         "change_column",
+        "drop_index",
     ]
     .contains(&op)
     {
@@ -138,14 +150,88 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
     if op == "rename_database" && request["confirmed"].as_bool() != Some(true) {
         return Err("Confirm the database rename first.".into());
     }
-    let input = serde_json::to_vec(
-        &json!({"port":layout.ports()?.mysql,"password":layout.secret()?,"request":request}),
+    worker(
+        layout,
+        json!({"port":layout.ports()?.mysql,"password":layout.secret()?,"request":request}),
+        false,
+        cancel,
     )
-    .map_err(|e| e.to_string())?;
+}
+
+fn execute_sqlite(layout: &Layout, mut request: Value, cancel: Arc<AtomicBool>) -> Result<Value> {
+    let path = Path::new(
+        request["path"]
+            .as_str()
+            .ok_or("Open a SQLite file first.")?,
+    );
+    if !path.is_absolute() || !path.is_file() {
+        return Err("This SQLite file is missing or is not a file. Open it again from its current location.".into());
+    }
+    let path = fs::canonicalize(path).map_err(|e| format!("Cannot open this SQLite file: {e}"))?;
+    let mut file = File::open(&path).map_err(|e| e.to_string())?;
+    let mut header = [0; 16];
+    let size = file.read(&mut header).map_err(|e| e.to_string())?;
+    if size != 0 && (size != 16 || &header != b"SQLite format 3\0") {
+        return Err("Choose an unencrypted SQLite 3 database or an empty file.".into());
+    }
+    request["path"] = json!(path);
+    let op = request["op"]
+        .as_str()
+        .ok_or("Choose a database operation.")?
+        .to_owned();
+    let destructive = ["drop_table", "drop_column", "drop_index"].contains(&op.as_str());
+    if destructive && request["confirmed"].as_bool() != Some(true) {
+        return Err("Confirm this destructive operation first.".into());
+    }
+    if destructive || op == "backup" {
+        let folder = layout.data.join("backups");
+        fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis();
+        let backup = folder.join(format!(
+            "sqlite-{stamp}-{:016x}.sqlite",
+            rand::random::<u64>()
+        ));
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)
+            .map_err(|e| e.to_string())?;
+        let result = worker(
+            layout,
+            json!({"request":{"op":"backup", "path":path}, "backupPath":backup}),
+            true,
+            cancel.clone(),
+        );
+        if result.is_err() {
+            let _ = fs::remove_file(&backup);
+        }
+        result?;
+        if op == "backup" {
+            return Ok(
+                json!({"message":format!("SQLite backup saved: {}", backup.display()),"path":backup}),
+            );
+        }
+        if cancel.load(Ordering::SeqCst) {
+            return Err(
+                "Canceled before changing the database. The SQLite backup was kept.".into(),
+            );
+        }
+    }
+    worker(layout, json!({"request":request}), true, cancel)
+}
+
+fn worker(layout: &Layout, input: Value, sqlite: bool, cancel: Arc<AtomicBool>) -> Result<Value> {
+    if cancel.load(Ordering::SeqCst) {
+        return Err("Database request canceled.".into());
+    }
+    let input = serde_json::to_vec(&input).map_err(|e| e.to_string())?;
     if input.len() > 2 * 1024 * 1024 {
         return Err("The request is too large. Import SQL files using the command line.".into());
     }
-    let mut child = php(layout)?
+    let mut child = php(layout, sqlite)?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

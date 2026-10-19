@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- SQLite project files in the desktop Data browser: a visible Open SQLite file action, recent paths, shared table/row editing and SQL workspace, and consistent file backups without starting services or installing an editor extension.
+- SQLite-specific schema controls, safe row identity and conflict checks, guarded destructive schema changes, and native/browser regression coverage. Advanced column redesign remains in SQL; `fairway db` stays MySQL-only.
+
+These changes require a new candidate and native acceptance; published RC 1 artifacts are unchanged.
+
 ## 0.1.0-rc.1 — 2026-10-19
 
 - Built-in Mailpit catcher and in-app inbox, PHP mail integration, SMTP settings and attachment saving.

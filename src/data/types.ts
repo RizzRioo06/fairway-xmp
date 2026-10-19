@@ -4,7 +4,17 @@ export type Column = {
   extra: string; columnKey: string; expression: string; binary: boolean; generated: boolean;
 };
 export type Table = { name: string; kind: string };
-export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string };
+export type TableIndex = {
+  name: string; unique: boolean; primary: boolean; type: string;
+  parts: { name: string | null; expression: string | null; direction: string; prefix: string | null; collation: string | null }[];
+  details: string; sql: string | null; removable: boolean; reason: string;
+};
+export type ForeignKey = {
+  name: string; database: string | null; table: string; columns: string[];
+  referencedDatabase: string | null; referencedTable: string; referencedColumns: (string | null)[];
+  onUpdate: string; onDelete: string;
+};
+export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string; indexes?: TableIndex[]; foreignKeys?: ForeignKey[]; referencedBy?: ForeignKey[] };
 export type Page = Structure & { rows: Row[]; total: string; offset: number; limit: number };
 export type QueryResult = { sets: { columns: string[]; rows: (string | null)[][]; affected: number; truncated: boolean }[]; elapsedMs: number };
 export type Definition = {
