@@ -38,7 +38,9 @@ Data browser navigation preserves its workspace state across sidebar visits. Dat
 - Application data: `dev.fairway.environment` under the platform's local user data directory.
 - Application data contains settings, generated service configs, logs, MySQL data, phpMyAdmin's writable overlay, PHP sessions, temporary files, Composer home, backups, and CLI launchers.
 - Runtime files remain inside the installed application resources and are not mutated at startup.
-- Existing coursework is never overwritten except the initial welcome page, created only if `index.php` is absent.
+- The initial welcome page is created only if `index.php` is absent; existing `index.php` content is never replaced during initialization.
+
+The proposed post-RC welcome page is a self-contained PHP landing page with the existing Fairway leaf/wordmark, the escaped document-root path, a first-page example using the actual server port, and links to Getting started, the PHP manual and project support. It shows only the executing PHP version, with no service dashboard, database credentials, project listing, scripts, remote fonts or automatic external requests. It is created only when `index.php` is absent; updating Fairway does not replace an existing or customized index. The proposal remains on a separate review branch pending the owner's next-RC decision.
 
 ## Services
 
