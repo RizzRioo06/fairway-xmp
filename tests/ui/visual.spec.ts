@@ -363,10 +363,17 @@ test('saved-list errors never look like an empty site list and folder guidance i
   await capture(page, info, 'sites-load-error');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Stopped');
   await siteAction(page, 'Blog', 'Edit site');
-  await expect(page.getByRole('dialog')).toContainText('Other project files there may also be accessible');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Files here are also reachable through localhost.');
+  await dialog.getByRole('button', { name: 'About shared document-root access' }).focus();
+  await expect(dialog.getByRole('tooltip')).toContainText('Other project files may be accessible');
+  await expect(dialog.getByRole('tooltip')).toBeInViewport({ ratio: 1 });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await siteAction(page, 'My Shop', 'Edit site');
-  await expect(page.getByRole('dialog')).not.toContainText('Other project files there may also be accessible');
+  await expect(page.getByRole('dialog')).not.toContainText('Files here are also reachable through localhost.');
+  await expect(page.getByRole('button', { name: 'About shared document-root access' })).toHaveCount(0);
 });
 
 test('site terminals open registered locations without replacing existing sessions', async ({ page }) => {
