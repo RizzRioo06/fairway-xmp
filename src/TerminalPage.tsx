@@ -25,6 +25,20 @@ function savedFontSize() {
 export type TerminalLaunch = { key: string; folder: string; label: string };
 type Tab = { key: string; slot: number; folder: string | null; label?: string };
 type Context = { folders: string[]; sites: { folder: string; label: string }[]; historySupported: boolean };
+type NoticeBody = { error: boolean; text: string; warning?: boolean; action?: string };
+type SlotNotice = NoticeBody | null;
+type ShownNotice = (NoticeBody & { onAction?: () => void; onDismiss?: () => void }) | null;
+
+function FixedNotice({ notice }: { notice: ShownNotice }) {
+  return <div className={`terminal-notice${notice ? ` notice${notice.error ? ' error' : ''}${notice.warning ? ' terminal-notice-warning' : ''}` : ''}`}>
+    <div className="terminal-notice-message">
+      <div role={notice && !notice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice && !notice.error ? notice.text : null}</div>
+      <div role={notice?.error ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{notice?.error ? notice.text : null}</div>
+    </div>
+    {notice?.action && <button onClick={notice.onAction}>{notice.action}</button>}
+    {notice?.onDismiss && <button aria-label="Dismiss terminal message" onClick={notice.onDismiss}>×</button>}
+  </div>;
+}
 
 function savedHistory() {
   try { return localStorage.getItem('fairway-terminal-history') !== 'false'; } catch { return true; }
@@ -44,6 +58,17 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
   const handledLaunch = useRef(launch?.key);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Record<number, Status>>({ 0: 'starting' });
+  const [slotNotices, setSlotNotices] = useState<Record<number, SlotNotice>>({});
+  const retryBySlot = useRef<Record<number, () => void>>({});
+  const clearErrorBySlot = useRef<Record<number, () => void>>({});
+  const reportNotice = useCallback((slot: number, notice: SlotNotice) => {
+    setSlotNotices(previous => {
+      const current = previous[slot];
+      if (current?.text === notice?.text && current?.error === notice?.error && current?.warning === notice?.warning && current?.action === notice?.action) return previous;
+      if (!current && !notice) return previous;
+      return { ...previous, [slot]: notice };
+    });
+  }, []);
   useEffect(() => { setFocusInput(true); }, [focusRequest]);
   const refreshContext = useCallback(async () => {
     if (!canControl) return;
@@ -88,7 +113,18 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
     setTabs(previous => previous.length > 1 ? previous.filter(tab => tab.slot !== slot) : previous);
     setSelected(remaining[0]?.slot ?? slot); setFocusInput(true);
   }
+  const slotNotice = slotNotices[activeSlot] ?? null;
+  const workspaceNotice: ShownNotice = slotNotice
+    ? {
+      ...slotNotice,
+      onAction: slotNotice.action ? () => retryBySlot.current[activeSlot]?.() : undefined,
+      onDismiss: slotNotice.error ? () => clearErrorBySlot.current[activeSlot]?.() : undefined,
+    }
+    : launchError ? { error: false, text: launchError, onDismiss: () => setLaunchError(null) }
+    : contextError ? { error: true, text: `Could not refresh folders: ${contextError}`, action: 'Retry', onAction: () => { void refreshContext(); }, onDismiss: () => setContextError(null) }
+    : null;
   return <div className={`terminal-workspace${expanded ? ' terminal-expanded' : ''}`}>
+    <FixedNotice notice={workspaceNotice} />
     <div className="page-heading"><div><h1>Terminal</h1><p>PHP and Composer, ready for your projects.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', ended: 'Session ended', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
     {canControl && <div className="terminal-workspace-controls">
       <div role="tablist" aria-label="Terminal sessions" className="terminal-tabs">{tabs.map(tab => <button key={tab.key} id={`terminal-tab-${tab.slot}`} role="tab" aria-selected={activeSlot === tab.slot} aria-controls={`terminal-panel-${tab.slot}`} tabIndex={activeSlot === tab.slot ? 0 : -1} title={tab.label ?? tab.folder ?? 'Default folder'} onClick={() => { setSelected(tab.slot); setFocusInput(true); }} onKeyDown={event => {
@@ -106,18 +142,18 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
         const checked = event.target.checked; setRememberHistory(checked);
         try { localStorage.setItem('fairway-terminal-history', String(checked)); } catch { /* Optional preference. */ }
       }} />Remember commands in new sessions<span title="Commands are saved privately on this device, with about 1,000 entries retained. Start a command with a space to omit it. Output and password prompts are not recorded.">Local history · leading space skips saving</span></label>}
-      {launchError && <p className="terminal-context-error" role="status">{launchError}</p>}
-      {contextError && <p className="terminal-context-error" role="status">Could not refresh folders: {contextError} <button className="text-link" onClick={() => { void refreshContext(); }}>Retry</button></p>}
     </div>}
     {tabs.map(tab => <div key={tab.key} id={`terminal-panel-${tab.slot}`} className="terminal-tab-panel" role="tabpanel" aria-labelledby={canControl ? `terminal-tab-${tab.slot}` : undefined} hidden={activeSlot !== tab.slot}>
-      <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} busy={busy} workspace={workspace} tab={tab} expanded={expanded} toggleExpanded={() => setExpanded(value => !value)} canClose={tabs.length > 1} closeTab={() => closeTab(tab.slot)} reportStatus={reportStatus} />
+      <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} busy={busy} workspace={workspace} tab={tab} expanded={expanded} toggleExpanded={() => setExpanded(value => !value)} canClose={tabs.length > 1} closeTab={() => closeTab(tab.slot)} reportStatus={reportStatus} reportNotice={reportNotice} retryBySlot={retryBySlot} clearErrorBySlot={clearErrorBySlot} />
     </div>)}
   </div>;
 }
 
-function TerminalSession({ active, focusInput, focusRequest, rememberHistory, busy, workspace, tab, expanded, toggleExpanded, canClose, closeTab, reportStatus }: {
+function TerminalSession({ active, focusInput, focusRequest, rememberHistory, busy, workspace, tab, expanded, toggleExpanded, canClose, closeTab, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
   active: boolean; focusInput: boolean; focusRequest: number; rememberHistory: boolean; busy: boolean; workspace: string; tab: Tab; expanded: boolean;
   toggleExpanded: () => void; canClose: boolean; closeTab: () => void; reportStatus: (slot: number, status: Status) => void;
+  reportNotice: (slot: number, notice: SlotNotice) => void;
+  retryBySlot: { current: Record<number, () => void> }; clearErrorBySlot: { current: Record<number, () => void> };
 }) {
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
@@ -144,6 +180,15 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
   const [confirm, setConfirm] = useState<'restart' | 'stop' | 'close' | null>(null);
 
   useEffect(() => { reportStatus(tab.slot, status); }, [tab.slot, status, reportStatus]);
+  clearErrorBySlot.current[tab.slot] = () => setError(null);
+  retryBySlot.current[tab.slot] = () => retryResize.current?.();
+  useEffect(() => {
+    const notice: SlotNotice = error ? { error: true, text: error }
+      : resizeWarning && status === 'running' ? { error: false, warning: true, text: 'Terminal size could not be updated. Your commands are still running.', action: 'Retry resize' }
+      : null;
+    reportNotice(tab.slot, notice);
+  }, [error, resizeWarning, status, tab.slot, reportNotice]);
+  useEffect(() => () => reportNotice(tab.slot, null), [tab.slot, reportNotice]);
   useEffect(() => { historyPreference.current = rememberHistory; }, [rememberHistory]);
 
   useEffect(() => {
@@ -324,7 +369,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener('keydown', key);
-    return () => { document.removeEventListener('keydown', key); previous?.focus(); };
+    return () => { document.removeEventListener('keydown', key); previous?.focus({ preventScroll: true }); };
   }, [confirm]);
 
   async function clipboard(action: 'copy' | 'paste') {
@@ -381,8 +426,6 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     }
   }}>
     {isUiTest && <div className="preview-banner">UI test — simulated terminal. Commands do not run on your computer.</div>}
-    {error && <div className="notice error" role="alert">{error}</div>}
-    {resizeWarning && status === 'running' && <div className="terminal-resize-warning" role="status"><span>Terminal size could not be updated. Your commands are still running.</span><button className="text-link" onClick={() => retryResize.current?.()}>Retry resize</button></div>}
     <div className="terminal-panel">
       <div className="terminal-toolbar">
         <div className="terminal-toolbar-heading"><span className="terminal-shell"><TerminalIcon size={16} />{info?.shell ?? 'Local shell'}</span><div className="terminal-session-actions">

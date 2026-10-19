@@ -1,4 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function expectStill(page: Page, position: number) {
+  const samples = await page.evaluate(async () => {
+    const positions: number[] = [];
+    for (let i = 0; i < 45; i++) {
+      await new Promise(requestAnimationFrame);
+      positions.push(window.scrollY);
+    }
+    return positions;
+  });
+  expect(samples.every(value => Math.abs(value - position) <= 1)).toBe(true);
+}
 
 test('global logs focus on problems with source/search filters and plain text', async ({ page }, info) => {
   await page.goto('/');
@@ -192,4 +204,39 @@ test('empty history and unreadable logs have distinct explanations', async ({ pa
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Logs unavailable', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('php.log: permission denied');
+  await expect(page.locator('.logs-notice')).toHaveText('');
+});
+
+test('copy failures stay on screen and do not return after navigation', async ({ page }) => {
+  const detail = `Clipboard denied. ${'Grant clipboard permission. '.repeat(40)}`;
+  await page.addInitScript(message => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error(message); } }, configurable: true });
+  }, detail);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  const output = page.getByRole('region', { name: 'Log entries', exact: true });
+  await expect(output).toContainText('PHP Fatal error');
+  await output.evaluate(element => { element.scrollTop = 80; });
+  const copy = page.getByRole('button', { name: 'Copy shown', exact: true });
+  await page.evaluate(() => { document.querySelector('main')!.style.minHeight = '2400px'; window.scrollTo(0, 700); });
+  await copy.evaluate(element => (element as HTMLElement).focus({ preventScroll: true }));
+  const position = await page.evaluate(() => window.scrollY);
+  expect(position).toBeGreaterThan(100);
+  const listPosition = await output.evaluate(element => element.scrollTop);
+  await page.keyboard.press('Enter');
+  const alert = page.getByRole('alert').filter({ hasText: 'Could not copy logs' });
+  await expect(alert).toContainText(detail);
+  await expect(page.locator('.logs-notice')).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('button', { name: 'Dismiss logs message', exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('.logs-notice').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(270);
+  const dimensions = await page.locator('.logs-notice-message').evaluate(element => ({ height: element.clientHeight, content: element.scrollHeight }));
+  expect(dimensions.content).toBeGreaterThan(dimensions.height);
+  await expectStill(page, position);
+  await expect(copy).toBeFocused();
+  expect(await output.evaluate(element => element.scrollTop)).toBe(listPosition);
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(alert).toHaveCount(0);
+  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not copy logs' })).toHaveCount(0);
+  await expect(page.locator('.logs-error')).toHaveCount(0);
 });

@@ -529,7 +529,7 @@ async fn pick_sqlite_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
         app.dialog()
             .file()
             .set_title("Open SQLite file")
-            .add_filter("SQLite databases", &["sqlite", "sqlite3", "db", "db3"])
+            .add_filter("SQLite database (.sqlite, .db)", &["sqlite", "db", "sqlite3", "db3"])
             .add_filter("All files", &["*"])
             .blocking_pick_file()
             .map(|path| path.into_path().map_err(|e| e.to_string()))

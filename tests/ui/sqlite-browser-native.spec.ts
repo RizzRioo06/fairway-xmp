@@ -11,7 +11,7 @@ test('SQLite edits the original project file through the native worker with MySQ
     await page.goto('/');
     await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
     await page.getByRole('button', { name: 'Open SQLite file…', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Create table', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Create table', exact: true }).first()).toBeEnabled();
     await page.getByRole('tab', { name: 'SQL query', exact: true }).click();
     await page.locator('#db-sql').fill("CREATE TABLE students(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO students VALUES(9007199254740993, 'Student 日本'); SELECT * FROM students;");
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
@@ -23,14 +23,14 @@ test('SQLite edits the original project file through the native worker with MySQ
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Table rows', exact: true })).toContainText('Edited in Fairway');
     // Native layout resolves this under the isolated home; inspect the selected path.
-    const selectedFile = await page.getByLabel('Data source', { exact: true }).inputValue();
+    const selectedFile = await page.getByLabel('SQLite file path', { exact: true }).innerText();
     expect((await readFile(selectedFile)).subarray(0, 16).toString()).toBe('SQLite format 3\0');
     await page.getByRole('button', { name: 'Back up SQLite file', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('SQLite backup saved:');
     await unlink(selectedFile);
     await page.getByRole('button', { name: 'Refresh rows', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('missing');
-    await expect(page.getByLabel('Data source', { exact: true })).toHaveValue(selectedFile);
+    await expect(page.getByLabel('SQLite file path', { exact: true })).toHaveText(selectedFile);
     expect(bridge.errors()).toBe('');
   } finally { await bridge.close(); }
 });

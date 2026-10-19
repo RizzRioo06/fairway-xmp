@@ -5,7 +5,13 @@
 - MySQL/SQLite Structure now shows indexes and incoming/outgoing foreign keys. Create ordinary or composite unique indexes with ordered columns; remove supported indexes with confirmation and a protective backup. Primary, constraint-owned, advanced and relationship-dependent definitions stay protected in forms. Foreign-key inspection is read-only; filtering stays in SQL.
 
 - SQLite project files in the desktop Data browser: a visible Open SQLite file action, recent paths, shared table/row editing and SQL workspace, and consistent file backups without starting services or installing an editor extension.
+- Data browser success and error messages stay on screen. Long messages scroll inside the notice, without moving the page or keyboard focus.
+- Mail, terminal, and log action results use that same fixed notice. Dialog validation stays in its dialog and scrolls there. Service status, missing runtimes, an unreadable site list, inbox loading, and log-file failures stay on the page.
+- Data browser row and column actions are icons. Every table row can be viewed in full, including when edit and delete are unavailable. An empty database offers a labeled Create table action beside Open SQL query.
+- MySQL and SQLite are data-source tabs. Both stay available: choosing MySQL while the service is stopped shows Start MySQL, and choosing SQLite before a file is chosen shows Open SQLite file. While a file is open, its name, path, immediate-save warning, Back up SQLite file, and Close SQLite file sit in one card under those tabs. Close releases the file without deleting it, writing it, or opening the picker. Remembered paths stay, and that session does not reopen the file until it is chosen.
 - SQLite-specific schema controls, safe row identity and conflict checks, guarded destructive schema changes, and native/browser regression coverage. Advanced column redesign remains in SQL; `fairway db` stays MySQL-only.
+- Main pages fill the content width beside the sidebar, with the same horizontal padding Mail and Logs already use.
+- The main sidebar can fold to icons from the workspace breadcrumb. Unfold restores the labels. Show and hide tables is the same kind of icon, placed in front of the table name.
 
 These changes require a new candidate and native acceptance; published RC 1 artifacts are unchanged.
 

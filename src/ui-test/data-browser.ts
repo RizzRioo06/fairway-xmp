@@ -43,7 +43,7 @@ export async function databaseRequest(id: string, r: Record<string, unknown>) {
   if (op === 'export') return { message: 'SQL export saved: /Users/Student May/Library/Application Support/dev.fairway.environment/backups/database-ui-test.sql' };
   if (op === 'query') {
     const sql = String(r.sql).trim();
-    if (!/^select\s/i.test(sql)) throw new Error('Simulated SQL error. Use SELECT VERSION() or SELECT * FROM students for visual review. Native SQL is verified separately.');
+    if (!/^select\s/i.test(sql)) throw new Error(sql.startsWith('LONG ') ? sql.slice(5) : 'Simulated SQL error. Use SELECT VERSION() or SELECT * FROM students for visual review. Native SQL is verified separately.');
     const selected = /from\s+`?students`?/i.test(sql) ? schema.students : null;
     return { elapsedMs: 12, sets: [{ columns: selected ? selected.columns.map(c => c.name) : [sqlite ? 'sqlite_version()' : 'VERSION()'], rows: selected ? selected.rows.map(row => selected.columns.map(c => row[c.name])) : [[sqlite ? '3.54.0 (UI fixture)' : '9.7.0 (UI fixture)']], affected: 0, truncated: false }] };
   }

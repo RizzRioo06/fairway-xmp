@@ -48,20 +48,24 @@ test('controls align and the table sidebar resizes, collapses, and restores with
   const remembered = (await sidebar.boundingBox())!.width;
   const detailBefore = (await detail.boundingBox())!.width;
   await capture(page, info, 'data-browser-resized');
-  await page.getByRole('button', { name: 'Hide tables', exact: true }).click();
+  const hideTables = page.locator('.db-detail-title').getByRole('button', { name: 'Hide tables', exact: true });
+  await expect(hideTables).toHaveText('');
+  await hideTables.click();
   await expect(sidebar).toHaveCount(0);
   await expect(divider).toHaveCount(0);
   await expect.poll(async () => (await detail.boundingBox())!.width).toBeGreaterThan(detailBefore + remembered);
   await expect(page.getByRole('region', { name: 'Table rows', exact: true })).toContainText('Student May');
   await capture(page, info, 'data-browser-collapsed');
-  await page.getByRole('button', { name: 'Show tables', exact: true }).click();
+  const showTables = page.locator('.db-detail-title').getByRole('button', { name: 'Show tables', exact: true });
+  await expect(showTables).toHaveText('');
+  await showTables.click();
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBe(remembered);
   await divider.press('End');
   await page.setViewportSize({ width: 820, height: 650 });
   await expect.poll(async () => (await detail.boundingBox())!.width).toBeGreaterThanOrEqual(280);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await page.getByRole('button', { name: 'Create table', exact: true }).click();
+  await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
   const columnName = await dialog.getByLabel('Column name', { exact: true }).first().boundingBox();
   const columnType = await dialog.getByRole('combobox', { name: 'Type', exact: true }).first().boundingBox();
@@ -127,6 +131,18 @@ test('database rows preserve exact values, pagination, and protect rows without 
   const rows = page.getByRole('region', { name: 'Table rows', exact: true });
   await expect(rows).toContainText('9007199254740993');
   await expect(rows).toContainText('NULL');
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  let view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByText('Student May', { exact: true })).toBeVisible();
+  await expect(view.getByText('NULL', { exact: true })).toBeVisible();
+  await view.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(view).toHaveCount(0);
+  await page.getByRole('button', { name: 'View row 2', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByText('empty', { exact: true })).toBeVisible();
+  await view.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit row', exact: true })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Edit row', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
   await capture(page, info, 'data-browser-rows');
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(page.getByText('51–55 of 55', { exact: true })).toBeVisible();
@@ -135,9 +151,12 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(page.getByText('1–50 of 55', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'messages_without_key', exact: true }).click();
   await expect(page.getByText(/No non-null primary or unique key/)).toBeVisible();
+  await expect(rows.getByRole('button', { name: 'View row 1', exact: true })).toBeEnabled();
   await expect(rows.getByRole('button', { name: /^Edit row/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'student_names view', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Insert row', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'View row 1', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /^Edit row/ })).toHaveCount(0);
   await expect(page.getByText('This view is read-only. Use SQL for advanced changes.')).toBeVisible();
 });
 
@@ -148,7 +167,7 @@ test('create database/table, insert default and NULL, edit empty text, delete wi
   await dialog.getByLabel('Database name', { exact: true }).fill('classroom');
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page.getByLabel('Database', { exact: true })).toHaveValue('classroom');
-  await page.getByRole('button', { name: 'Create table', exact: true }).click();
+  await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
   dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
   await dialog.getByLabel('Table name', { exact: true }).fill('students');
   await capture(page, info, 'create-table');
@@ -184,7 +203,8 @@ test('create database/table, insert default and NULL, edit empty text, delete wi
   await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
   await dialog.getByLabel('Type students to confirm', { exact: true }).fill('students');
   await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByText('No tables yet. Create your first table with +.')).toBeVisible();
+  await expect(page.getByText('No tables yet.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Database workspace', exact: true }).getByRole('button', { name: 'Create table', exact: true })).toBeVisible();
   await action(page, 'Database', 'Delete database');
   dialog = page.getByRole('dialog', { name: 'Delete database', exact: true });
   await dialog.getByLabel('Type classroom to confirm', { exact: true }).fill('classroom');
@@ -194,7 +214,7 @@ test('create database/table, insert default and NULL, edit empty text, delete wi
 
 test('insert offers defaults only where available and saves untouched value and NULL fields', async ({ page }, info) => {
   await open(page);
-  await page.getByRole('button', { name: 'Create table', exact: true }).click();
+  await page.getByRole('button', { name: 'Create table', exact: true }).first().click();
   let dialog = page.getByRole('dialog', { name: 'Create table', exact: true });
   await dialog.getByLabel('Table name', { exact: true }).fill('insert_modes');
   await dialog.locator('.db-column-card').nth(1).getByLabel('Allow NULL', { exact: true }).uncheck();
@@ -229,7 +249,10 @@ test('insert offers defaults only where available and saves untouched value and 
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const cells = page.getByRole('region', { name: 'Table rows', exact: true }).locator('tbody tr').first().locator('td');
-  await expect(cells).toHaveText(['EditDelete', '100', 'empty', 'NULL', 'empty', '0', 'CURRENT_TIMESTAMP']);
+  await expect(cells).toHaveText(['', '100', 'empty', 'NULL', 'empty', '0', 'CURRENT_TIMESTAMP']);
+  await expect(cells.first().getByRole('button', { name: 'View row 1', exact: true })).toBeVisible();
+  await expect(cells.first().getByRole('button', { name: 'Edit row 1', exact: true })).toBeVisible();
+  await expect(cells.first().getByRole('button', { name: 'Delete row 1', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit row 1', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Edit row', exact: true });
   await expect(dialog.locator('option[value=default]')).toHaveCount(0);
@@ -291,6 +314,36 @@ test('SQL results, errors, session history and cancellation stay reviewable', as
   await expect(page.getByRole('alert')).toContainText('canceled');
   await expect(page.getByRole('button', { name: 'Run selection / all', exact: true })).toBeEnabled();
   await capture(page, info, 'data-browser-canceled');
+});
+
+test('database messages stay on screen without moving the page or focus', async ({ page }) => {
+  await open(page);
+  await page.getByRole('tab', { name: 'SQL query', exact: true }).click();
+  const editor = page.locator('#db-sql');
+  const runSql = page.getByRole('button', { name: 'Run selection / all', exact: true });
+  await editor.fill(`LONG ${'Database message detail. '.repeat(80)}`);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await runSql.focus();
+  const position = await page.evaluate(() => window.scrollY);
+  expect(position).toBeGreaterThan(100);
+  await runSql.press('Enter');
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Database message detail.');
+  await expect(page.getByRole('button', { name: 'Dismiss database message', exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('.db-notice').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(270);
+  const message = page.locator('.db-notice-message');
+  const dimensions = await message.evaluate(element => ({ height: element.clientHeight, content: element.scrollHeight }));
+  expect(dimensions.content).toBeGreaterThan(dimensions.height);
+  const samples = await page.evaluate(async () => {
+    const positions: number[] = [];
+    for (let i = 0; i < 45; i++) {
+      await new Promise(requestAnimationFrame);
+      positions.push(window.scrollY);
+    }
+    return positions;
+  });
+  expect(samples.every(value => Math.abs(value - position) <= 1)).toBe(true);
+  await expect(runSql).toBeFocused();
 });
 
 

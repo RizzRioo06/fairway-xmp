@@ -30,6 +30,10 @@ export default function LogsPage({ active, services, projects, request }: { acti
   const [error, setError] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const operationFocus = useRef<HTMLElement | null>(null);
+  const [settled, setSettled] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [visible, setVisible] = useState(!document.hidden);
   const scrolling = useRef<HTMLDivElement>(null);
@@ -41,6 +45,18 @@ export default function LogsPage({ active, services, projects, request }: { acti
     document.addEventListener('visibilitychange', visibility);
     return () => { document.removeEventListener('visibilitychange', visibility); window.clearTimeout(copyingTimer.current); };
   }, []);
+  useEffect(() => { if (!active) setCopyError(null); }, [active]);
+  useEffect(() => {
+    if (!operationFocus.current) return;
+    const trigger = operationFocus.current;
+    operationFocus.current = null;
+    // Copy does not disable its button, but a failed write can still blur it.
+    // Restore that control without scrolling, and never take focus back after
+    // navigation or from an open dialog.
+    if (activeRef.current && document.activeElement === document.body && !document.querySelector('[aria-modal="true"]') && trigger.isConnected && !trigger.matches(':disabled')) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, [settled]);
 
   useEffect(() => {
     if (!request) return;
@@ -141,14 +157,29 @@ export default function LogsPage({ active, services, projects, request }: { acti
 
   function changeFilter(action: () => void) { position.current.bottom = true; action(); }
   async function copy() {
+    operationFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     try {
       await navigator.clipboard.writeText(entries.map(entry => `[${entry.time ?? 'Time unavailable'}] ${sourceName(entry)} · ${entry.file}\n${entry.text}`).join('\n\n'));
+      if (!activeRef.current) return;
       setCopyError(null); setCopied(true); window.clearTimeout(copyingTimer.current);
       copyingTimer.current = window.setTimeout(() => setCopied(false), 1800);
-    } catch { setCopied(false); setCopyError('Could not copy logs. Select the text and copy it manually, or retry.'); }
+    } catch (reason) {
+      if (!activeRef.current) return;
+      setCopied(false);
+      const extra = reason instanceof Error ? reason.message.trim() : '';
+      const sentence = extra ? (/[.!?]$/.test(extra) ? extra : `${extra}.`) : '';
+      setCopyError(sentence ? `Could not copy logs. ${sentence} Select the text and copy it manually, or retry.` : 'Could not copy logs. Select the text and copy it manually, or retry.');
+    } finally { setSettled(value => value + 1); }
   }
 
   return <div className={`logs-page${site ? ' logs-site-active' : ''}`}>
+    <div className={`logs-notice${copyError ? ' notice error' : ''}`}>
+      <div className="logs-notice-message">
+        <div role={copyError ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{copyError}</div>
+      </div>
+      {copyError && <button onClick={() => { void copy(); }}>Retry copy</button>}
+      {copyError && <button aria-label="Dismiss logs message" onClick={() => setCopyError(null)}>×</button>}
+    </div>
     <div className="page-heading"><div><h1>Logs</h1><p>Check here when something goes wrong.</p></div></div>
     <section className="logs-workspace" aria-label="Environment logs">
       <div className="logs-toolbar">
@@ -167,7 +198,6 @@ export default function LogsPage({ active, services, projects, request }: { acti
         <button className="secondary" disabled={!entries.length} onClick={() => { void copy(); }}>{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? 'Copied' : 'Copy shown'}</button>
       </div></div>
       {error && <div className="logs-error" role="alert">{error} <button className="text-button" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>}
-      {copyError && <div className="logs-error" role="alert">{copyError} <button className="text-button" onClick={() => { void copy(); }}>Retry copy</button></div>}
       {!!snapshot.unavailable.length && <div className="logs-error" role="alert"><strong>Some logs could not be read.</strong>{snapshot.unavailable.map(item => <p key={item}>{item}</p>)}</div>}
       <div className="logs-output" ref={scrolling} onScroll={rememberPosition} tabIndex={0} role="region" aria-label="Log entries">
         {entries.map(entry => <article className={`log-entry log-${entry.severity}`} key={entry.id} data-entry={entry.id}>

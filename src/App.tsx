@@ -1,6 +1,6 @@
 import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2,
+  ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2, PanelLeftClose, PanelLeftOpen,
   AppWindow, Database, Download, ExternalLink, FolderOpen, Globe, Leaf, LoaderCircle, Mail, Play,
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
@@ -99,6 +99,7 @@ export default function App() {
   }, []);
   const [report, setReport] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [sidebarFolded, setSidebarFolded] = useState(false);
   const [mailSettings, setMailSettings] = useState(false);
   const [ports, setPorts] = useState<Ports>(preview.ports);
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
@@ -275,36 +276,37 @@ export default function App() {
   const mailEnv = `MAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=${data.ports.smtp}\nMAIL_USERNAME=null\nMAIL_PASSWORD=null`;
   const connection = `DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=${data.ports.mysql}\nDB_DATABASE=fairway\nDB_USERNAME=fairway\nDB_PASSWORD=fairway`;
 
-  return <div className="app-shell">
+  const foldTitle = (label: string) => sidebarFolded ? label : undefined;
+  return <div className={`app-shell${sidebarFolded ? ' sidebar-folded' : ''}`}>
     <aside className="sidebar">
-      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home">
+      <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home" title={foldTitle('Fairway XMP')}>
         <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span className="brand-name">fairway<span className="brand-period">.</span><span className="brand-edition">XMP</span></span>
       </a>
       <nav className="sidebar-nav" aria-label="Main navigation">
         <div className="nav-group" role="group" aria-label="Core">
-          <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} onClick={() => setView('environment')}><Globe size={18} />Environment</button>
-          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} />Terminal</button>
-          <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} onClick={() => setView('logs')}><ScrollText size={18} />Logs</button>
+          <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} title={foldTitle('Environment')} onClick={() => setView('environment')}><Globe size={18} /><span className="nav-label">Environment</span></button>
+          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} /><span className="nav-label">Terminal</span></button>
+          <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} title={foldTitle('Logs')} onClick={() => setView('logs')}><ScrollText size={18} /><span className="nav-label">Logs</span></button>
         </div>
         <div className="nav-group" role="group" aria-label="Tools">
-          <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} onClick={() => setView('projects')}><AppWindow size={18} />Manage Sites</button>
-          <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mail')}><Mail size={18} />View Mail</button>
-          {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} />Browse Data</button>}
+          <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} title={foldTitle('Manage Sites')} onClick={() => setView('projects')}><AppWindow size={18} /><span className="nav-label">Manage Sites</span></button>
+          <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} title={foldTitle('View Mail')} onClick={() => setView('mail')}><Mail size={18} /><span className="nav-label">View Mail</span></button>
+          {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} title={foldTitle('Browse Data')} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} /><span className="nav-label">Browse Data</span></button>}
         </div>
         <div className="nav-group nav-group-app" role="group" aria-label="App">
-          <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={18} />Settings</button>
-          <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} onClick={() => setView('updates')}><ArrowDownToLine size={18} />Updates</button>
+          <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} title={foldTitle('Settings')} onClick={() => setView('settings')}><Settings2 size={18} /><span className="nav-label">Settings</span></button>
+          <button className={view === 'updates' ? 'nav-item active' : 'nav-item'} title={foldTitle('Updates')} onClick={() => setView('updates')}><ArrowDownToLine size={18} /><span className="nav-label">Updates</span></button>
         </div>
       </nav>
       <div className="sidebar-bottom">
-        <button className="help-button" onClick={() => setHelp(true)}><CircleHelp size={17} />Getting started<ArrowUpRight size={14} /></button>
+        <button className="help-button" title={foldTitle('Getting started')} onClick={() => setHelp(true)}><CircleHelp size={17} /><span className="nav-label">Getting started</span><ArrowUpRight size={14} /></button>
         <div className="sidebar-footer" aria-label="App version">v{data.version}</div>
       </div>
     </aside>
 
     <main>
-      <header className="topbar"><span>Workspace <ChevronRight size={13} />{viewTitle[view]}</span><span className="local-pill"><span />Local environment</span></header>
-      <div className={view === 'mail' || view === 'logs' ? 'main-content wide' : 'main-content'}>
+      <header className="topbar"><span><button className="icon-button sidebar-fold" aria-expanded={!sidebarFolded} aria-label={sidebarFolded ? 'Unfold sidebar' : 'Fold sidebar'} title={sidebarFolded ? 'Unfold sidebar' : 'Fold sidebar'} onClick={() => setSidebarFolded(folded => !folded)}>{sidebarFolded ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button>Workspace <ChevronRight size={13} />{viewTitle[view]}</span><span className="local-pill"><span />Local environment</span></header>
+      <div className="main-content">
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
         {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></Suspense></div>}

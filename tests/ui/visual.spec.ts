@@ -132,6 +132,46 @@ test('invalid project details stay in the form with an error', async ({ page }) 
   await expect(dialog.getByLabel('Site name')).toHaveValue('Shop');
 });
 
+test('long site-form errors scroll inside the dialog without moving the page', async ({ page }) => {
+  await page.goto('/');
+  await openSites(page);
+  await page.getByRole('button', { name: 'Add site' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
+  await dialog.getByLabel('Site name').fill('Notes');
+  await dialog.getByRole('button', { name: 'Choose…' }).click();
+  await expect(dialog.getByLabel('Web root folder')).not.toHaveValue('');
+  const detail = `Could not save the site. ${'Choose a folder inside your account. '.repeat(80)}`;
+  await page.evaluate(text => { (window as unknown as { __fairwayProjectError: string }).__fairwayProjectError = text; }, detail);
+  await page.evaluate(() => { document.querySelector('main')!.style.minHeight = '2400px'; window.scrollTo(0, 700); });
+  const position = await page.evaluate(() => window.scrollY);
+  expect(position).toBeGreaterThan(100);
+  await dialog.getByRole('button', { name: 'Add site' }).click();
+  const alert = dialog.getByRole('alert');
+  await expect(alert).toContainText(detail);
+  await expect(dialog).toBeVisible();
+  expect(await alert.evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(270);
+  const dimensions = await alert.evaluate(element => ({ height: element.clientHeight, content: element.scrollHeight }));
+  expect(dimensions.content).toBeGreaterThan(dimensions.height);
+  await expect(page.locator('.operation-notice')).not.toContainText('Could not save the site.');
+  const samples = await page.evaluate(async () => {
+    const positions: number[] = [];
+    for (let i = 0; i < 45; i++) {
+      await new Promise(requestAnimationFrame);
+      positions.push(window.scrollY);
+    }
+    return positions;
+  });
+  expect(samples.every(value => Math.abs(value - position) <= 1)).toBe(true);
+  const owner = await page.evaluate(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body) return 'page';
+    if (active.closest('[role="dialog"]')) return 'dialog';
+    return 'outside';
+  });
+  expect(['page', 'dialog']).toContain(owner);
+  await expect(dialog.getByLabel('Site name')).toHaveValue('Notes');
+});
+
 test('turning off the last HTTPS site removes trust, while other sites retain it', async ({ page }, info) => {
   await page.goto('/');
   await openSites(page);
@@ -467,4 +507,30 @@ test('mail inbox lists, previews, searches, and deletes caught emails', async ({
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByLabel(/Mail inbox/)).toHaveValue('8802');
   await expect(page.getByLabel(/Mail SMTP/)).toHaveValue('11025');
+});
+
+test('the main sidebar folds to icons and returns that width to the page', async ({ page }) => {
+  await page.goto('/');
+  const sidebar = page.locator('.sidebar');
+  const main = page.locator('main');
+  const openWidth = (await sidebar.boundingBox())!.width;
+  const openMain = (await main.boundingBox())!.width;
+  expect(openWidth).toBeGreaterThan(150);
+  const fold = page.locator('.topbar').getByRole('button', { name: 'Fold sidebar', exact: true });
+  await expect(fold).toBeVisible();
+  await expect(page.locator('.sidebar').getByRole('button', { name: 'Fold sidebar', exact: true })).toHaveCount(0);
+  await fold.click();
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBe(64);
+  await expect.poll(async () => (await main.boundingBox())!.width).toBeGreaterThan(openMain + 100);
+  await expect.poll(async () => {
+    const box = await page.locator('.sidebar .nav-label').first().boundingBox();
+    return box ? Math.max(box.width, box.height) : 0;
+  }).toBeLessThanOrEqual(1);
+  await expect(page.locator('.sidebar-footer')).toHaveText(/^v\d+\.\d+\.\d+/);
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Data browser', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Unfold sidebar', exact: true }).click();
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBe(openWidth);
+  await expect(page.getByRole('button', { name: 'Environment', exact: true })).toBeVisible();
 });
