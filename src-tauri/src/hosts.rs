@@ -1,6 +1,14 @@
 //! Manage only Fairway's marked entries in the system hosts file.
 use crate::config::{valid_project_name, Result};
-use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+use std::{collections::BTreeSet, fs, path::PathBuf};
+
+#[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
+use std::process::Command;
+
+#[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+pub mod macos_native;
+#[cfg(all(target_os = "macos", feature = "native-hosts-writer"))]
+mod macos_writer;
 
 const LEGACY_BEGIN: &str = "# >>> Fairway XMP project domains >>>";
 const LEGACY_END: &str = "# <<< Fairway XMP project domains <<<";
@@ -216,6 +224,7 @@ pub fn apply(names: &[String]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
 pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
     if names.iter().any(|name| !valid_project_name(name)) {
         return Err("Invalid site domain name.".into());
@@ -284,6 +293,11 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
     } else {
         Err("Local domain setup did not update the system hosts file.".into())
     }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+pub fn ensure(names: &[String], _helper_flag: &str) -> Result<()> {
+    macos_native::ensure(names)
 }
 
 #[cfg(test)]

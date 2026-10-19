@@ -1,0 +1,116 @@
+//! Experimental SMAppService registration. Approval belongs to macOS, not Fairway.
+use crate::config::Result;
+use objc2::{class, msg_send, rc::Retained, runtime::AnyObject};
+use objc2_foundation::{NSError, NSString};
+use std::{
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
+
+const LABEL: &str = "dev.fairway.environment.hosts-helper";
+#[link(name = "ServiceManagement", kind = "framework")]
+unsafe extern "C" {}
+
+fn service() -> Retained<AnyObject> {
+    let plist = NSString::from_str(&format!("{LABEL}.plist"));
+    unsafe { msg_send![class!(SMAppService), daemonServiceWithPlistName: &*plist] }
+}
+
+fn helper() -> Result<PathBuf> {
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let contents = executable
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or("Cannot locate app bundle.")?;
+    let helper = contents.join("Library/HelperTools").join(LABEL);
+    if !helper.is_file()
+        || !contents
+            .join("Library/LaunchDaemons")
+            .join(format!("{LABEL}.plist"))
+            .is_file()
+    {
+        return Err("This prototype needs its bundled signed address helper.".into());
+    }
+    Ok(helper)
+}
+
+pub fn unregister() -> Result<()> {
+    let service = service();
+    let status: isize = unsafe { msg_send![&service, status] };
+    if status == 0 || status == 3 {
+        return Ok(());
+    }
+    let mut error: Option<Retained<NSError>> = None;
+    let success: bool = unsafe { msg_send![&service, unregisterAndReturnError: &mut error] };
+    if success {
+        Ok(())
+    } else {
+        Err(format!("Cannot remove address helper: {error:?}"))
+    }
+}
+
+pub fn ensure(names: &[String]) -> Result<()> {
+    if names.len() > 1024
+        || names
+            .iter()
+            .any(|name| !crate::config::valid_project_name(name))
+    {
+        return Err("Invalid site domains or too many sites (maximum 1024).".into());
+    }
+    if super::current(names)? {
+        if names.is_empty() {
+            unregister()?;
+        }
+        return Ok(());
+    }
+    let helper = helper()?;
+    let service = service();
+    let mut status: isize = unsafe { msg_send![&service, status] };
+    if status == 0 {
+        let mut error: Option<Retained<NSError>> = None;
+        let success: bool = unsafe { msg_send![&service, registerAndReturnError: &mut error] };
+        if !success {
+            return Err(format!("Cannot register address helper: {error:?}"));
+        }
+        status = unsafe { msg_send![&service, status] };
+    }
+    if status == 2 {
+        unsafe {
+            let _: () = msg_send![class!(SMAppService), openSystemSettingsLoginItems];
+        }
+        return Err("Allow Fairway XMP in System Settings → General → Login Items & Extensions, then try the address change again.".into());
+    }
+    if status != 1 {
+        return Err(
+            "The address helper is unavailable. Reopen the complete prototype app bundle.".into(),
+        );
+    }
+    let mut child = Command::new(helper)
+        .arg("--client")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    child
+        .stdin
+        .take()
+        .ok_or("Cannot send addresses to helper.")?
+        .write_all(&serde_json::to_vec(names).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "Address change failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    if !super::current(names)? {
+        return Err("The address helper did not update the hosts file.".into());
+    }
+    if names.is_empty() {
+        unregister()?;
+    }
+    Ok(())
+}

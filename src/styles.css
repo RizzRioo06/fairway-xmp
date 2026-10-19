@@ -97,6 +97,9 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .help-tip-content p{font-size:11px;line-height:1.7;margin:0 0 9px;color:inherit}
 .help-tip-content p:last-child{margin-bottom:0}
 .help-tip-content code{font-size:10px;color:#355d44;white-space:nowrap}
+.help-tip[data-placement=above] .help-tip-content{top:auto;bottom:calc(100% + 8px)}
+.help-tip[data-placement=above] .help-tip-content::before{top:auto;bottom:-10px}
+.site-field{display:flex;flex-direction:column;gap:9px}.site-field-title{display:flex;align-items:center;gap:6px}.site-field-title label{font-size:13px;font-weight:550}.site-inline-help{display:flex;align-items:center;justify-content:space-between;gap:10px}.project-form .site-field-title .help-tip-content{left:0;right:auto}.project-form .help-tip-content code{white-space:normal}
 
 .help-tip-content::before{content:'';position:absolute;left:0;right:0;top:-10px;height:10px}
 

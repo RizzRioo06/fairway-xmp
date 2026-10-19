@@ -707,6 +707,11 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
         crate::data_browser::cli(&Layout::new(runtime)?, &args[2..])?;
         return Ok(true);
     }
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    if action == "--remove-native-hosts-helper" {
+        crate::hosts::macos_native::unregister()?;
+        return Ok(true);
+    }
     if action == "--build-info" {
         println!("{}", crate::diagnostics::build_identity());
         return Ok(true);

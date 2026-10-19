@@ -39,11 +39,15 @@ test('projects are added, edited, and removed explicitly', async ({ page }, info
   await dialog.getByLabel('Site name').fill('Course Site');
   await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel('Domain')).toHaveValue('course-site');
+  await expect(dialog.getByLabel('Domain', { exact: true })).toHaveValue('course-site');
   await expect(dialog.getByRole('button', { name: 'Add site' })).toBeDisabled();
   await dialog.getByLabel('Web root folder').click();
   await expect(dialog.getByLabel('Web root folder')).toHaveValue(/new-site.public$/);
-  await expect(dialog).toContainText('course-site.test in your computer’s hosts file');
+  await dialog.getByRole('button', { name: 'About address permissions' }).click();
+  await expect(dialog.getByRole('tooltip')).toContainText('course-site.test in your computer’s hosts file');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('tooltip')).toHaveCount(0);
   await dialog.getByLabel('App type').selectOption('front-controller');
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport();
   await expect(dialog.getByRole('button', { name: 'Add site', exact: true })).toBeInViewport();
@@ -57,9 +61,11 @@ test('projects are added, edited, and removed explicitly', async ({ page }, info
   await siteAction(page, 'Course Site', 'Edit site');
   const edit = page.getByRole('dialog', { name: 'Edit site' });
   await edit.getByLabel('Site name').fill('Course');
-  await expect(edit.getByLabel('Domain')).toHaveValue('course-site');
-  await edit.getByLabel('Domain').fill('course');
-  await expect(edit).toContainText('replaces course-site.test with course.test');
+  await expect(edit.getByLabel('Domain', { exact: true })).toHaveValue('course-site');
+  await edit.getByLabel('Domain', { exact: true }).fill('course');
+  await edit.getByRole('button', { name: 'About address permissions' }).click();
+  await expect(edit.getByRole('tooltip')).toContainText('replaces course-site.test with course.test');
+  await page.keyboard.press('Escape');
   await edit.getByRole('button', { name: 'Save changes' }).click();
   await expect(table.getByText('http://course.test:8800/', { exact: true })).toBeVisible();
 
@@ -68,6 +74,35 @@ test('projects are added, edited, and removed explicitly', async ({ page }, info
   await expect(remove).toContainText('its files are kept');
   await remove.getByRole('button', { name: 'Remove site' }).click();
   await expect(page.getByText('No sites yet.')).toBeVisible();
+});
+
+test('site form keeps detailed help optional and keyboard accessible', async ({ page }) => {
+  await page.goto('/');
+  await openSites(page);
+  await page.getByRole('button', { name: 'Add site', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add site' });
+  await expect(dialog.getByRole('tooltip')).toHaveCount(0);
+  await expect(dialog).not.toContainText('The site name can use any language');
+  for (const label of ['About site domains', 'About the web root', 'About app routing', 'About address permissions']) {
+    const button = dialog.getByRole('button', { name: label, exact: true });
+    await button.focus();
+    const tip = dialog.getByRole('tooltip');
+    await expect(tip).toBeVisible();
+    await expect(tip).toBeInViewport({ ratio: 1 });
+    const fits = await tip.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const scroll = element.closest('.modal-form-body')!.getBoundingClientRect();
+      return bounds.left >= scroll.left && bounds.right <= scroll.right && bounds.top >= scroll.top && bounds.bottom <= scroll.bottom;
+    });
+    expect(fits).toBe(true);
+    await button.press('Enter'); // Help inside a form must never submit it.
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tip).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+  }
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('removing the last HTTPS project also removes certificate trust', async ({ page }) => {

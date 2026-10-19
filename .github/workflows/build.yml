@@ -52,6 +52,9 @@ jobs:
       - run: npm run build
       - run: npm run test:scripts
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked ${{ runner.os == 'macOS' && '--all-features' || '' }}
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked ${{ runner.os == 'macOS' && '--all-features' || '' }} -- -D warnings
+      - name: Compile native Mac address helper and check non-privileged guards
+        if: runner.os == 'macOS'
+        run: python scripts/build_macos_hosts_helper.py --team-id AAAAAAAAAA --output artifacts/helper-compile-check
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
