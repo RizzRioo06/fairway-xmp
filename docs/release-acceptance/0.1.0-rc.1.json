@@ -4,7 +4,7 @@
   "platforms": {
     "windows-x64": {
       "tester": "Release owner (eimg)",
-      "os": "",
+      "os": "Windows 11 — August 11, 2026 update, KB5121003",
       "testedAt": "2026-10-19",
       "installerSha256": "cbc06db5ebcaa63df3ba9308802c08ba2bafc26e71948c511e66ed1ee8abe259",
       "checks": {
@@ -23,7 +23,7 @@
     },
     "macos-arm64": {
       "tester": "Release owner (eimg)",
-      "os": "",
+      "os": "macOS 27 Beta 4",
       "testedAt": "2026-10-19",
       "installerSha256": "ef36c0487f8b24a5bf3a0635ffa667da1972bf68ea29a02cce765be1d7b5d875",
       "checks": {
@@ -42,7 +42,7 @@
     },
     "linux-x86_64": {
       "tester": "Release owner (eimg)",
-      "os": "",
+      "os": "Ubuntu 26.04",
       "testedAt": "2026-10-19",
       "installerSha256": "89157247aa8e457b3e770e152a984831953c5c7bacfef7524b8e2e874b1b869f",
       "checks": {
@@ -62,6 +62,6 @@
     "statement": "considered human device test done and pass",
     "basis": "Release owner report in the release preparation chat; not an agent-observed device test. Date fields record the confirmation date; exact execution dates were not separately supplied.",
     "scope": "Candidate 5 pre-publication checks. The agreed human update/restart checks remain deferred.",
-    "missingDetails": "Tested OS versions have been requested; blank OS fields intentionally block publication validation."
+    "osDetails": "Supplied by the release owner in the release preparation chat; recorded as reported."
   }
 }
