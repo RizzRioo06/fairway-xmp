@@ -7,7 +7,7 @@ async function enter(page: Page, command: string) {
 }
 async function open(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
 }
 
@@ -224,7 +224,7 @@ test('history preference applies to new sessions without interrupting existing c
   });
   await page.goto('/');
   await page.getByLabel('Example paths').selectOption('macOS');
-  await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-history-preference', 'true');
   await enter(page, 'echo history-setting-keeps-session');

@@ -12,7 +12,7 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
   const { close, errors } = await nativeBridge(page, info);
   try {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open terminal', exact: true }).click();
+    await page.getByRole('button', { name: 'Terminal', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
     const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
     const rows = page.locator('.terminal-tab-panel:not([hidden]) .terminal-host .xterm-rows');

@@ -61,7 +61,17 @@ const trustApproval: Record<string, string> = {
 
 export default function App() {
   const [data, setData] = useState<Snapshot>(preview);
-  const [view, setView] = useState<View>('environment');
+  const [view, setCurrentView] = useState<View>('environment');
+  const navigation = useRef({ view: 'environment' as View, id: 0 });
+  const pageId = navigation.current.id;
+
+  function setView(next: View) {
+    if (navigation.current.view !== next) {
+      navigation.current = { view: next, id: navigation.current.id + 1 };
+      setNoticeState(null);
+    }
+    setCurrentView(next);
+  }
   const [logRequest, setLogRequest] = useState<{ key: number; source: string } | null>(null);
 
   function showLog(service: ServiceId) {
@@ -75,7 +85,18 @@ export default function App() {
   const [backendBusy, setBackendBusy] = useState<string | null>(null);
   const busy = backendBusy ?? localBusy;
   const databaseBusy = backendBusy === 'Working with database…';
-  const [notice, setNotice] = useState<Notice>(null);
+  const [notice, setNoticeState] = useState<Notice>(null);
+  const lastBackendError = useRef<string | null>(null);
+  function setNotice(next: Notice) {
+    // An operation may finish after the user has left its page.
+    if (navigation.current.id === pageId) setNoticeState(next);
+  }
+  const reportBackendError = useCallback((error: unknown) => {
+    const text = message(error);
+    if (lastBackendError.current === text) return;
+    lastBackendError.current = text;
+    setNoticeState({ kind: 'error', text });
+  }, []);
   const [report, setReport] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [mailSettings, setMailSettings] = useState(false);
@@ -89,7 +110,7 @@ export default function App() {
   const [sslSetup, setSslSetup] = useState<Project | null>(null);
   const operation = useRef(false);
   const backendOperation = useRef(false);
-  const noticeRef = useRef<HTMLDivElement>(null);
+  const operationFocus = useRef<{ trigger: HTMLElement; pageId: number } | null>(null);
   const versions = data.runtimeVersions;
   const selectedPhp = data.phpVersions[data.phpVersion] ?? versions?.php;
   const allReady = data.services.filter(service => service.id !== 'mail' || data.mailAvailable || service.running).every(service => service.ready);
@@ -126,7 +147,7 @@ export default function App() {
         const current = await invoke<Snapshot>('snapshot');
         if (!disposed) setData(current);
       } catch (error) {
-        if (!disposed) setNotice({ kind: 'error', text: message(error) });
+        if (!disposed) reportBackendError(error);
       } finally { fetching = false; }
     };
     void poll();
@@ -135,7 +156,8 @@ export default function App() {
       ...(isUiTest ? [listen('ui-test-reset', payload => {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
-        setNotice(null); setUpdate(null); setUpdateProgress(null); setReport(null); setHelp(false); setCopied(null);
+        setNoticeState(null); lastBackendError.current = null;
+        setUpdate(null); setUpdateProgress(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
       listen('fairway-status', payload => setData(payload as Snapshot)),
       listen('fairway-operation-started', payload => {
@@ -148,25 +170,37 @@ export default function App() {
       listen('fairway-update-progress', payload => setUpdateProgress(payload as UpdateProgress)),
       listen('fairway-error', payload => {
         setBusy(null); operation.current = false;
-        setNotice({ kind: 'error', text: String(payload) });
+        reportBackendError(String(payload));
       }),
       listen('fairway-shutdown', () => {
         backendOperation.current = true; setBackendBusy('Stopping services before quitting…');
       }),
     ]).then(items => {
       if (disposed) items.forEach(fn => fn()); else unlisteners.push(...items);
-    }).catch(error => { if (!disposed) setNotice({ kind: 'error', text: message(error) }); });
+    }).catch(error => { if (!disposed) reportBackendError(error); });
     return () => { disposed = true; unlisteners.forEach(fn => fn()); };
   }, []);
 
-  // Results appear at the top of the page; bring them into view from lower cards.
-  useEffect(() => { noticeRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [notice]);
   useEffect(() => { setPorts(data.ports); }, [data.ports.website, data.ports.phpmyadmin, data.ports.mysql, data.ports.php, data.ports.mail, data.ports.smtp]);
   useEffect(() => { setPhpVersion(data.phpVersion); }, [data.phpVersion]);
+  useEffect(() => {
+    if (busy || !operationFocus.current) return;
+    const { trigger, pageId: origin } = operationFocus.current;
+    operationFocus.current = null;
+    // Some WebViews blur a disabled button. Wait until React has enabled it,
+    // and never take focus from navigation, a modal, or another control.
+    if (navigation.current.id === origin && document.activeElement === document.body &&
+        !document.querySelector('[aria-modal="true"]') && trigger.isConnected && !trigger.matches(':disabled')) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, [busy]);
 
   async function run(label: string, action: () => Promise<void>) {
     if (operation.current || backendOperation.current) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    operationFocus.current = trigger ? { trigger, pageId } : null;
     operation.current = true;
+    lastBackendError.current = null;
     setBusy(label); setNotice(null);
     try { await action(); }
     catch (error) { setNotice({ kind: 'error', text: message(error) }); }
@@ -272,7 +306,6 @@ export default function App() {
       <div className={view === 'mail' || view === 'logs' ? 'main-content wide' : 'main-content'}>
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
-        {notice && <div ref={noticeRef} className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={17} /></button></div>}
         {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></Suspense></div>}
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
 
@@ -287,15 +320,15 @@ export default function App() {
           })}</div>
           {canControl && !data.runtimeReady && <div className="notice error" role="alert">Fairway XMP’s PHP or database files are missing. Reinstall Fairway XMP to restore them. Your projects and database data will be kept.</div>}
 
-          <div className="workspace-card">
-            <div className="workspace-icon"><FolderOpen size={23} /></div>
-            <div className="workspace-details"><h2>Document root</h2><p>PHP files here open at http://127.0.0.1:{data.ports.website}/.</p><code title={data.documentRoot}>{data.documentRoot}</code></div>
-            <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('coursework')}>Open folder<ArrowUpRight size={15} /></button>
-          </div>
-
-          <div className="bottom-grid">
-            <section className="connection-card"><div className="card-title"><h2><Database size={17} />Database connection</h2><button className="icon-button" title="Copy database environment settings" aria-label="Copy database environment settings" onClick={() => { void copy(connection, 'database'); }}>{copied === 'database' ? <Check size={16} /> : <Clipboard size={16} />}</button></div><dl><div><dt>Host</dt><dd>127.0.0.1<span className="port-inline">:{data.ports.mysql}</span></dd></div><div><dt>Database</dt><dd>fairway</dd></div><div><dt>Username / password</dt><dd>fairway / fairway</dd></div></dl><button className="text-link" disabled={!data.services.find(s => s.id === 'mysql')?.ready || !!busy} onClick={() => { void run('Backing up databases…', async () => { const path = await invoke<string>('backup_database'); setNotice({ kind: 'success', text: `Database backup saved: ${path}` }); }); }}><Download size={14} />Back up databases</button></section>
-            <section className="terminal-card"><span className="terminal-symbol"><Terminal size={20} /></span><h2>Your tools, right here.</h2><p>Run PHP and Composer in the embedded terminal.<br />Ready for your projects.</p><button className="secondary" disabled={!canControl || !data.runtimeReady || !!busy} onClick={() => open('terminal')}>Open terminal<ChevronRight size={15} /></button></section>
+          <div className="section-heading workspace-heading"><h2>Workspace details</h2></div>
+          <div className="workspace-reference">
+            <section className="reference-card document-root-card">
+              <div className="card-title"><h2><FolderOpen size={17} />Document root</h2></div>
+              <p className="reference-description">PHP files here open at http://127.0.0.1:{data.ports.website}/.</p>
+              <code className="document-root-path">{data.documentRoot}</code>
+              <div className="reference-actions"><button className="text-link" disabled={!canControl || !!busy} onClick={() => open('coursework')}><FolderOpen size={14} />Open folder<ArrowUpRight size={14} /></button></div>
+            </section>
+            <section className="reference-card connection-card"><div className="card-title"><h2><Database size={17} />Database connection</h2><button className="icon-button" title="Copy database environment settings" aria-label="Copy database environment settings" onClick={() => { void copy(connection, 'database'); }}>{copied === 'database' ? <Check size={16} /> : <Clipboard size={16} />}</button></div><dl><div><dt>Host</dt><dd>127.0.0.1<span className="port-inline">:{data.ports.mysql}</span></dd></div><div><dt>Database</dt><dd>fairway</dd></div><div><dt>Username / password</dt><dd>fairway / fairway</dd></div></dl><div className="reference-actions"><button className="text-link" disabled={!data.services.find(s => s.id === 'mysql')?.ready || !!busy} onClick={() => { void run('Backing up databases…', async () => { const path = await invoke<string>('backup_database'); setNotice({ kind: 'success', text: `Database backup saved: ${path}` }); }); }}><Download size={14} />Back up databases</button></div></section>
           </div>
           <footer className="content-footer"><span><span className="status-dot running" />127.0.0.1 · Local access only</span><button onClick={() => setView('settings')}>Configure environment<Settings2 size={13} /></button></footer>
         </>}
@@ -333,7 +366,7 @@ export default function App() {
             </form>
           </section>
           <section className="settings-card cli-tools" aria-label="Command-line tools">
-            <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. “Open terminal” uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
+            <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. The embedded terminal uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
             <p>{data.pathInstalled ? 'Available in new terminals and restarted editors.' : 'Add these commands to your user PATH.'}</p>
             <div className="cli-commands" aria-label="Terminal commands"><code>php</code><code>composer</code>{databaseCliAvailable && <code>fairway db</code>}</div>
             <button className="secondary" disabled={!canControl || !!busy || (!data.pathInstalled && !data.runtimeReady)} onClick={() => { void run('Updating user PATH…', async () => {
@@ -363,6 +396,13 @@ export default function App() {
             {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy} onClick={() => { void run('Downloading update…', async () => { setUpdateProgress({ phase: 'downloading', downloaded: 0 }); try { await invoke<void>('install_update', { version: update.version }); } finally { setUpdateProgress(null); } }); }}>Install update</button></div>}
           </section>
         </>}
+      </div>
+      <div className={`operation-notice${notice ? ` notice ${notice.kind}` : ''}`}>
+        <div className="operation-notice-message">
+          <div role={notice?.kind === 'success' ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice?.kind === 'success' ? notice.text : null}</div>
+          <div role={notice?.kind === 'error' ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{notice?.kind === 'error' ? notice.text : null}</div>
+        </div>
+        {notice && <button aria-label="Dismiss message" onClick={() => setNoticeState(null)}><X size={17} /></button>}
       </div>
       {busy && !databaseBusy && <div className="operation-status" role="status"><LoaderCircle className="spin" size={16} />{busy}</div>}
     </main>
@@ -394,12 +434,26 @@ function ServiceCard({ service, version, unavailable, disabled, busy, onAction, 
   const Icon = item.icon;
   const browser = service.id === 'phpmyadmin';
   const web = browser || service.id === 'nginx' || service.id === 'mail';
+  const status = <span className={`status-label ${service.ready ? 'ready' : service.running ? 'pending' : ''}`}><span className={`status-dot ${service.ready ? 'running' : service.running ? 'pending' : ''}`} />{service.ready ? 'Running' : service.running ? 'Waiting' : 'Stopped'}</span>;
+  const address = <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : web ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{web && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(service.id === 'nginx' ? 'website' : service.id)}><ExternalLink size={14} /></button>}</div>;
+  const error = (service.message || unavailable) && <div className="service-error" role="status">{service.message || 'Mail catcher files are missing. Reinstall Fairway XMP to restore mail.'}</div>;
+  const actions = <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!canControl} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>;
+
+  if (service.id === 'mail') return <section className="service-card service-card-mail">
+    <div className="mail-service-summary">
+      <span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span>
+      <div className="mail-service-details">
+        <div className="mail-service-heading"><div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div>{status}</div>
+        <p>{item.description}</p>
+      </div>
+    </div>
+    {address}{actions}{error}
+  </section>;
+
   return <section className="service-card">
-    <div className="service-top"><span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span><span className={`status-label ${service.ready ? 'ready' : service.running ? 'pending' : ''}`}><span className={`status-dot ${service.ready ? 'running' : service.running ? 'pending' : ''}`} />{service.ready ? 'Running' : service.running ? 'Waiting' : 'Stopped'}</span></div>
+    <div className="service-top"><span className={`service-icon ${item.color}`}><Icon size={23} strokeWidth={1.8} /></span>{status}</div>
     <div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div><p>{item.description}</p>
-    <div className="service-address"><span>{service.id === 'php' ? 'Internal port' : web ? 'localhost' : '127.0.0.1'}<span className="address-port">:{service.port}</span></span>{web && <button className="icon-button" title={`Open ${item.name}`} aria-label={`Open ${item.name}`} disabled={!service.ready || busy} onClick={() => onOpen(service.id === 'nginx' ? 'website' : service.id)}><ExternalLink size={14} /></button>}</div>
-    {(service.message || unavailable) && <div className="service-error" role="status">{service.message || 'Mail catcher files are missing. Reinstall Fairway XMP to restore mail.'}</div>}
-    <div className="service-actions">{browser ? <button className="service-start" disabled={!service.ready || busy} onClick={() => onOpen('phpmyadmin')}>Open phpMyAdmin<ArrowUpRight size={14} /></button> : service.id === 'php' ? <span className="service-managed">Managed with Nginx</span> : <><button className="service-start" disabled={disabled} onClick={() => onAction(service.running ? 'stop' : 'start', service.id)}>{service.running ? <Square size={12} /> : <Play size={12} />}{service.running ? 'Stop service' : 'Start service'}</button><button className="icon-button" title={`Restart ${item.name}`} aria-label={`Restart ${item.name}`} disabled={disabled || !service.running} onClick={() => onAction('restart', service.id)}><RefreshCw size={14} /></button></>}<button className="icon-button" title={`View ${item.name} logs`} aria-label={`View ${item.name} logs`} disabled={!canControl} onClick={() => onLog(service.id)}><ScrollText size={15} /></button></div>
+    {address}{error}{actions}
   </section>;
 }
 
