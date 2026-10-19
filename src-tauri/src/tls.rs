@@ -11,6 +11,9 @@ use time::OffsetDateTime;
 pub const HTTPS_PORT: u16 = 8443;
 const CA_NAME: &str = "Fairway XMP Local CA";
 
+#[cfg(all(target_os = "macos", feature = "native-macos-trust"))]
+mod macos_native;
+
 pub fn https_port() -> u16 {
     #[cfg(debug_assertions)]
     if let Ok(port) = std::env::var("FAIRWAY_DEV_HTTPS_PORT") {
@@ -193,6 +196,7 @@ fn verify_macos_trust(layout: &Layout) -> Result<()> {
 
 pub fn ensure_trust(layout: &Layout) -> Result<()> {
     ensure_certificate(layout)?;
+    #[cfg(not(target_os = "macos"))]
     let root = root_certificate(layout);
     #[cfg(target_os = "macos")]
     {
@@ -207,12 +211,18 @@ pub fn ensure_trust(layout: &Layout) -> Result<()> {
                     .into(),
             );
         }
-        let mut install = Command::new("/usr/bin/security");
-        install
-            .args(["add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k"])
-            .arg(keychain)
-            .arg(root);
-        run(install).map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
+        #[cfg(feature = "native-macos-trust")]
+        macos_native::install(&root_certificate(layout), &keychain)?;
+        #[cfg(not(feature = "native-macos-trust"))]
+        {
+            let mut install = Command::new("/usr/bin/security");
+            install
+                .args(["add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k"])
+                .arg(keychain)
+                .arg(root_certificate(layout));
+            run(install)
+                .map_err(|e| format!("Could not trust Fairway's local certificate: {e}"))?;
+        }
         verify_macos_trust(layout).map_err(|e| {
             format!("macOS did not trust Fairway's local certificate after installation: {e}")
         })?;

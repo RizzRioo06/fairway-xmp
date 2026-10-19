@@ -1,6 +1,6 @@
 # macOS authorization assessment — 2026-10-19
 
-Status: assessment only, prepared after RC 1. No authorization, hosts-file, certificate-store or installer behavior changes are included. The owner will decide separately whether the proposed work warrants another RC.
+Status: assessment plus an opt-in native HTTPS-trust prototype, prepared after RC 1 at the owner's request for a local Mac comparison build. Standard builds keep the existing authorization behavior. The owner will decide separately whether the proposed work warrants another RC.
 
 ## Findings in the current source
 
@@ -24,7 +24,11 @@ Apple documents a separate authentication interaction for [per-user certificate 
 
 ## Recommended next experiment
 
-Investigate **native per-user HTTPS trust setup first**, independently of hosts elevation. A small Mac-only prototype would add the same CA certificate to the login keychain and apply the same SSL-scoped user trust using Security framework APIs, retain the existing trust verification, and implement matching removal. It would not add a preliminary Local Authentication dialog, unlock keychains with stored passwords, or alter macOS authorization policy. No prototype is integrated in this branch.
+Investigate **native per-user HTTPS trust setup first**, independently of hosts elevation. The opt-in `native-macos-trust` Cargo feature now adds the same public CA certificate to the login keychain with `SecItemAdd`, then applies SSL-server-only trust in the user domain with `SecTrustSettingsSetTrustSettings`. It decodes the actual PEM used by verification rather than relying on a potentially stale DER sidecar. Existing trust verification and compatible certificate/trust removal are retained. It adds no preliminary Local Authentication dialog, stored-password keychain unlock, administrator helper or authorization-policy changes. A duplicate public certificate left after cancellation is accepted for retry; other insertion errors stop before requesting trust. The trusted marker is written only after the existing verification succeeds. Cancellation and other errors retain the failed operation's context.
+
+The four optional Mac dependencies already existed in Cargo.lock; their versions and checksums are unchanged. Ordinary builds leave the feature off, and Windows/Linux keep their existing trust implementation. The local comparison build enables it explicitly and labels its window **Fairway XMP — Native HTTPS Prototype**. It uses the ordinary Fairway profile and therefore must be run after quitting the installed app; it does not replace the installed RC 1 bundle. A Developer ID signature identifies the local app, but this is a test build rather than a notarized release candidate.
+
+For a meaningful prompt comparison, existing CA trust must first be absent. In the app, turn HTTPS off for all sites, choose **Remove certificate trust**, then enable HTTPS for one existing site. Merely enabling another site while the CA is already trusted intentionally skips setup. Compare prompt count, wording and authentication methods; fewer prompts are not yet established. Cancel a setup and retry, enable a second HTTPS site, then remove trust when unused. Address/hosts changes remain on the existing administrator-password path. These steps affect the normal profile's local CA trust; no automatic trust removal or setup is run during build/verification.
 
 Use a disposable logged-in test account and a dedicated test CA. Record the exact dialog text, requesting process, prompt count and available authentication methods for the current implementation and prototype. Cover an unlocked and locked login keychain, clean and already-trusted CA, cancellation at each prompt, Touch ID unavailable/disabled, a standard user account, a second HTTPS site, trust removal and re-creation. Check the oldest supported macOS release as well as the owner's macOS 27 beta; the beta alone cannot establish shipping behavior. Remove only the dedicated test CA afterward.
 
@@ -38,4 +42,4 @@ This is substantially more work than replacing the password dialog. Keep it outs
 
 ## Release recommendation
 
-Keep RC 1 and its published artifacts unchanged. The accompanying welcome-page proposal is independent visual/content polish; the authorization work remains an assessment. A future authorization change needs its own implementation review and native acceptance. Any welcome-page or authorization implementation chosen for another RC requires a fresh candidate build and acceptance; existing RC 1 hashes do not cover it.
+Keep RC 1 and its published artifacts unchanged. The accompanying welcome-page proposal is independent visual/content polish. The native trust feature remains an opt-in test proposal and needs the user's real prompt comparison before any decision to enable it normally. Any welcome-page or authorization implementation chosen for another RC requires a fresh candidate build and acceptance; existing RC 1 hashes do not cover it.

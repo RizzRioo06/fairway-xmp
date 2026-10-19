@@ -55,7 +55,7 @@ const hostsApproval: Record<string, string> = {
   windows: 'Windows will ask for administrator permission.',
 };
 const trustApproval: Record<string, string> = {
-  macos: 'Fairway adds its local certificate to your login keychain. macOS asks for your password to approve the trust setting; an administrator account is not required.',
+  macos: 'Fairway adds its local certificate to your login keychain. macOS asks you to approve the trust setting; use Touch ID if offered, or your password. An administrator account is not required.',
   windows: 'Fairway adds its local certificate to your Windows user certificate store. Windows shows a security warning; choose Yes to continue. An administrator account is not required.',
 };
 
