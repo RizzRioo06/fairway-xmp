@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Create beta update metadata pointing only at verified versioned release assets."""
+"""Create update metadata pointing only at verified versioned release assets."""
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-import re
 from urllib.parse import quote
 from release_candidate import verify_files
-
-
-def beta_version(value):
-    match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)-beta\.(\d+)', value)
-    if not match: raise ValueError('Expected a numbered beta version')
-    return tuple(map(int, match.groups()))
+from release_versions import version_key
 
 
 def generate(manifest, directories, repo, notes, published_at=None):
     version = manifest['version']
-    beta_version(version)
+    version_key(version)
     if repo != 'eimg/fairway-xmp': raise ValueError('Unexpected release repository')
     if manifest.get('signing') != {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}:
         raise ValueError('Missing expected release signing policy')

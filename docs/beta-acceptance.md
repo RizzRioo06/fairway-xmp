@@ -1,6 +1,6 @@
-# Beta candidate and acceptance
+# Candidate build and acceptance
 
-Beta 3 candidates require Mac signing/notarization and signed Mac/Windows updater artifacts; Windows Authenticode remains deferred. See [signed beta releases](signed-beta-releases.md). PHP 8.5 is the default; PHP 8.0/8.1 remain unsupported legacy options for older coursework. Their Windows dependency build/patch provenance remains an open, explicitly recorded limitation in [release follow-ups](release-follow-ups.md). This process does not mark that work verified.
+Beta 3 candidates require Mac signing/notarization and signed Mac/Windows updater artifacts; Windows Authenticode remains deferred. See [signed beta releases](signed-beta-releases.md). PHP 8.5 is the default; PHP 8.0/8.1 remain unsupported legacy options for older coursework. Their Windows dependency build/patch provenance remains an open, explicitly recorded limitation in [release follow-ups](release-follow-ups.md). For the RC cycle, the release owner accepts those Windows limitations as-is; this process does not mark that work verified. See [RC preparation](rc-preparation.md) for scope and release channels.
 
 ## Build a candidate
 
@@ -36,22 +36,45 @@ The browser HTML report provides screenshots for normal/minimum window sizes, se
 For this candidate, perform a short native check on the supported target OS. Record the OS version, tester, date, and installer SHA256 in a copy of the generated acceptance template:
 
 1. **Install and first project:** install as an ordinary user. Windows must exercise Visual C++/WebView2 prerequisites on a clean machine. Start services, run a PHP/database project, open phpMyAdmin, and verify PHP/Composer in a new terminal.
-2. **Upgrade with existing work:** retain a small project, database rows, backup, ports, and PHP selection across alpha → candidate installation. Try a supported alternative PHP version and reopen the app.
+2. **Upgrade with existing work:** retain a small project, database rows, backup, ports, and PHP selection across current beta → candidate installation; automated historical alpha upgrade coverage is additional. Try a supported alternative PHP version and reopen the app.
 3. **Uninstall and reinstall:** choose the default keep-data behavior; reinstall and open the same project/database. Confirm unrelated PHP/MySQL installations and shell settings still work.
 4. **Desktop native controls:** close/reopen the window, use the tray/menu bar, and Quit while an operation is pending. Verify services shut down and no error is hidden. For Linux, review dashboard rendering, `q` detach, and `Q` shutdown instead.
 5. **Desktop data browser and SQL tools:** start MySQL from Data browser, create a database/table, insert/edit/delete a row, check NULL and large numeric values, execute/cancel SQL, export a database and import it using `fairway db`. Confirm a protective backup is created before a destructive schema change. Try a home/project path with spaces and non-ASCII characters.
 6. **Desktop terminal sessions and cleanup:** run PHP and Composer without persistent PATH integration, keep a development server in one tab while working in the other, interrupt it with Ctrl+C, change the new-terminal project folder, search/resize, navigate away and return, then Quit and confirm both shell command trees have ended. On Mac also check command history opt-out in new sessions; Windows uses in-session history.
 7. **Desktop visual review:** inspect the same commit's browser screenshots and briefly check the installed app for native WebView differences.
 
+8. **Desktop Sites and HTTPS:** add/edit a site, check domain setup/retry, approve HTTPS trust, verify the browser URL and registered web root, and confirm saved settings survive restart and upgrade.
+9. **Desktop in-app update and restart (after publication and feed promotion):** from an enabled signed build, install this candidate as a subsequent version through Updates; check progress, database backup, graceful service/terminal shutdown, restart, version change, preserved project/site/settings/data, and PHP/Composer/database launchers. Check approval and cancellation of the macOS administrator prompt if the installed app cannot be replaced directly. Earlier betas require the manual bootstrap install. The automated same-version reinstall drill does not mark this check complete.
+10. **Desktop mail catcher and inbox:** start/stop Mail alone and from the tray, send PHP mail() and framework SMTP mail, read/search/preview/delete messages, save an attachment, and check restart/Quit cleanup. Verify existing custom ports survive migration.
+11. **Desktop troubleshooting logs:** reproduce a PHP error and a failed HTTP/HTTPS request, open Logs, select two site addresses and verify request isolation while shared PHP stays clearly labeled, check source/search filters and successful requests with Problems only off, then pause, copy the filtered output and resume. Confirm multiline errors, service startup failures, navigation continuity and readable normal/minimum window layouts. Logs must remain usable during service operations.
+
 Set a check to true only after it passed for the exact artifact. Preserve notes/screenshots of failures separately and rebuild after a code/runtime change; old acceptance does not apply to the new hash.
+
+## Acceptance before and after publication
+
+The owner approved this sequencing on 2026-10-19: every check except desktop `in-app-update-and-restart` must pass before publication. That human check needs the published production feed. Keep it explicitly false on both desktop targets until tested; missing fields, non-boolean values and any other unfinished check still fail. Existing templates without `postPublicationChecks` metadata remain supported; the checker defines the allowed deferral, not the evidence file. All exact-installer identity fields and automated signed-updater/lifecycle gates remain mandatory.
+
+Before publication:
 
 ```sh
 python scripts/release_candidate.py check-acceptance \
+  --phase pre-publication \
+  --manifest /path/to/candidate-manifest.json \
+  --evidence /path/to/pre-publication-acceptance.json
+```
+
+The command reports pending update checks without completing them. RC/stable publication requires this pre-publication evidence. Published `acceptance.json` preserves the submitted booleans; `BUILD-INFO.json` records `prePublicationHumanAccepted`, full `humanAccepted` and the pending checks separately. The candidate manifest retains its original build-time status. When the owner authorizes publication, reuse the reviewed files unchanged, include their matching source archives and checksums, and update downloads/changelog/known limitations. Don't rebuild between acceptance and publication.
+
+After the owner-authorized release and feed promotion, test a real update into that exact version on Mac and Windows. Record dated results, including protected Mac prompt approval/cancellation, with the tester and OS. Complete only the update checks that passed in a copy of the same evidence, retaining all installer hashes and the earlier records. Then run:
+
+```sh
+python scripts/release_candidate.py check-acceptance \
+  --phase post-publication \
   --manifest /path/to/candidate-manifest.json \
   --evidence /path/to/completed-acceptance.json
 ```
 
-This rejects mismatched commits/versions/hashes, missing tester information, and unfinished checks. It reports acceptance; it never publishes. When publishing is authorized, reuse the reviewed files unchanged, include their matching source archives and checksums, and update downloads/changelog/known limitations. Don't rebuild between acceptance and publication.
+This phase requires every check; it is also the default when `--phase` is omitted. Commit the completed evidence and dated test notes in the release checkout for review, keeping the published pre-publication snapshot intact. Do not overwrite published installer bytes or claim full acceptance before this passes. If the human update fails, keep it false, record the failure, stop further rollout and investigate before another promotion/release. Neither checker command publishes anything.
 
 Before dispatching the publication workflow, create and push the release tag at the exact candidate commit using the release owner's authenticated Git access. The publisher checks that the fetched tag resolves to that commit and uses `--verify-tag`; it never moves the tag or supplies a historical `target_commitish` to the release API. GitHub's workflow token cannot satisfy the extra workflow permission that explicit historical targets can require.
 
@@ -60,6 +83,3 @@ Before dispatching the publication workflow, create and push the release tag at 
 Desktop: **Settings → Help and diagnostics → Diagnostic report**, review the JSON, then **Copy diagnostic report**. Linux: `fairway diagnostics`. The report includes app version, source commit/modified-source flag, OS/architecture, runtime readiness/versions, selected PHP, service ports/readiness, and command-detection categories. It excludes filesystem paths, logs, project/database contents, and credentials. GUI app PATH detection can differ from a new terminal.
 
 Desktop executables and the Linux CLI also accept `--build-info` for machine-readable version/commit/OS/architecture without launching the GUI or supervisor. Build identity is embedded at compilation; local builds with source edits are marked modified and cannot be recorded as clean release candidates.
-
-8. **Desktop Sites and HTTPS:** add/edit a site, check domain setup/retry, approve HTTPS trust, verify the browser URL and registered web root, and confirm saved settings survive restart and upgrade.
-9. **Desktop in-app update and restart:** from an enabled signed build, install a subsequent version through Updates; check progress, database backup, graceful service/terminal shutdown, restart, version change, preserved project/site/settings/data, and PHP/Composer/database launchers. Check the macOS administrator prompt if the installed app cannot be replaced directly. Earlier betas require the manual bootstrap install. The automated same-version reinstall drill does not mark this check complete.

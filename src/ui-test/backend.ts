@@ -7,7 +7,7 @@ import { cancelData, databaseRequest, resetData } from './data-browser';
 // Fast Refresh cannot keep a screen subscribed to an obsolete simulation.
 if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
 
-export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled'] as const;
+export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled', 'Logs under load', 'Logs empty', 'Logs unreadable', 'Slow mail', 'Mail unavailable'] as const;
 export type Scenario = typeof scenarios[number];
 export type Platform = 'Windows' | 'macOS';
 const events = new EventTarget();
@@ -98,7 +98,7 @@ export function select(next: Scenario, os: Platform) {
   resetData();
   seedMail();
   scenario = next; platform = os;
-  data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', mailAvailable: next !== 'Missing runtime', pathInstalled: true };
+  data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', mailAvailable: next !== 'Missing runtime' && next !== 'Mail unavailable', pathInstalled: true };
   data.sitesError = next === 'Saved sites unavailable' ? 'The saved site list is invalid: expected a JSON array.' : null;
   data.projects = next === 'No sites' || data.sitesError ? [] : [
     { name: 'My Shop', domain: 'shop', root: joinPath(home(), 'Code', 'shop', 'public'), https: true, indexFallback: true, available: next !== 'Missing web root', domainReady: true },
@@ -108,8 +108,9 @@ export function select(next: Scenario, os: Platform) {
   data.domainsPending = next === 'Hosts update pending';
   data.os = platform === 'Windows' ? 'windows' : 'macos';
   configureCli(next !== 'CLI disabled');
-  if (next === 'Running' || next === 'Partially running') running('nginx', true);
-  if (next === 'Running') { running('mysql', true); running('mail', true); }
+  if (next === 'Running' || next === 'Partially running' || next === 'Slow mail' || next === 'Mail unavailable') running('nginx', true);
+  if (next === 'Running' || next === 'Slow mail') { running('mysql', true); running('mail', true); }
+  if (next === 'Mail unavailable') running('mysql', true);
   if (next === 'Partially running') {
     Object.assign(data.services.find(service => service.id === 'mysql')!, {
       running: true, pid: 12346, message: 'MySQL is starting. Check the logs if it does not become ready.',
@@ -129,10 +130,17 @@ export function listen(event: string, callback: (payload: unknown) => void) {
 }
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'save_mail_attachment') return `/Users/you/Downloads/${String(args.name)}` as T;
-  if (command === 'mail_inbox') return structuredClone(mailRequest(args.request as Parameters<typeof mailRequest>[0])) as T;
+  if (command === 'mail_inbox') {
+    const request = args.request as Parameters<typeof mailRequest>[0];
+    const response = structuredClone(mailRequest(request));
+    if (scenario === 'Slow mail') await new Promise(resolve => window.setTimeout(resolve,
+      request.query === 'welcome' || request.id === 'welcome' ? 1400 : 30));
+    return response as T;
+  }
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
   if (command === 'data_browser') {
     if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');
@@ -202,7 +210,16 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'backup_database':
       if (!data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before making a backup.');
       result = joinPath(data.dataDir, 'backups', 'student-databases-ui-test.sql'); break;
-    case 'read_log': result = `[UI TEST — simulated ${String(args.service)} log]\nService configuration loaded.\nReady for local connections.\nNo real services are running.`; break;
+    case 'read_logs':
+      if (scenario === 'Logs empty' || scenario === 'Logs unreadable') { result = { entries: [], unavailable: scenario === 'Logs unreadable' ? ['php.log: permission denied'] : [], limited: false }; break; }
+      if (scenario === 'Logs under load') { result = { entries: Array.from({ length: 900 }, (_, index) => ({ id: `burst-${index}`, source: ['php', 'mysql', 'mail'][index % 3], file: 'test.log', severity: index === 0 ? 'error' : 'unknown', time: index === 0 ? new Date(1792324800000).toISOString() : null, text: `burst-log-${index} 日本 မြန်မာ` })), unavailable: [], limited: true }; break; }
+      result = { entries: [
+      { id: 'php-error', source: 'php', file: 'php.log', severity: 'error', time: '2026-10-18T12:00:00Z', text: 'PHP Fatal error: Uncaught Error: Call to undefined function missing_function() in lesson/index.php:4\nStack trace:\n#0 {main}\n  thrown in lesson/index.php on line 4' },
+      { id: 'request-failed', host: 'lesson.test', source: 'requests', file: 'access.log', severity: 'error', time: '2026-10-18T12:00:01Z', text: 'GET http://lesson.test:8800 /index.php → 500 · 0.003 s' },
+      { id: 'mysql-info', source: 'mysql', file: 'mysql.log', severity: 'info', time: '2026-10-18T12:00:02Z', text: '[System] Ready for local connections.' },
+      { id: 'request-ok', host: 'shop.test', source: 'requests', file: 'access.log', severity: 'info', time: '2026-10-18T12:00:03Z', text: 'GET https://shop.test:8843 / → 200 · 0.002 s' },
+      { id: 'mail-output', source: 'mail', file: 'mail-process.log', severity: 'unknown', time: null, text: '[UI TEST — simulated mail log] custom diagnostic <script>safe text</script>' },
+    ], unavailable: [], limited: false }; break;
     case 'diagnostic_report': result = JSON.stringify({
       schema: 1, product: 'Fairway XMP', version: data.version, simulated: true,
       build: { commit: 'ui-test', modifiedSources: false, debug: true },

@@ -303,14 +303,8 @@ impl Manager {
             return Err(error);
         }
         let control = |args: &[&str]| {
-            let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-            cmd.arg("-e")
-                .arg(self.layout.data.join("logs/nginx.log"))
-                .arg("-p")
-                .arg(&self.layout.data)
-                .arg("-c")
-                .arg(&config)
-                .args(args);
+            let mut cmd = self.nginx_command();
+            cmd.args(args);
             process::output(cmd)
         };
         let result = control(&["-t"]).and_then(|_| {
@@ -583,6 +577,7 @@ impl Manager {
     }
 
     fn spawn_service(&mut self, id: &str) -> Result<()> {
+        crate::logs::trim_stopped(&self.layout.data.join("logs"), id)?;
         let mut cmd = match id {
             "php" => {
                 let mut cmd = process::command(self.layout.php_exe(if cfg!(windows) {
@@ -604,25 +599,16 @@ impl Manager {
                 cmd
             }
             "nginx" => {
-                let mut check = process::command(self.layout.exe("nginx", "nginx"));
-                check
-                    .arg("-e")
-                    .arg(self.layout.data.join("logs/nginx.log"))
-                    .arg("-t")
-                    .arg("-p")
-                    .arg(&self.layout.data)
-                    .arg("-c")
-                    .arg(self.layout.data.join("config/nginx.conf"));
+                let mut check = self.nginx_command();
+                check.arg("-t");
                 process::output(check)?;
-                let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-                cmd.arg("-e")
-                    .arg(self.layout.data.join("logs/nginx.log"))
-                    .arg("-p")
-                    .arg(&self.layout.data)
-                    .arg("-c")
-                    .arg(self.layout.data.join("config/nginx.conf"));
+                let cmd = self.nginx_command();
                 #[cfg(not(windows))]
-                cmd.args(["-g", "daemon off;"]);
+                let cmd = {
+                    let mut cmd = cmd;
+                    cmd.args(["-g", "daemon off;"]);
+                    cmd
+                };
                 cmd
             }
             "mysql" => {
@@ -733,6 +719,31 @@ impl Manager {
         )
     }
 
+    fn nginx_command(&self) -> std::process::Command {
+        let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
+        cmd.current_dir(&self.layout.data);
+        // Nginx's Windows main() receives ANSI argv, while its configuration
+        // filenames use UTF-8. Keep argv ASCII and let Windows set the Unicode
+        // working directory, without requiring NTFS short-name aliases.
+        #[cfg(windows)]
+        cmd.args([
+            "-e",
+            "logs/nginx.log",
+            "-p",
+            "./",
+            "-c",
+            "config/nginx.conf",
+        ]);
+        #[cfg(not(windows))]
+        cmd.arg("-e")
+            .arg(self.layout.data.join("logs/nginx.log"))
+            .arg("-p")
+            .arg(&self.layout.data)
+            .arg("-c")
+            .arg(self.layout.data.join("config/nginx.conf"));
+        cmd
+    }
+
     fn database_command(&self, executable: &str, secure: bool) -> std::process::Command {
         let mut cmd = process::command(crate::config::windows_ansi_path(
             &self.layout.exe("mysql", executable),
@@ -827,14 +838,8 @@ impl Manager {
                     process::output(cmd)?;
                 }
                 "nginx" => {
-                    let mut cmd = process::command(self.layout.exe("nginx", "nginx"));
-                    cmd.arg("-e")
-                        .arg(self.layout.data.join("logs/nginx.log"))
-                        .arg("-p")
-                        .arg(&self.layout.data)
-                        .arg("-c")
-                        .arg(self.layout.data.join("config/nginx.conf"))
-                        .args(["-s", "quit"]);
+                    let mut cmd = self.nginx_command();
+                    cmd.args(["-s", "quit"]);
                     process::output(cmd)?;
                 }
                 // Mailpit shuts down cleanly on SIGTERM; SIGQUIT would dump and abort.
@@ -898,21 +903,34 @@ impl Manager {
         if !self.processes.contains_key("mysql") {
             return Err("Start MySQL before making a backup.".into());
         }
-        let (path, partial, output) = reserve_backup(&self.layout.data.join("backups"))?;
+        let (path, partial, mut output) = reserve_backup(&self.layout.data.join("backups"))?;
         let result = (|| {
             let mut cmd = self.database_command("mysqldump", true);
             // Back up student databases, not MySQL's version-dependent system schema.
             let mut list = self.database_command("mysql", true);
-            list.args(["--batch", "--skip-column-names", "-e", "SHOW DATABASES"]);
-            let names: Vec<_> = process::output(list)?
-                .lines()
-                .filter(|name| {
-                    !["mysql", "sys", "information_schema", "performance_schema"].contains(name)
-                })
-                .map(String::from)
-                .collect();
+            // JSON preserves whitespace, Unicode and control characters in names.
+            // Batch-mode escaping or trimming individual names can change them.
+            list.args(["--batch", "--raw", "--skip-column-names", "--default-character-set=utf8mb4", "-e",
+                "SELECT COALESCE(JSON_ARRAYAGG(SCHEMA_NAME), JSON_ARRAY()) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('mysql','sys','information_schema','performance_schema')"]);
+            let names: Option<Vec<String>> = serde_json::from_str(&process::output(list)?)
+                .map_err(|e| format!("Could not read database names for backup: {e}"))?;
+            let mut names = names.unwrap_or_default();
+            names.sort();
+            if names
+                .iter()
+                .any(|name| !crate::config::mysql_cli_identifier_supported(name))
+            {
+                return Err("The Windows MySQL client cannot back up non-ASCII database names with the current system code page. Use ASCII database names before retrying. Your databases have been kept.".into());
+            }
             if names.is_empty() {
-                return Err("There are no student databases to back up.".into());
+                use std::io::Write;
+                output
+                    .write_all(b"-- Fairway XMP backup: no student databases were present.\n")
+                    .map_err(|e| e.to_string())?;
+                output.sync_all().map_err(|e| e.to_string())?;
+                drop(output);
+                fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+                return Ok(path.to_string_lossy().into());
             }
             cmd.args([
                 "--single-transaction",
@@ -921,6 +939,7 @@ impl Manager {
                 "--triggers",
                 "--set-gtid-purged=OFF",
                 "--databases",
+                "--",
             ])
             .args(names)
             .stdout(Stdio::from(output))

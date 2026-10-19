@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.1.0-beta.3 — in preparation
+## 0.1.0-rc.1 — in preparation
+
+- Built-in Mailpit catcher and in-app inbox, PHP mail integration, SMTP settings and attachment saving.
+- Safe migration of existing ports and native Mail Start/Stop tray controls.
+- Grouped sidebar with Environment, Terminal and Logs as core services, plus Manage Sites, View Mail and Browse Data.
+- Searchable troubleshooting Logs with service shortcuts, site request filters alongside shared PHP output, readable Unicode requests, and bounded background reads and display.
+- Reliability fixes for backup names and empty-database upgrades, mail response races and incomplete downloads, special-character/long paths, and bounded CLI log reading.
+- Explicit Windows MySQL backup/export errors for unsupported non-ASCII identifiers; updates stop when their database backup cannot complete. Nginx supports Unicode and short-alias Windows data paths.
+- RC/stable-aware release publication, exact-installer human acceptance gates, and separate stable/preview update endpoints.
+
+Feature scope locked on 2026-10-18. Per-site PHP is deferred; all sites use the selected global PHP version. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).
+
+## 0.1.0-beta.3 — 2026-10-17
 
 - Developer ID signing, Apple notarization and stapling for the Mac app and installer.
 - In-app beta updates on Mac and Windows, with version-bound signatures, download progress, verification before service shutdown, database backup, safe installer handoff, and enabled CLI launcher refresh.

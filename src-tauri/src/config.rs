@@ -414,7 +414,7 @@ impl Layout {
             "[mysqld]\nbasedir={}\ndatadir={}\nport={}\nbind-address=127.0.0.1\nlower_case_table_names=1\nmysqlx=OFF\nlocal-infile=OFF\ncharacter-set-server=utf8mb4\ncollation-server=utf8mb4_unicode_ci\nmax_connections=40\ninnodb_buffer_pool_size=64M\nlog-error={}\npid-file={}\nsocket={}\nsecure-file-priv={}\n",
             ini(&self.runtime.join("mysql")), ini(&self.data.join("mysql")), ports.mysql,
             ini(&self.data.join("logs/mysql.log")), ini(&self.data.join("mysql.pid")),
-            ini(&self.data.join("mysql.sock")), ini(&self.data.join("tmp")));
+            ini(Path::new("mysql.sock")), ini(&self.data.join("tmp")));
         atomic_write(&conf.join("mysql.cnf"), mysql.as_bytes())?;
         let secret = self.secret()?;
         let admin = format!(
@@ -537,6 +537,23 @@ pub fn mysql_path_supported(path: &Path) -> bool {
     }
 }
 
+pub fn mysql_cli_identifier_supported(name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetACP() -> u32;
+        }
+        // The vendor CLI receives narrow argv. Even representable ANSI bytes
+        // differ from UTF-8, which is the connection charset used for dumps.
+        name.is_ascii() || unsafe { GetACP() } == 65001
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        true
+    }
+}
+
 pub fn ini(path: &Path) -> String {
     format!(
         "\"{}\"",
@@ -548,13 +565,55 @@ pub fn ini(path: &Path) -> String {
 }
 
 pub fn nginx_path(path: &Path) -> String {
+    #[cfg(windows)]
+    let resolved = nginx_long_path(path);
+    #[cfg(windows)]
+    let path = resolved.as_path();
     format!(
         "\"{}\"",
         path.to_string_lossy()
             .replace('\\', "/")
-            .replace('$', "\\$")
             .replace('"', "\\\"")
     )
+}
+
+#[cfg(windows)]
+fn nginx_long_path(path: &Path) -> PathBuf {
+    // Unlike MySQL, Nginx reads UTF-8 paths and rejects NTFS short-name aliases
+    // during its filename safety checks. Windows TEMP can contain RUNNER~1 (or
+    // another alias). Expand existing parents even for not-yet-created logs and
+    // temporary directories, without moving any files.
+    if !path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let mut parent = path;
+    let mut tail = Vec::new();
+    while !parent.exists() {
+        let (Some(name), Some(next)) = (parent.file_name(), parent.parent()) else {
+            return path.to_path_buf();
+        };
+        tail.push(name.to_owned());
+        parent = next;
+    }
+    let Ok(resolved) = fs::canonicalize(parent) else {
+        return path.to_path_buf();
+    };
+    let text = resolved.to_string_lossy();
+    let mut long = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{unc}"))
+    } else {
+        PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(&text))
+    };
+    for name in tail.into_iter().rev() {
+        long.push(name);
+    }
+    long
+}
+
+// Directives such as root, access_log and ssl_certificate compile variables even
+// inside quotes. A geo value is literal; referencing it preserves a real '$'.
+fn nginx_variable_path(path: &Path) -> String {
+    nginx_path(path).replace('$', "${fairway_dollar}")
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -611,23 +670,23 @@ fn nginx_config(layout: &Layout, ports: &Ports, projects: &[ProjectConfig]) -> S
         let fallback = if project.index_fallback { "/index.php?$query_string" } else { "=404" };
         let locations = format!("location ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ {fallback}; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {fastcgi} }}");
         let server = |listen: String, tls: String| format!("server {{ listen 127.0.0.1:{listen}; server_name {}.test; root {}; index index.php index.html;\n{tls}{locations}\n}}\n",
-            project.domain, nginx_path(&project.root));
+            project.domain, nginx_variable_path(&project.root));
         let http = server(ports.website.to_string(), String::new());
         if !project.https {
             return http;
         }
         let https = server(format!("{} ssl", crate::tls::https_port()), format!("ssl_certificate {};\nssl_certificate_key {};\n",
-            nginx_path(&crate::tls::certificate(layout)), nginx_path(&crate::tls::private_key(layout))));
+            nginx_variable_path(&crate::tls::certificate(layout)), nginx_variable_path(&crate::tls::private_key(layout))));
         format!("{http}{https}")
     }).collect::<String>();
     format!(
-        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\naccess_log {};\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
+        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\ngeo $fairway_dollar {{ default \"$\"; }}\nmap $request_uri $fairway_request_path {{ ~^([^?]*) $1; default $uri; }}\nlog_format fairway escape=json '{{\"time\":\"$time_iso8601\",\"method\":\"$request_method\",\"uri\":\"$fairway_request_path\",\"status\":\"$status\",\"host\":\"$host\",\"port\":\"$server_port\",\"scheme\":\"$scheme\",\"duration\":\"$request_time\"}}';\naccess_log {} fairway;\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
         nginx_path(&layout.data.join("nginx.pid")), nginx_path(&layout.data.join("logs/nginx.log")),
-        nginx_path(&layout.runtime.join("nginx/conf/mime.types")), nginx_path(&layout.data.join("logs/access.log")),
+        nginx_path(&layout.runtime.join("nginx/conf/mime.types")), nginx_variable_path(&layout.data.join("logs/access.log")),
         nginx_path(&layout.data.join("tmp/client")), nginx_path(&layout.data.join("tmp/fastcgi")),
         nginx_path(&layout.data.join("tmp/proxy")), nginx_path(&layout.data.join("tmp/uwsgi")), nginx_path(&layout.data.join("tmp/scgi")),
-        ports.website, nginx_path(&layout.www), fastcgi, ports.phpmyadmin,
-        nginx_path(&layout.data.join("phpmyadmin")), fastcgi, project_servers)
+        ports.website, nginx_variable_path(&layout.www), fastcgi, ports.phpmyadmin,
+        nginx_variable_path(&layout.data.join("phpmyadmin")), fastcgi, project_servers)
 }
 
 /// Send PHP's mail() to the bundled mail catcher, so nothing reaches real inboxes.
@@ -684,11 +743,29 @@ mod tests {
         );
         assert_eq!(layout.www, PathBuf::from("/Users/A $name/fairway/www"));
         let nginx = nginx_config(&layout, &Ports::default(), &[]);
-        assert!(nginx.contains("/Users/A \\$name/fairway/www"));
+        assert!(nginx.contains("/Users/A ${fairway_dollar}name/fairway/www"));
+        assert_eq!(nginx_path(Path::new("/tmp/A $name")), "\"/tmp/A $name\"");
         assert!(nginx.contains("listen 127.0.0.1:8801"));
         assert!(nginx.contains("/tmp/data/phpmyadmin"));
         assert!(!nginx.contains("listen 0.0.0.0"));
         assert_eq!(php_string("a'b\\c"), "'a\\'b\\\\c'");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn nginx_expands_short_aliases_and_keeps_unicode_for_future_files() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-Nginx 日本-{}", rand::random::<u64>()));
+        fs::create_dir_all(&root).unwrap();
+        let alias = windows_ansi_path(&root);
+        assert_eq!(
+            nginx_path(&alias.join("pending/logfile")),
+            nginx_path(&root.join("pending/logfile"))
+        );
+        let rendered = nginx_path(&root);
+        assert!(rendered.contains("Nginx 日本"));
+        assert!(!rendered.contains("//?/"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]

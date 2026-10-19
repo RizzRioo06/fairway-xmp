@@ -65,11 +65,15 @@ def download(url, expected=None, algorithm='sha256', headers=None):
                     time.sleep(2)
         finally:
             partial.unlink(missing_ok=True)
-    digest = hashlib.new(algorithm, target.read_bytes()).hexdigest()
+    with target.open('rb') as stream:
+        digest = hashlib.file_digest(stream, algorithm).hexdigest()
     if expected and digest.lower() != expected.lower():
         target.unlink()
         raise RuntimeError(f'Checksum mismatch for {url}; refused to extract')
-    return target, hashlib.sha256(target.read_bytes()).hexdigest()
+    if algorithm == 'sha256':
+        return target, digest
+    with target.open('rb') as stream:
+        return target, hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def safe_extract(archive: Path, target: Path, kind: str, skip_external_links=False):
@@ -452,7 +456,7 @@ def verify(target):
         ([str(target / 'mysql/bin' / ('mysqld' + suffix)), '--no-defaults', '--version'], f'Ver {MANIFEST["mysql"]} '),
     ]
     if 'mailpit' in MANIFEST:
-        commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version'], f' v{MANIFEST["mailpit"]} '))
+        commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version', '--no-release-check'], f' v{MANIFEST["mailpit"]} '))
     for command, expected in commands:
         output = subprocess.check_output(command, env=env, stderr=subprocess.STDOUT, text=True)
         if expected not in output:

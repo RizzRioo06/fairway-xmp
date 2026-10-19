@@ -1,6 +1,6 @@
 use crate::config::Result;
 use std::{
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
@@ -524,24 +524,58 @@ impl Drop for OwnedProcess {
 
 pub fn tail(path: &Path) -> Result<String> {
     use std::io::{Seek, SeekFrom};
-    let mut file = match File::open(path) {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let mut file = match options.open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Ok("No log entries yet.".into())
         }
         Err(e) => return Err(e.to_string()),
     };
-    let size = file.metadata().map_err(|e| e.to_string())?.len();
-    file.seek(SeekFrom::Start(size.saturating_sub(64 * 1024)))
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("Expected a regular log file.".into());
+    }
+    let size = metadata.len();
+    let offset = size.saturating_sub(64 * 1024);
+    file.seek(SeekFrom::Start(offset))
         .map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    file.take(size - offset)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&bytes).into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cli_tail_bounds_large_files_and_rejects_special_files() {
+        let root = std::env::temp_dir().join(format!("fairway-tail-{}", rand::random::<u64>()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("large.log");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(4 * 1024 * 1024).unwrap();
+        drop(file);
+        assert_eq!(tail(&path).unwrap().len(), 64 * 1024);
+        assert!(tail(&root).is_err());
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let fifo = root.join("pipe.log");
+            let name = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+            assert!(tail(&fifo).is_err());
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn silent_command_failure_retains_the_exit_status() {
         #[cfg(windows)]

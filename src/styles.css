@@ -101,6 +101,10 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .help-tip-content::before{content:'';position:absolute;left:0;right:0;top:-10px;height:10px}
 
 .sidebar-footer{justify-content:center;text-align:center;letter-spacing:0;padding:0 10px}
+.sidebar .sidebar-nav{flex:1;min-height:0;gap:16px;margin-bottom:18px}
+.nav-group{display:flex;flex-direction:column;flex-shrink:0;gap:6px}
+.nav-group+.nav-group{border-top:1px solid var(--border);padding-top:16px}
+.nav-group-app{margin-top:auto}
 
 .project-form{gap:16px}.project-form label>span:first-child{font-size:13px}.project-form small{font-size:12px;color:#526759;line-height:1.6}.project-form .settings-hint{font-size:12px;color:#526759}.project-form .secondary,.project-form .primary{font-size:12px}.project-form select{font-family:inherit;font-size:12px}.project-form .notice{font-size:12px}
 

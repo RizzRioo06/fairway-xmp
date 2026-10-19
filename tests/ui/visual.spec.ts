@@ -4,7 +4,7 @@ import type { Page, TestInfo } from '@playwright/test';
 const scenarios = ['Stopped', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure'];
 
 async function openSites(page: Page) {
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage Sites', exact: true }).click();
 }
 
 async function siteAction(page: Page, name: string, action: string) {
@@ -212,10 +212,10 @@ test('interactive service, log, backup, and settings review', async ({ page }, i
   await expect(page.getByRole('status').filter({ hasText: 'Starting services…' })).toBeVisible();
   await capture(page, info, 'starting');
   await expect(page.getByText('All services ready', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'View Nginx logs', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Nginx logs' })).toContainText('simulated nginx log');
+  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Log entries' })).toContainText('PHP Fatal error');
   await capture(page, info, 'logs');
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await page.getByRole('button', { name: 'Back up databases', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Database backup saved:' })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -379,7 +379,7 @@ test('update progress clears after a failed download and services stay available
 test('mail inbox lists, previews, searches, and deletes caught emails', async ({ page }, info) => {
   await page.goto('/');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
-  await page.getByRole('button', { name: 'Mail', exact: true }).click();
+  await page.getByRole('button', { name: 'View Mail', exact: true }).click();
   await page.getByRole('button', { name: 'SMTP settings' }).click();
   const connection = page.getByRole('dialog', { name: 'Mail connection' });
   await expect(connection).toContainText('11025');

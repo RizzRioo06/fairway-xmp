@@ -37,7 +37,55 @@ class CandidateTests(unittest.TestCase):
             if changed == 'missing-check': record['checks'].pop('tray-and-quit')
             if changed == 'string-pass': record['checks']['tray-and-quit'] = 'true'
             if changed == 'tester': record['tester'] = ''
-            with self.subTest(changed=changed), self.assertRaises(ValueError): candidate.acceptance(manifest, bad)
+            for phase in candidate.ACCEPTANCE_PHASES:
+                with self.subTest(changed=changed, phase=phase), self.assertRaises(ValueError): candidate.acceptance(manifest, bad, phase)
+
+    def test_only_explicitly_false_update_checks_can_be_deferred(self):
+        manifest = self.manifest()
+        evidence = self.evidence(manifest)
+        for target in ('macos-arm64', 'windows-x64'):
+            evidence['platforms'][target]['checks']['in-app-update-and-restart'] = False
+        original = copy.deepcopy(evidence)
+        status = candidate.acceptance(manifest, evidence, 'pre-publication')
+        self.assertEqual(status['status'], 'awaiting-post-publication')
+        self.assertEqual(status['pendingChecks'], {target: ['in-app-update-and-restart'] for target in ('windows-x64', 'macos-arm64')})
+        self.assertEqual(evidence, original)
+        with self.assertRaises(ValueError): candidate.acceptance(manifest, evidence)
+        for target, record in evidence['platforms'].items():
+            for check in record['checks']:
+                if check in candidate.POST_PUBLICATION_CHECKS:
+                    continue
+                bad = copy.deepcopy(evidence)
+                bad['platforms'][target]['checks'][check] = False
+                with self.subTest(target=target, check=check), self.assertRaises(ValueError):
+                    candidate.acceptance(manifest, bad, 'pre-publication')
+        for value in (None, 'false', 0, 1):
+            bad = copy.deepcopy(evidence)
+            bad['platforms']['windows-x64']['checks']['in-app-update-and-restart'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError): candidate.acceptance(manifest, bad, 'pre-publication')
+        bad = copy.deepcopy(evidence)
+        bad['platforms']['windows-x64']['checks'].pop('in-app-update-and-restart')
+        with self.assertRaises(ValueError): candidate.acceptance(manifest, bad, 'pre-publication')
+        with self.assertRaises(ValueError): candidate.acceptance(manifest, evidence, 'skip')
+        for target in ('macos-arm64', 'windows-x64'):
+            evidence['platforms'][target]['checks']['in-app-update-and-restart'] = True
+        self.assertEqual(candidate.acceptance(manifest, evidence)['status'], 'complete')
+
+    def test_acceptance_cli_defaults_to_all_checks(self):
+        manifest = self.manifest()
+        evidence = self.evidence(manifest)
+        evidence['platforms']['macos-arm64']['checks']['in-app-update-and-restart'] = False
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate.write(root / 'manifest.json', manifest)
+            candidate.write(root / 'evidence.json', evidence)
+            command = [sys.executable, str(candidate.ROOT / 'scripts/release_candidate.py'), 'check-acceptance',
+                       '--manifest', str(root / 'manifest.json'), '--evidence', str(root / 'evidence.json')]
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            result = subprocess.run([*command, '--phase', 'pre-publication'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('awaiting-post-publication', result.stdout)
+            self.assertIn('in-app-update-and-restart', result.stdout)
 
     def test_downloaded_artifact_tampering_and_traversal_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -61,6 +109,8 @@ class CandidateTests(unittest.TestCase):
                 result = candidate.assemble(root, root / 'output/manifest.json')
                 self.assertEqual(result['status'], 'awaiting-human-acceptance')
                 evidence = candidate.read(root / 'output/acceptance-template.json')
+                self.assertEqual(evidence['postPublicationChecks'], ['in-app-update-and-restart'])
+                self.assertTrue(all(value is False for record in evidence['platforms'].values() for value in record['checks'].values()))
                 with self.assertRaises(ValueError): candidate.acceptance(result, evidence)
                 data = candidate.read(root / 'candidate-windows-x64.json'); data['commit'] = 'c' * 40
                 candidate.write(root / 'candidate-windows-x64.json', data)

@@ -10,7 +10,7 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
   const bridge = await nativeBridge(page, info);
   try {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Data browser', exact: true }).click();
+    await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
     await page.getByRole('button', { name: 'Start MySQL', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Database', exact: true })).toBeEnabled({ timeout: 60000 });
     await page.getByRole('button', { name: 'Database', exact: true }).click();

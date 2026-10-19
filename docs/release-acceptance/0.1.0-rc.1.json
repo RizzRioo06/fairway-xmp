@@ -1,0 +1,67 @@
+{
+  "version": "0.1.0-rc.1",
+  "commit": "24e5c053b30eb7cca280f6ad9f5de47d8e90b489",
+  "platforms": {
+    "windows-x64": {
+      "tester": "Release owner (eimg)",
+      "os": "Windows 11 — August 11, 2026 update, KB5121003",
+      "testedAt": "2026-10-19",
+      "installerSha256": "cbc06db5ebcaa63df3ba9308802c08ba2bafc26e71948c511e66ed1ee8abe259",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "tray-and-quit": true,
+        "browser-visual-review": true,
+        "data-browser-and-sql-tools": true,
+        "terminal-sessions-and-cleanup": true,
+        "sites-domains-and-https": true,
+        "in-app-update-and-restart": false,
+        "mail-catcher-and-inbox": true,
+        "troubleshooting-logs": true
+      }
+    },
+    "macos-arm64": {
+      "tester": "Release owner (eimg)",
+      "os": "macOS 27 Beta 4",
+      "testedAt": "2026-10-19",
+      "installerSha256": "ef36c0487f8b24a5bf3a0635ffa667da1972bf68ea29a02cce765be1d7b5d875",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "menu-bar-and-quit": true,
+        "browser-visual-review": true,
+        "data-browser-and-sql-tools": true,
+        "terminal-sessions-and-cleanup": true,
+        "sites-domains-and-https": true,
+        "in-app-update-and-restart": false,
+        "mail-catcher-and-inbox": true,
+        "troubleshooting-logs": true
+      }
+    },
+    "linux-x86_64": {
+      "tester": "Release owner (eimg)",
+      "os": "Ubuntu 26.04",
+      "testedAt": "2026-10-19",
+      "installerSha256": "89157247aa8e457b3e770e152a984831953c5c7bacfef7524b8e2e874b1b869f",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "dashboard-detach-and-shutdown": true
+      }
+    }
+  },
+  "postPublicationChecks": [
+    "in-app-update-and-restart"
+  ],
+  "attestation": {
+    "by": "Release owner (eimg)",
+    "recordedAt": "2026-10-19",
+    "statement": "considered human device test done and pass",
+    "basis": "Release owner report in the release preparation chat; not an agent-observed device test. Date fields record the confirmation date; exact execution dates were not separately supplied.",
+    "scope": "Candidate 5 pre-publication checks. The agreed human update/restart checks remain deferred.",
+    "osDetails": "Supplied by the release owner in the release preparation chat; recorded as reported."
+  }
+}

@@ -1,0 +1,108 @@
+name: Warm build inputs
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/tauri.conf.json'
+      - 'runtime-manifest.json'
+      - 'runtime*lock.json'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'scripts/prepare*runtime.py'
+      - 'scripts/package_sources.py'
+      - 'scripts/windows_legacy_sources.json'
+      - 'tests/fixtures/runtime-alpha1-*.json'
+      - '.github/actions/**'
+      - '.github/workflows/warm-build-cache.yml'
+      - '.github/workflows/*-test-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warm-build-inputs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/configure-macos-build
+        if: runner.os == 'macOS'
+      - uses: actions/setup-node@v5
+        if: runner.os != 'Linux'
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: installer-complete-v1
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST MACOSX_DEPLOYMENT_TARGET
+          cache-on-failure: false
+          save-if: ${{ github.ref_type != 'tag' }}
+      - uses: ./.github/actions/restore-runtime-downloads
+        if: runner.os != 'Linux'
+        id: downloads
+      - uses: ./.github/actions/prepare-linux-runtime
+        if: runner.os == 'Linux'
+      - name: Stage locked desktop runtime
+        if: runner.os != 'Linux'
+        run: python scripts/prepare_runtime.py
+      - name: Cache Windows upgrade fixture downloads too
+        if: runner.os == 'Windows'
+        run: python scripts/prepare_runtime.py --manifest tests/fixtures/runtime-alpha1-manifest.json --lockfile tests/fixtures/runtime-alpha1-downloads.lock.json --destination .runtime-work/alpha1-runtime
+      - name: Verify and cache corresponding-source downloads
+        if: runner.os == 'macOS'
+        run: python scripts/package_sources.py --locked
+      - uses: actions/cache/save@v5
+        if: runner.os != 'Linux' && github.ref_type != 'tag' && steps.downloads.outputs.cache-hit != 'true'
+        with:
+          path: .runtime-cache
+          key: ${{ steps.downloads.outputs.key }}
+      - name: Build desktop frontend
+        if: runner.os != 'Linux'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Warm dependencies for native tests and lint
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo test --no-run --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
+            cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
+          else
+            cargo test --no-run --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
+            cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+          fi
+      - name: Warm release dependency compilation
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            cargo build --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --bin fairway --target x86_64-pc-windows-msvc --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example updater_probe --target x86_64-pc-windows-msvc --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example installer_probe --no-default-features --target x86_64-pc-windows-msvc --locked
+          elif [ "$RUNNER_OS" = macOS ]; then
+            cargo build --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --bin fairway --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example updater_probe --locked
+            cargo build --release --manifest-path src-tauri/Cargo.toml --example installer_probe --no-default-features --locked
+          else
+            cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
+          fi

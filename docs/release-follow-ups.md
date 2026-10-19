@@ -1,4 +1,10 @@
-# Follow-up work after PHP version selection
+# Release follow-up work
+
+The owner accepted the Windows MySQL CLI non-ASCII identifier limitation on 2026-10-19. It is disclosed for this RC: on non-UTF-8 system locales, unsupported backup/export names fail explicitly and updates cannot proceed without a completed backup. Broader Unicode CLI backup support remains open; normal Unicode row/query handling is retained. See [database limitations](data-browser.md#windows-backupexport-identifiers).
+
+## RC preparation policy — 2026-10-17
+
+The release owner accepts the existing Windows PHP 8.0/8.1 dependency-provenance gap and unsigned Windows installer as disclosed limitations for this RC cycle. They do not block publication after the other acceptance gates pass. Runtime inputs stay as-is, the provenance checklist stays open, and Authenticode remains absent. Mac signing/notarization and cryptographic Mac/Windows updater signatures remain mandatory. On 2026-10-18 the owner locked RC feature scope after per-site PHP issue #5 closed as not planned; global PHP selection is retained. See [RC preparation](rc-preparation.md).
 
 ## Beta 3 publication
 
@@ -28,7 +34,7 @@ The new [beta acceptance process](beta-acceptance.md) covers candidate identity,
 
 ## Verify older Windows dependency sources
 
-**Open before publishing a Windows installer with PHP 8.0/8.1.** Those official PHP ZIPs have no embedded SBOM identifying exact dependency build commits. `scripts/windows_legacy_sources.json` supplies 49 pinned source entries, and `runtime-sources.lock.json` records archive hashes. This verifies which source files are collected; it does not prove that their build recipes and patches match the distributed binaries.
+**Open follow-up; accepted as a disclosed limitation for this RC cycle.** Those official PHP ZIPs have no embedded SBOM identifying exact dependency build commits. `scripts/windows_legacy_sources.json` supplies 49 pinned source entries, and `runtime-sources.lock.json` records archive hashes. This verifies which source files are collected; it does not prove that their build recipes and patches match the distributed binaries.
 
 Some mappings require particular attention:
 
@@ -45,7 +51,7 @@ Different build suffixes do not by themselves establish a source mismatch, but t
 - [ ] Correct or extend the legacy source manifest and source lock where that evidence identifies missing inputs.
 - [ ] Collect the corresponding-source archive and verify it includes those exact sources, recipes, patches, and notices.
 
-If an exact mapping cannot be established, use a verifiable runtime input or defer those versions in the Windows release. Keep this item open until the evidence is recorded; version-matched tags alone are not completion.
+For future provenance remediation, establish the exact mapping, choose a verifiable input, or defer those versions. The current RC cycle retains the existing inputs under the owner decision above. Keep this item open until evidence is recorded; version-matched tags alone are not completion.
 
 ## Finish the release owner's Mac visual test
 

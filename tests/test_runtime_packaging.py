@@ -7,6 +7,7 @@ import tempfile
 import tarfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('runtime', Path(__file__).resolve().parents[1] / 'scripts/prepare_runtime.py')
 runtime = importlib.util.module_from_spec(SPEC)
@@ -14,6 +15,34 @@ SPEC.loader.exec_module(runtime)
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_runtime_verification_is_offline_and_still_rejects_wrong_mailpit_version(self):
+        manifest = {'php': '8.5.11', 'extensions': [], 'composer': '2.10.3',
+                    'nginx': '1.30.5', 'mysql': '9.7.2', 'mailpit': '1.31.6'}
+        for mailpit_version in ('1.31.6', '0.0.0'):
+            def offline_output(command, **kwargs):
+                if '-r' in command:
+                    return json.dumps({'version': manifest['php'], 'extensions': []})
+                if 'version' in command:
+                    if '--no-release-check' not in command:
+                        raise OSError('Release lookup is unavailable offline')
+                    return f'mailpit v{mailpit_version} compiled with Go'
+                if any('composer.phar' in str(part) for part in command):
+                    return f'Composer version {manifest["composer"]} built'
+                if '-v' in command:
+                    return f'nginx/{manifest["nginx"]}'
+                return f'mysqld Ver {manifest["mysql"]} bundled'
+
+            with self.subTest(version=mailpit_version), tempfile.TemporaryDirectory() as folder, \
+                    patch.object(runtime, 'MANIFEST', manifest), \
+                    patch.object(runtime.platform, 'system', return_value='Darwin'), \
+                    patch.object(runtime.subprocess, 'check_output', side_effect=offline_output), \
+                    patch('sys.stdout', new=io.StringIO()):
+                if mailpit_version == manifest['mailpit']:
+                    runtime.verify(Path(folder))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'Runtime version mismatch'):
+                        runtime.verify(Path(folder))
+
     def test_older_windows_php_dependency_sources_are_pinned(self):
         manifest = Path(__file__).resolve().parents[1] / 'scripts/windows_legacy_sources.json'
         sources = json.loads(manifest.read_text())

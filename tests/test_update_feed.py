@@ -11,11 +11,11 @@ SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
 import release_candidate as candidate
 import update_feed
+import release_versions
 
 
 class UpdateFeedTests(unittest.TestCase):
-    def fixture(self, root):
-        version = '0.1.0-beta.3'
+    def fixture(self, root, version='0.1.0-beta.3'):
         manifest = {'version': version, 'commit': 'a' * 40, 'signing': {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}, 'candidates': {}}
         directories = {}
         for target, name in [('macos-arm64', f'fairway-xmp-{version}-macos-arm64.app.tar.gz'), ('windows-x64', f'fairway-xmp-{version}-windows-x64-setup.exe')]:
@@ -46,9 +46,21 @@ class UpdateFeedTests(unittest.TestCase):
                 bad = copy.deepcopy(manifest); mutate(bad)
                 with self.assertRaises(ValueError): update_feed.generate(bad, directories, 'eimg/fairway-xmp', '')
 
-    def test_beta_order_and_release_overlay(self):
-        self.assertGreater(update_feed.beta_version('0.1.0-beta.10'), update_feed.beta_version('0.1.0-beta.9'))
-        with self.assertRaises(ValueError): update_feed.beta_version('0.1.0')
+    def test_beta_rc_stable_order_and_invalid_versions(self):
+        versions = ['0.1.0-beta.9', '0.1.0-beta.10', '0.1.0-rc.1', '0.1.0-rc.10', '0.1.0', '0.1.1-beta.1', '0.2.0-rc.1', '1.0.0']
+        self.assertEqual(sorted(reversed(versions), key=release_versions.version_key), versions)
+        for invalid in ['v0.1.0', '0.1.0-rc', '0.1.0-rc.01', '00.1.0', '0.1.0-beta.1.extra', '0.1.0+build', '0.1.0-alpha.1']:
+            with self.subTest(version=invalid), self.assertRaises(ValueError): release_versions.version_key(invalid)
+
+    def test_rc_and_stable_feeds_use_exact_verified_versioned_artifacts(self):
+        for version in ['0.1.0-rc.1', '0.1.0']:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                manifest, directories = self.fixture(Path(temporary), version)
+                feed = update_feed.generate(manifest, directories, 'eimg/fairway-xmp', 'Reviewed notes')
+                self.assertEqual(feed['version'], version)
+                self.assertTrue(all(f'/releases/download/v{version}/' in entry['url'] for entry in feed['platforms'].values()))
+
+    def test_release_overlay(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'overlay.json'
             subprocess.run([sys.executable, str(SCRIPTS / 'configure_release.py'), '--public-key', str(SCRIPTS.parent / 'packaging/updater.pub'), '--output', str(output)], check=True, capture_output=True)

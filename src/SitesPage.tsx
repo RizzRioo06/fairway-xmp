@@ -20,7 +20,7 @@ export default function SitesPage({ data, busy, copied, add, edit, remove, open,
     <div className="page-heading"><div><h1>Your sites</h1><p>Give an existing project its own <code>.test</code> address on this computer.</p></div><button className="primary" disabled={!usable} onClick={add}><Plus size={15} />Add site</button></div>
     <section className="sites-server" aria-label="Site environment">
       <div><strong>{server?.ready ? 'Web server running' : server?.running ? 'Web server not ready' : 'Web server stopped'}</strong><p>All sites use PHP {data.phpVersion}. Files in <code>{data.documentRoot}</code> also open at <code>http://127.0.0.1:{data.ports.website}/</code>.</p></div>
-      {!server?.ready && <button className="secondary" disabled={!canControl || !data.runtimeReady || busy} onClick={server?.running ? logs : start}>{server?.running ? <ScrollText size={14} /> : <Play size={14} />}{server?.running ? 'View web server logs' : 'Start web server'}</button>}
+      {!server?.ready && <button className="secondary" disabled={!canControl || (!server?.running && (!data.runtimeReady || busy))} onClick={server?.running ? logs : start}>{server?.running ? <ScrollText size={14} /> : <Play size={14} />}{server?.running ? 'View web server logs' : 'Start web server'}</button>}
     </section>
     {!data.runtimeReady && canControl && <div className="notice error" role="alert">The bundled web runtime is missing. Reinstall Fairway XMP to restore it. Your site files and saved registrations will be kept.</div>}
     {server?.message && <div className="notice error" role="alert">{server.message}</div>}

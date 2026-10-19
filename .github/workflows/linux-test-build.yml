@@ -24,11 +24,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Install build dependencies (not needed on target machines)
-        run: |
-          awk '$1 == "deb" { $1="deb-src"; print }' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/fairway-sources.list > /dev/null
-          sudo apt-get update
-          sudo apt-get install -y build-essential autoconf bison re2c pkg-config patchelf libxml2-dev libssl-dev libcurl4-openssl-dev libsqlite3-dev libonig-dev libzip-dev libsodium-dev libicu-dev libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libpcre2-dev zlib1g-dev libaio1 libnuma1 libncurses5
+          shared-key: installer-complete-v1
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST MACOSX_DEPLOYMENT_TARGET
+          cache-on-failure: false
+          save-if: ${{ github.ref_type != 'tag' }}
       - name: Verify application version consistency
         id: metadata
         run: |
@@ -37,30 +36,12 @@ jobs:
           echo "$version"
       - name: Packaging tests
         run: python -m unittest discover -s tests -v
+      - uses: ./.github/actions/prepare-linux-runtime
       - name: Rust format, tests and lint
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
           cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
           cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
-      - uses: actions/cache/restore@v5
-        id: runtime-cache
-        with:
-          path: |
-            src-tauri/resources/runtime
-            .runtime-work/linux-sources
-          key: linux-glibc235-${{ hashFiles('runtime-linux-downloads.lock.json', 'runtime-manifest.json', 'scripts/prepare_runtime.py', 'scripts/prepare_linux_runtime.py') }}
-      - name: Prepare portable Linux runtime
-        if: steps.runtime-cache.outputs.cache-hit != 'true'
-        run: python scripts/prepare_runtime.py --lockfile runtime-linux-downloads.lock.json
-      - name: Verify staged runtime
-        run: python scripts/prepare_runtime.py --verify-only
-      - uses: actions/cache/save@v5
-        if: steps.runtime-cache.outputs.cache-hit != 'true'
-        with:
-          path: |
-            src-tauri/resources/runtime
-            .runtime-work/linux-sources
-          key: ${{ steps.runtime-cache.outputs.cache-primary-key }}
       - name: Build terminal binary
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
       - name: Exercise service manager and database recovery
@@ -109,7 +90,7 @@ jobs:
 
   portable-runtime:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
