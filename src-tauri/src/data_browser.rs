@@ -560,10 +560,8 @@ mod tests {
 
     #[test]
     fn sqlite_worker_path_drops_verbatim_prefix() {
-        let file = std::env::temp_dir().join(format!(
-            "fairway-sqlite-path-{}.sqlite",
-            std::process::id()
-        ));
+        let file =
+            std::env::temp_dir().join(format!("fairway-sqlite-path-{}.sqlite", std::process::id()));
         std::fs::write(&file, b"").unwrap();
         let canonical = std::fs::canonicalize(&file).unwrap();
         let worker = php_sqlite_path(&canonical);
