@@ -32,10 +32,8 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     // independently of Command Prompt's batch-file termination confirmation.
     await enter(process.platform === 'win32' ? 'echo FIRST_SERVER_READY & ping -t 127.0.0.1' : 'php -r "echo \'FIRST_SERVER_READY\'; sleep(30);"');
     await expect(rows).toContainText('FIRST_SERVER_READY');
-    const folders = page.getByRole('combobox', { name: 'New terminal folder', exact: true });
-    await expect(folders.locator('option', { hasText: 'Project with spaces 日本' })).toHaveCount(1);
-    await folders.selectOption('Project with spaces 日本');
-    await page.getByRole('button', { name: 'New terminal', exact: true }).click();
+    await page.getByLabel('New terminal', { exact: true }).click();
+    await page.locator('.terminal-folder-menu').getByRole('button', { name: 'Project with spaces 日本', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
     await enter(process.platform === 'win32' ? 'cd' : 'pwd');
     await expect(rows).toContainText(process.platform === 'win32' ? 'Project with spaces' : 'Project with spaces 日本');
@@ -49,20 +47,20 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     await input.press('Control+c');
     await enter('php -r "echo hex2bin(\'46495253545f5441425f524553554d4544\');"');
     await expect(rows).toContainText('FIRST_TAB_RESUMED');
-    await page.getByRole('button', { name: 'Expand terminal', exact: true }).click();
     await page.setViewportSize({ width: 6000, height: 900 });
     await enter('echo native-resize-survived');
     await expect(rows).toContainText('native-resize-survived');
     await page.setViewportSize({ width: 820, height: 650 });
-    await page.getByRole('button', { name: 'Restore terminal size', exact: true }).click();
     await enter('exit 0');
-    await expect(page.getByRole('status').filter({ hasText: /^Session ended$/ })).toBeVisible();
-    await expect(rows).toContainText('exit 0');
+    await expect(rows).not.toContainText('native-resize-survived');
+    await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
     await page.getByRole('tab', { name: 'Terminal 2 · Project with spaces 日本', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: /^Connected$/ })).toBeVisible();
     await enter('composer --version'); await expect(rows).toContainText('Composer version');
     const path = info.outputPath('native-terminal.png');
     await page.screenshot({ path, fullPage: true }); await info.attach('native-terminal', { path, contentType: 'image/png' });
+    await enter('exit 0');
+    await expect(page.getByRole('tab')).toHaveCount(1);
     expect(errors()).toBe('');
   } finally {
     await close();

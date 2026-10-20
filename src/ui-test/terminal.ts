@@ -4,9 +4,9 @@ type Session = { id: string; directory: string; output: string; line: string; ex
 const sessions = new Map<string, Session>();
 const slots = new Map<number, string>();
 let workspace: string | null = null;
-const prompt = '\r\n$ ';
+const prompt = (directory: string) => `\r\n➜  ${directory.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '/'} `;
 export function terminalRequest(command: string, args: Record<string, unknown>, directory: string, version: string, ready: boolean, sites: Project[]): unknown {
-  if (command === 'terminal_context') return { folders: ['hello', 'Student project'], sites: sites.filter(site => site.available).flatMap(site => [{ folder: `site:${site.domain}`, label: `${site.name} — web root` }, ...(/[\\/]public$/i.test(site.root) ? [{ folder: `site-parent:${site.domain}`, label: `${site.name} — app folder` }] : [])]), historySupported: directory.startsWith('/') };
+  if (command === 'terminal_context') return { defaultDirectory: directory, folders: ['hello', 'Student project'], sites: sites.filter(site => site.available).flatMap(site => [{ folder: `site:${site.domain}`, label: `${site.name} — web root` }, ...(/[\\/]public$/i.test(site.root) ? [{ folder: `site-parent:${site.domain}`, label: `${site.name} — app folder` }] : [])]), historySupported: directory.startsWith('/') };
   const request = command === 'terminal_start' ? args.request as Record<string, unknown> : args;
   const id = String(request.id);
   if (command === 'terminal_start') {
@@ -21,13 +21,14 @@ export function terminalRequest(command: string, args: Record<string, unknown>, 
       if (!site) throw new Error('The site folder is no longer available.');
       cwd = token[1] === 'site-parent' ? site.root.replace(/[\\/]public$/i, '') : site.root;
     }
-    sessions.set(id, { id, directory: cwd, output: `Fairway XMP simulated terminal${prompt}`, line: '', exited: false, code: null });
+    sessions.set(id, { id, directory: cwd, output: `Fairway XMP simulated terminal${prompt(cwd)}`, line: '', exited: false, code: null });
     slots.set(slot, id);
     return { shell: directory.startsWith('/') ? 'zsh' : 'Command Prompt', directory: cwd };
   }
   if (command === 'terminal_close') { sessions.delete(id); for (const [slot, current] of slots) if (current === id) slots.delete(slot); return; }
   const session = sessions.get(id);
   if (!session) throw new Error('Terminal session has ended. Start a new session.');
+  if (command === 'terminal_external') return;
   if (command === 'terminal_resize') return;
   if (command === 'terminal_read') {
     const data = Array.from(new TextEncoder().encode(session.output)); session.output = '';
@@ -35,7 +36,7 @@ export function terminalRequest(command: string, args: Record<string, unknown>, 
   }
   if (command === 'terminal_write') {
     for (const char of String(args.data)) {
-      if (char === '\x03') { session.line = ''; session.output += `^C${prompt}`; }
+      if (char === '\x03') { session.line = ''; session.output += `^C${prompt(session.directory)}`; }
       else if (char === '\x7f') { if (session.line) { session.line = session.line.slice(0, -1); session.output += '\b \b'; } }
       else if (char === '\r' || char === '\n') {
         const line = session.line.trim(); session.line = ''; session.output += '\r\n';
@@ -46,7 +47,7 @@ export function terminalRequest(command: string, args: Record<string, unknown>, 
           else if (line === 'composer --version') session.output += 'Composer version 2.10.3 (simulated)';
           else if (line.startsWith('echo ')) session.output += line.slice(5);
           else if (line) session.output += 'UI test only: this command was not executed.';
-          session.output += prompt;
+          session.output += prompt(session.directory);
         }
       } else if (char >= ' ') { session.line += char; session.output += char; }
     }

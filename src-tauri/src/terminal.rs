@@ -42,6 +42,7 @@ pub struct StartRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalContext {
+    default_directory: String,
     folders: Vec<String>,
     sites: Vec<SiteFolder>,
     history_supported: bool,
@@ -75,6 +76,7 @@ struct OutputState {
     eof: bool,
     stopped: bool,
     error: Option<String>,
+    directory: DirectoryTracker,
 }
 
 #[derive(Debug, Serialize)]
@@ -232,6 +234,7 @@ pub fn context(layout: &Layout) -> Result<TerminalContext> {
         }
     }
     Ok(TerminalContext {
+        default_directory: directory(layout, None)?.to_string_lossy().into_owned(),
         folders,
         sites,
         history_supported: cfg!(target_os = "macos"),
@@ -258,15 +261,86 @@ fn prepare_history(layout: &Layout, remember: bool) -> Result<std::path::PathBuf
             .map_err(|e| e.to_string())?;
         crate::config::private_file(&history)?;
     }
-    let settings = if remember {
+    let mut settings = if remember {
         format!("HISTFILE={}\nHISTSIZE=1000\nSAVEHIST=1000\nsetopt HIST_IGNORE_SPACE HIST_SAVE_NO_DUPS SHARE_HISTORY HIST_FCNTL_LOCK\n",
             crate::integration::shell_quote(&history.to_string_lossy()))
     } else {
         "HISTFILE=''\nHISTSIZE=1000\nSAVEHIST=0\n".into()
     };
+    settings.push_str("PROMPT='%F{green}➜%f  %B%1/%b '\nRPROMPT=''\nPROMPT_EOL_MARK=''\n");
     crate::config::atomic_write(&config.join(".zshrc"), settings.as_bytes())?;
     crate::config::private_file(&config.join(".zshrc"))?;
     Ok(config)
+}
+
+fn tools_path(layout: &Layout) -> Result<std::ffi::OsString> {
+    let bin = prepare_tools(layout)?;
+    let mut paths = vec![bin, layout.data.join("composer/vendor/bin")];
+    if let Some(path) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&path));
+    }
+    #[cfg(unix)]
+    paths.extend([
+        layout.home.join(".local/bin"),
+        "/opt/homebrew/bin".into(),
+        "/opt/homebrew/sbin".into(),
+        "/usr/local/bin".into(),
+        "/usr/local/sbin".into(),
+        "/usr/bin".into(),
+        "/bin".into(),
+        "/usr/sbin".into(),
+        "/sbin".into(),
+    ]);
+    let mut seen = HashSet::new();
+    paths.retain(|path| !path.as_os_str().is_empty() && seen.insert(path.clone()));
+    std::env::join_paths(paths).map_err(|e| e.to_string())
+}
+
+/// Construct a native launch with no shell commands or environment overrides.
+#[cfg(any(target_os = "macos", windows))]
+fn external_command(directory: &std::path::Path) -> std::process::Command {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = crate::process::command("/usr/bin/open");
+        command.args(["-a", "Terminal"]).arg(directory);
+        command
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let executable = std::env::var_os("SystemRoot")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| "C:\\Windows".into())
+            .join("System32/cmd.exe");
+        let mut command = std::process::Command::new(executable);
+        command.current_dir(directory).creation_flags(0x00000010);
+        command
+    }
+}
+
+/// Open the system terminal at a folder, using its normal shell and environment.
+pub fn open_external(directory: &std::path::Path) -> Result<()> {
+    if !directory.is_absolute() || !directory.is_dir() {
+        return Err("The terminal's current folder is no longer available.".into());
+    }
+    let directory = shell_directory(std::fs::canonicalize(directory).map_err(|e| e.to_string())?)?;
+    #[cfg(target_os = "macos")]
+    {
+        crate::process::output(external_command(&directory))?;
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        external_command(&directory)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = directory;
+        Err("Open your preferred terminal in this folder.".into())
+    }
 }
 
 fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
@@ -275,7 +349,6 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
             "Runtime files are missing. Reinstall Fairway XMP to restore PHP and Composer.".into(),
         );
     }
-    let bin = prepare_tools(layout)?;
     #[cfg(target_os = "macos")]
     let mut command = {
         let mut c = CommandBuilder::new("/bin/zsh");
@@ -306,28 +379,11 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
         c.arg("-i");
         c
     };
-    let mut paths = vec![bin, layout.data.join("composer/vendor/bin")];
-    if let Some(path) = std::env::var_os("PATH") {
-        paths.extend(std::env::split_paths(&path));
-    }
-    #[cfg(unix)]
-    paths.extend([
-        layout.home.join(".local/bin"),
-        "/opt/homebrew/bin".into(),
-        "/opt/homebrew/sbin".into(),
-        "/usr/local/bin".into(),
-        "/usr/local/sbin".into(),
-        "/usr/bin".into(),
-        "/bin".into(),
-        "/usr/sbin".into(),
-        "/sbin".into(),
-    ]);
-    let mut seen = HashSet::new();
-    paths.retain(|path| !path.as_os_str().is_empty() && seen.insert(path.clone()));
-    command.env(
-        "PATH",
-        std::env::join_paths(paths).map_err(|e| e.to_string())?,
-    );
+    command.env("PATH", tools_path(layout)?);
+    #[cfg(windows)]
+    command.env("PROMPT", "$E]9;9;$P$E\\$G ");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    command.env("PS1", "> ");
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "Fairway XMP");
@@ -378,7 +434,16 @@ impl Terminals {
         let pair = native_pty_system()
             .openpty(dimensions)
             .map_err(|e| e.to_string())?;
-        let output = Arc::new(Output::default());
+        let output = Arc::new(Output {
+            state: Mutex::new(OutputState {
+                directory: DirectoryTracker {
+                    current: Some(starting_directory.clone()),
+                    ..DirectoryTracker::default()
+                },
+                ..OutputState::default()
+            }),
+            drained: Condvar::new(),
+        });
         #[cfg(unix)]
         let reader: Box<dyn Read + Send> = {
             use std::os::fd::BorrowedFd;
@@ -449,6 +514,65 @@ impl Terminals {
             .find(|s| s.id == id)
             .cloned()
             .ok_or_else(|| "Terminal session has ended. Start a new session.".into())
+    }
+
+    pub fn current_directory(&self, id: &str) -> Result<std::path::PathBuf> {
+        let session = self.session(id)?;
+        #[cfg(unix)]
+        let pid = session
+            .child
+            .lock()
+            .map_err(|_| "Terminal process is unavailable.")?
+            .as_ref()
+            .and_then(|child| child.process_id())
+            .ok_or("Terminal process has ended.")?;
+        #[cfg(target_os = "macos")]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            let mut info = std::mem::MaybeUninit::<libc::proc_vnodepathinfo>::zeroed();
+            let size = std::mem::size_of::<libc::proc_vnodepathinfo>();
+            let result = unsafe {
+                libc::proc_pidinfo(
+                    pid as i32,
+                    libc::PROC_PIDVNODEPATHINFO,
+                    0,
+                    info.as_mut_ptr().cast(),
+                    size as i32,
+                )
+            };
+            if result != size as i32 {
+                return Err("Could not read this terminal's current folder.".into());
+            }
+            let info = unsafe { info.assume_init() };
+            let bytes: Vec<u8> = info
+                .pvi_cdir
+                .vip_path
+                .iter()
+                .flatten()
+                .map(|byte| *byte as u8)
+                .take_while(|byte| *byte != 0)
+                .collect();
+            if bytes.is_empty() {
+                return Err("The terminal's current folder is unavailable.".into());
+            }
+            Ok(std::ffi::OsString::from_vec(bytes).into())
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            std::fs::read_link(format!("/proc/{pid}/cwd")).map_err(|e| e.to_string())
+        }
+        #[cfg(windows)]
+        {
+            session
+                .output
+                .state
+                .lock()
+                .map_err(|_| "Terminal output is unavailable.")?
+                .directory
+                .current
+                .clone()
+                .ok_or_else(|| "The terminal's current folder is unavailable.".into())
+        }
     }
 
     pub fn read(&self, id: &str) -> Result<TerminalOutput> {
@@ -676,6 +800,58 @@ impl Drop for Session {
     }
 }
 
+/// Track CMD's OSC 9;9 working-directory reports across arbitrary read boundaries.
+/// This metadata never changes the shell or treats terminal output as a command.
+#[derive(Default)]
+struct DirectoryTracker {
+    current: Option<std::path::PathBuf>,
+    sequence: Vec<u8>,
+    in_osc: bool,
+    escape: bool,
+}
+
+impl DirectoryTracker {
+    fn feed(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            if !self.in_osc {
+                if self.escape && byte == b']' {
+                    self.in_osc = true;
+                    self.sequence.clear();
+                    self.escape = false;
+                } else {
+                    self.escape = byte == 0x1b;
+                }
+                continue;
+            }
+            if byte == 7 || (self.escape && byte == b'\\') {
+                if self.escape {
+                    self.sequence.pop();
+                }
+                if let Some(path) = self
+                    .sequence
+                    .strip_prefix(b"9;9;")
+                    .and_then(|path| std::str::from_utf8(path).ok())
+                {
+                    let path = path.trim_matches('"');
+                    if !path.is_empty() && !path.contains('\0') {
+                        self.current = Some(path.into());
+                    }
+                }
+                self.in_osc = false;
+                self.escape = false;
+                self.sequence.clear();
+            } else if self.sequence.len() >= 4096 {
+                self.in_osc = false;
+                self.escape = false;
+                self.sequence.clear();
+            } else {
+                self.sequence.push(byte);
+                self.escape = byte == 0x1b;
+            }
+        }
+    }
+}
+
 fn read_output(mut reader: Box<dyn Read + Send>, output: Arc<Output>) {
     let mut bytes = [0u8; 8192];
     loop {
@@ -697,6 +873,7 @@ fn read_output(mut reader: Box<dyn Read + Send>, output: Arc<Output>) {
                     #[cfg(not(windows))]
                     break;
                 }
+                state.directory.feed(&bytes[..count]);
                 state.bytes.extend(&bytes[..count]);
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -847,6 +1024,84 @@ mod tests {
     }
 
     #[test]
+    fn directory_reports_handle_split_sequences_and_bounded_untrusted_output() {
+        let mut tracker = DirectoryTracker::default();
+        for byte in b"\x1b]9;9;\"C:\\Student project\"\x1b\\" {
+            tracker.feed(&[*byte]);
+        }
+        assert_eq!(
+            tracker.current,
+            Some(std::path::PathBuf::from(r"C:\Student project"))
+        );
+        tracker.feed(b"\x1b]0;window title\x07");
+        assert_eq!(
+            tracker.current,
+            Some(std::path::PathBuf::from(r"C:\Student project"))
+        );
+        tracker.feed(b"\x1b]9;9;");
+        tracker.feed(&vec![b'x'; 10000]);
+        assert!(tracker.sequence.len() <= 4096);
+        tracker.feed(b"\x1b]9;9;C:\\new folder\x07");
+        assert_eq!(
+            tracker.current,
+            Some(std::path::PathBuf::from(r"C:\new folder"))
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn embedded_prompt_and_current_folder_follow_cd() {
+        let fixture = Fixture::new();
+        let folder = fixture.layout.www.join("Student's project 日本");
+        fs::create_dir_all(&folder).unwrap();
+        fixture.start("directory");
+        let prompt = fixture.until("directory", "www");
+        assert!(prompt.contains('➜'));
+        fixture
+            .terminals
+            .write(
+                "directory",
+                &format!(
+                    "cd -- {}; printf '\\103\\127\\104\\137\\122\\105\\101\\104\\131\\n'\r",
+                    crate::integration::shell_quote(&folder.to_string_lossy())
+                ),
+            )
+            .unwrap();
+        fixture.until("directory", "CWD_READY");
+        let current = fixture.terminals.current_directory("directory").unwrap();
+        assert_eq!(current, fs::canonicalize(&folder).unwrap());
+        // Prompt expansion follows cd without evaluating folder names as shell code.
+        let embedded = std::process::Command::new("/bin/zsh")
+            .args(["-d", "-i", "-c", "print -P -- \"$PROMPT\""])
+            .env("HOME", &fixture.layout.home)
+            .env("ZDOTDIR", prepare_history(&fixture.layout, false).unwrap())
+            .current_dir(&current)
+            .output()
+            .unwrap();
+        let prompt = String::from_utf8_lossy(&embedded.stdout);
+        assert!(prompt.contains('➜') && prompt.contains("Student's project 日本"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn external_terminal_opens_the_folder_without_scripts_or_environment_overrides() {
+        let folder = std::path::Path::new("/Users/Student's projects 日本/shop");
+        let command = external_command(folder);
+        assert_eq!(command.get_program(), "/usr/bin/open");
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [
+                std::ffi::OsStr::new("-a"),
+                std::ffi::OsStr::new("Terminal"),
+                folder.as_os_str()
+            ]
+        );
+        assert_eq!(command.get_envs().count(), 0);
+        assert!(open_external(std::path::Path::new("relative-folder")).is_err());
+    }
+
+    #[test]
     fn validates_session_and_dimensions_before_replacing_a_shell() {
         let fixture = Fixture::new();
         assert!(fixture
@@ -969,7 +1224,12 @@ mod tests {
         let name = "Student's project 日本";
         fs::create_dir_all(fixture.layout.www.join(name)).unwrap();
         fs::write(fixture.layout.www.join("file.txt"), "").unwrap();
-        let folders = context(&fixture.layout).unwrap().folders;
+        let choices = context(&fixture.layout).unwrap();
+        assert_eq!(
+            choices.default_directory,
+            directory(&fixture.layout, None).unwrap().to_string_lossy()
+        );
+        let folders = choices.folders;
         assert!(folders.contains(&name.to_string()));
         assert!(!folders.contains(&"file.txt".to_string()));
         fixture.start("existing");

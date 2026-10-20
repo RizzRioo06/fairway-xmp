@@ -402,42 +402,10 @@ pub fn open(layout: &Layout, target: &str, ports: &crate::config::Ports) -> Resu
         "logs" => layout.data.join("logs").to_string_lossy().into(),
         "backups" => layout.data.join("backups").to_string_lossy().into(),
         "terminal" => {
-            #[cfg(target_os = "macos")]
-            {
-                let script = layout.data.join("fairway-terminal.command");
-                let text = format!(
-                    "#!/bin/sh\nexport PATH={}:\"$PATH\"\ncd {}\nexec /bin/zsh\n",
-                    shell_quote(&layout.bin.to_string_lossy()),
-                    shell_quote(&layout.www.to_string_lossy())
-                );
-                atomic_write(&script, text.as_bytes())?;
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&script, fs::Permissions::from_mode(0o755))
-                    .map_err(|e| e.to_string())?;
-                let mut cmd = process::command("/usr/bin/open");
-                cmd.arg("-a").arg("Terminal").arg(script);
-                process::output(cmd)?;
-            }
-            #[cfg(windows)]
-            {
-                // Create a separate console; no shell interpolation of user-supplied text.
-                let mut cmd = std::process::Command::new("cmd.exe");
-                use std::os::windows::process::CommandExt;
-                let mut paths = vec![layout.bin.clone()];
-                if let Some(path) = env::var_os("PATH") {
-                    paths.extend(env::split_paths(&path));
-                }
-                cmd.arg("/K")
-                    .current_dir(&layout.www)
-                    .env("PATH", env::join_paths(paths).map_err(|e| e.to_string())?)
-                    .creation_flags(0x00000010)
-                    .spawn()
-                    .map_err(|e| e.to_string())?;
-            }
-            #[cfg(target_os = "linux")]
+            #[cfg(feature = "terminal")]
+            return crate::terminal::open_external(&layout.www);
+            #[cfg(not(feature = "terminal"))]
             return Err("Run fairway shell to open a terminal with the bundled tools.".into());
-            #[cfg(not(target_os = "linux"))]
-            return Ok(());
         }
         _ => return Err("Unknown destination.".into()),
     };

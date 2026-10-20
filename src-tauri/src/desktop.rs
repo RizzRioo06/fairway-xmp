@@ -215,6 +215,19 @@ async fn terminal_context(state: State<'_, Shared>) -> Result<crate::terminal::T
 }
 
 #[tauri::command]
+async fn terminal_external(app: tauri::AppHandle, id: String) -> Result<()> {
+    let _operation = begin_operation(&app, "Opening external terminal…")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = app
+            .state::<crate::terminal::Terminals>()
+            .current_directory(&id)?;
+        crate::terminal::open_external(&directory)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn terminal_read(
     app: tauri::AppHandle,
     id: String,
@@ -935,6 +948,7 @@ pub fn run() {
             snapshot,
             terminal_start,
             terminal_context,
+            terminal_external,
             terminal_read,
             terminal_write,
             terminal_resize,

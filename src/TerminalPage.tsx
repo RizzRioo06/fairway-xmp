@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Clipboard, Copy, Eraser, Maximize2, Minimize2, Minus, Plus, RefreshCw, Search, Square, Terminal as TerminalIcon, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { Check, ChevronDown, ChevronUp, Clipboard, Copy, Eraser, ExternalLink, Minus, MoreHorizontal, Plus, RefreshCw, Search, Terminal as TerminalIcon, X } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -9,11 +9,10 @@ import './terminal.css';
 
 type Info = { shell: string; directory: string };
 type Output = { data: number[]; exited: boolean; exitCode: number | null; error: string | null };
-type Status = 'starting' | 'running' | 'ended' | 'error';
+type Status = 'starting' | 'running' | 'error';
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 const DEFAULT_FONT_SIZE = 13;
 const FONT_SIZE_KEY = 'fairway-terminal-font-size';
-
 function savedFontSize() {
   try {
     const value = Number(localStorage.getItem(FONT_SIZE_KEY));
@@ -24,7 +23,7 @@ function savedFontSize() {
 
 export type TerminalLaunch = { key: string; folder: string; label: string };
 type Tab = { key: string; slot: number; folder: string | null; label?: string };
-type Context = { folders: string[]; sites: { folder: string; label: string }[]; historySupported: boolean };
+type Context = { defaultDirectory: string; folders: string[]; sites: { folder: string; label: string }[]; historySupported: boolean };
 type NoticeBody = { error: boolean; text: string; warning?: boolean; action?: string };
 type SlotNotice = NoticeBody | null;
 type ShownNotice = (NoticeBody & { onAction?: () => void; onDismiss?: () => void }) | null;
@@ -44,16 +43,41 @@ function savedHistory() {
   try { return localStorage.getItem('fairway-terminal-history') !== 'false'; } catch { return true; }
 }
 
+function useDismissDetails(ref: RefObject<HTMLDetailsElement | null>, active: boolean) {
+  useEffect(() => {
+    const details = ref.current;
+    if (!details) return;
+    if (!active) details.open = false;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !details.contains(event.target)) details.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !details.open) return;
+      event.preventDefault(); event.stopPropagation();
+      details.open = false;
+      details.querySelector('summary')?.focus({ preventScroll: true });
+    };
+    document.addEventListener('pointerdown', dismiss);
+    details.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      details.removeEventListener('keydown', escape);
+    };
+  }, [ref, active]);
+}
+
 export default function TerminalPage({ active, busy, focusRequest = 0, launch = null }: { active: boolean; busy: boolean; focusRequest?: number; launch?: TerminalLaunch | null }) {
   const [workspace] = useState(() => crypto.randomUUID());
   const [rememberHistory, setRememberHistory] = useState(savedHistory);
   const [tabs, setTabs] = useState<Tab[]>(() => [{ key: crypto.randomUUID(), slot: 0, folder: launch?.folder ?? null, label: launch?.label }]);
   const [selected, setSelected] = useState(0);
   const activeSlot = tabs.some(tab => tab.slot === selected) ? selected : tabs[0].slot;
-  const [expanded, setExpanded] = useState(false);
   const [focusInput, setFocusInput] = useState(true);
-  const [folder, setFolder] = useState('');
-  const [context, setContext] = useState<Context>({ folders: [], sites: [], historySupported: false });
+  const newTerminalMenu = useRef<HTMLDetailsElement>(null);
+  const closeBySlot = useRef<Record<number, () => void>>({});
+  const externalBySlot = useRef<Record<number, () => void>>({});
+  useDismissDetails(newTerminalMenu, active);
+  const [context, setContext] = useState<Context>({ defaultDirectory: '', folders: [], sites: [], historySupported: false });
   const [contextError, setContextError] = useState<string | null>(null);
   const handledLaunch = useRef(launch?.key);
   const [launchError, setLaunchError] = useState<string | null>(null);
@@ -88,8 +112,7 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
     if (tabs.some(tab => statuses[tab.slot] === 'starting')) return;
     handledLaunch.current = launch.key;
     if (tabs.length >= 2) {
-      setFolder(launch.folder);
-      setLaunchError('Both terminal tabs are open. Close a tab, then choose New terminal to open the selected site folder.');
+      setLaunchError('Both terminals are open. Close the extra tab, then open the site terminal again.');
       return;
     }
     const slot = tabs.some(tab => tab.slot === 0) ? 1 : 0;
@@ -97,22 +120,22 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
     setTabs(previous => [...previous, { key: crypto.randomUUID(), slot, folder: launch.folder, label: launch.label }]);
     setSelected(slot); setFocusInput(true); setLaunchError(null);
   }, [launch, busy, tabs, statuses]);
-  function addTab() {
+  function addTab(folder: string | null = null) {
     if (busy || tabs.length >= 2 || tabs.some(tab => statuses[tab.slot] === 'starting')) return;
     const slot = tabs.some(tab => tab.slot === 0) ? 1 : 0;
     setStatuses(previous => ({ ...previous, [slot]: 'starting' }));
-    const next = { key: crypto.randomUUID(), slot, folder: folder || null, label: context.sites.find(site => site.folder === folder)?.label };
+    if (newTerminalMenu.current) newTerminalMenu.current.open = false;
+    const next = { key: crypto.randomUUID(), slot, folder, label: context.sites.find(site => site.folder === folder)?.label };
     setLaunchError(null);
     setTabs(previous => [...previous, next]);
     setSelected(slot); setFocusInput(true);
   }
-  function closeTab(slot: number) {
-    const remaining = tabs.filter(tab => tab.slot !== slot);
-    // A second close may complete before this one. Never resurrect its old tab
-    // or leave the workspace without a visible session/recovery action.
-    setTabs(previous => previous.length > 1 ? previous.filter(tab => tab.slot !== slot) : previous);
-    setSelected(remaining[0]?.slot ?? slot); setFocusInput(true);
-  }
+  const closeTab = useCallback((slot: number) => {
+    if (slot === 0) return;
+    setTabs(previous => previous.filter(tab => tab.slot !== slot));
+    setSelected(previous => previous === slot ? 0 : previous);
+    setFocusInput(true);
+  }, []);
   const slotNotice = slotNotices[activeSlot] ?? null;
   const workspaceNotice: ShownNotice = slotNotice
     ? {
@@ -123,35 +146,48 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
     : launchError ? { error: false, text: launchError, onDismiss: () => setLaunchError(null) }
     : contextError ? { error: true, text: `Could not refresh folders: ${contextError}`, action: 'Retry', onAction: () => { void refreshContext(); }, onDismiss: () => setContextError(null) }
     : null;
-  return <div className={`terminal-workspace${expanded ? ' terminal-expanded' : ''}`}>
+  const cannotAdd = busy || tabs.length >= 2 || tabs.some(tab => statuses[tab.slot] === 'starting');
+  return <div className="terminal-workspace">
     <FixedNotice notice={workspaceNotice} />
-    <div className="page-heading"><div><h1>Terminal</h1><p>PHP and Composer, ready for your projects.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', ended: 'Session ended', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
-    {canControl && <div className="terminal-workspace-controls">
-      <div role="tablist" aria-label="Terminal sessions" className="terminal-tabs">{tabs.map(tab => <button key={tab.key} id={`terminal-tab-${tab.slot}`} role="tab" aria-selected={activeSlot === tab.slot} aria-controls={`terminal-panel-${tab.slot}`} tabIndex={activeSlot === tab.slot ? 0 : -1} title={tab.label ?? tab.folder ?? 'Default folder'} onClick={() => { setSelected(tab.slot); setFocusInput(true); }} onKeyDown={event => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const index = tabs.findIndex(item => item.slot === tab.slot);
-        const next = tabs[event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-        setFocusInput(false); setSelected(next.slot);
-        document.getElementById(`terminal-tab-${next.slot}`)?.focus();
-      }}>Terminal {tab.slot + 1}{tab.folder && <span> · {tab.label ?? tab.folder}</span>}</button>)}</div>
-      <div className="terminal-new-session"><label>Start in<select aria-label="New terminal folder" value={folder} onFocus={() => { void refreshContext(); }} onChange={event => setFolder(event.target.value)}><option value="">Default folder</option>{folder && !context.folders.includes(folder) && !context.sites.some(site => site.folder === folder) && <option value={folder}>{folder} (unavailable)</option>}{context.folders.map(name => <option key={name} value={name}>{name}</option>)}{context.sites.length > 0 && <optgroup label="Registered sites">{context.sites.map(site => <option key={site.folder} value={site.folder}>{site.label}</option>)}</optgroup>}</select></label>
-        <button className="secondary" aria-label="New terminal" disabled={busy || tabs.length >= 2 || tabs.some(tab => statuses[tab.slot] === 'starting')} title={tabs.length >= 2 ? 'Close a tab to open another terminal.' : 'Open a separate shell without interrupting this one.'} onClick={addTab}><Plus size={14} />New terminal</button>
-      </div>
-      {context.historySupported && <label className="terminal-history"><input type="checkbox" checked={rememberHistory} onChange={event => {
-        const checked = event.target.checked; setRememberHistory(checked);
-        try { localStorage.setItem('fairway-terminal-history', String(checked)); } catch { /* Optional preference. */ }
-      }} />Remember commands in new sessions<span title="Commands are saved privately on this device, with about 1,000 entries retained. Start a command with a space to omit it. Output and password prompts are not recorded.">Local history · leading space skips saving</span></label>}
-    </div>}
-    {tabs.map(tab => <div key={tab.key} id={`terminal-panel-${tab.slot}`} className="terminal-tab-panel" role="tabpanel" aria-labelledby={canControl ? `terminal-tab-${tab.slot}` : undefined} hidden={activeSlot !== tab.slot}>
-      <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} busy={busy} workspace={workspace} tab={tab} expanded={expanded} toggleExpanded={() => setExpanded(value => !value)} canClose={tabs.length > 1} closeTab={() => closeTab(tab.slot)} reportStatus={reportStatus} reportNotice={reportNotice} retryBySlot={retryBySlot} clearErrorBySlot={clearErrorBySlot} />
-    </div>)}
+    <div className="page-heading"><div><h1>Terminal</h1><p>PHP and Composer, ready for your projects.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
+    <div className="terminal-panel">
+      {canControl && <div className="terminal-header">
+        <div role="tablist" aria-label="Terminals" className="terminal-tabs">{tabs.map(tab => <div className={`terminal-tab${activeSlot === tab.slot ? ' selected' : ''}`} key={tab.key}>
+          <button id={`terminal-tab-${tab.slot}`} role="tab" aria-selected={activeSlot === tab.slot} aria-controls={`terminal-panel-${tab.slot}`} tabIndex={activeSlot === tab.slot ? 0 : -1} title={tab.label ?? tab.folder ?? context.defaultDirectory} onClick={() => { setSelected(tab.slot); setFocusInput(true); }} onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const index = tabs.findIndex(item => item.slot === tab.slot);
+            const next = tabs[event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+            setFocusInput(false); setSelected(next.slot);
+            document.getElementById(`terminal-tab-${next.slot}`)?.focus({ preventScroll: true });
+          }}><TerminalIcon size={14} aria-hidden="true" /><span className="terminal-tab-name">Terminal {tab.slot + 1}</span>{tab.folder && <span className="terminal-tab-folder"> · {tab.label ?? tab.folder}</span>}</button>
+          {tab.slot !== 0 && <button className="terminal-tab-close" aria-label={`Close terminal ${tab.slot + 1}`} disabled={statuses[tab.slot] === 'starting'} onClick={() => { setSelected(tab.slot); setFocusInput(false); closeBySlot.current[tab.slot]?.(); }}><X size={13} /></button>}
+        </div>)}</div>
+        <details className="terminal-new" ref={newTerminalMenu} onToggle={event => { if (event.currentTarget.open) void refreshContext(); }}>
+          <summary aria-label="New terminal" aria-disabled={cannotAdd} title={tabs.length >= 2 ? 'Close the extra tab to open another terminal.' : 'New terminal'} onClick={event => { if (cannotAdd) event.preventDefault(); }}><Plus size={16} /></summary>
+          <div className="terminal-popover terminal-folder-menu">
+            <div className="terminal-menu-label">New terminal in</div>
+            <button className="terminal-default-folder" disabled={cannotAdd || !context.defaultDirectory} onClick={() => addTab()}><span>{context.defaultDirectory || 'Loading folder…'}<small>Default location</small></span></button>
+            {context.folders.map(name => <button key={name} disabled={cannotAdd} onClick={() => addTab(name)}>{name}</button>)}
+            {context.sites.length > 0 && <><div className="terminal-menu-label terminal-menu-divider">Registered sites</div>{context.sites.map(site => <button key={site.folder} disabled={cannotAdd} onClick={() => addTab(site.folder)}>{site.label}</button>)}</>}
+          </div>
+        </details>
+        <button className="terminal-external" aria-label="Open in external terminal" title="Open your system terminal in the current folder" disabled={statuses[activeSlot] !== 'running' || busy} onClick={() => externalBySlot.current[activeSlot]?.()}><ExternalLink size={14} aria-hidden="true" /><span>External terminal</span></button>
+      </div>}
+      {tabs.map(tab => <div key={tab.key} id={`terminal-panel-${tab.slot}`} className="terminal-tab-panel" role="tabpanel" aria-labelledby={canControl ? `terminal-tab-${tab.slot}` : undefined} hidden={activeSlot !== tab.slot}>
+        <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} setRememberHistory={checked => {
+          setRememberHistory(checked);
+          try { localStorage.setItem('fairway-terminal-history', String(checked)); } catch { /* Optional preference. */ }
+        }} historySupported={context.historySupported} defaultDirectory={context.defaultDirectory} busy={busy} workspace={workspace} tab={tab} closeTab={closeTab} closeBySlot={closeBySlot} externalBySlot={externalBySlot} reportStatus={reportStatus} reportNotice={reportNotice} retryBySlot={retryBySlot} clearErrorBySlot={clearErrorBySlot} />
+      </div>)}
+
+    </div>
   </div>;
 }
 
-function TerminalSession({ active, focusInput, focusRequest, rememberHistory, busy, workspace, tab, expanded, toggleExpanded, canClose, closeTab, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
-  active: boolean; focusInput: boolean; focusRequest: number; rememberHistory: boolean; busy: boolean; workspace: string; tab: Tab; expanded: boolean;
-  toggleExpanded: () => void; canClose: boolean; closeTab: () => void; reportStatus: (slot: number, status: Status) => void;
+function TerminalSession({ active, focusInput, focusRequest, rememberHistory, setRememberHistory, historySupported, defaultDirectory, busy, workspace, tab, closeTab, closeBySlot, externalBySlot, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
+  active: boolean; focusInput: boolean; focusRequest: number; rememberHistory: boolean; setRememberHistory: (checked: boolean) => void; historySupported: boolean; defaultDirectory: string; busy: boolean; workspace: string; tab: Tab;
+  closeTab: (slot: number) => void; closeBySlot: { current: Record<number, () => void> }; externalBySlot: { current: Record<number, () => void> }; reportStatus: (slot: number, status: Status) => void;
   reportNotice: (slot: number, notice: SlotNotice) => void;
   retryBySlot: { current: Record<number, () => void> }; clearErrorBySlot: { current: Record<number, () => void> };
 }) {
@@ -177,7 +213,19 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
   const [matchFound, setMatchFound] = useState<boolean | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [confirm, setConfirm] = useState<'restart' | 'stop' | 'close' | null>(null);
+  const [confirm, setConfirm] = useState<'restart' | 'close' | null>(null);
+  const [pendingRestart, setPendingRestart] = useState(false);
+  const toolsMenu = useRef<HTMLDetailsElement>(null);
+  const [contextPosition, setContextPosition] = useState<{ left: number; top: number } | null>(null);
+  useDismissDetails(toolsMenu, active);
+  closeBySlot.current[tab.slot] = () => {
+    if (status === 'starting') return;
+    if (status === 'running') setConfirm('close');
+    else void endTerminal(false);
+  };
+  useEffect(() => {
+    if (pendingRestart && !busy) { setPendingRestart(false); setGeneration(value => value + 1); }
+  }, [pendingRestart, busy]);
 
   useEffect(() => { reportStatus(tab.slot, status); }, [tab.slot, status, reportStatus]);
   clearErrorBySlot.current[tab.slot] = () => setError(null);
@@ -197,6 +245,8 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     let timer: number | undefined;
     let frame = 0;
     let failed = false;
+    let receivedInput = false;
+    let startedAt = 0;
     let queuedBytes = 0;
     let writing = Promise.resolve();
     let resizing = false;
@@ -263,6 +313,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     const selection = term.onSelectionChange(() => { if (!disposed) setHasSelection(term.hasSelection()); });
     const input = term.onData(data => {
       if (session.current !== id || failed) return;
+      receivedInput = true;
       // Serialize keys and chunk pastes; never queue unlimited IPC writes.
       if (queuedBytes + data.length > 256 * 1024) { setError('Paste is too large. Use a smaller selection.'); return; }
       queuedBytes += data.length;
@@ -292,9 +343,17 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
         if (disposed || session.current !== id) return;
         if (output.error) { fail(output.error); return; }
         if (output.exited) {
-          term.writeln(`\r\n[Session ended${output.exitCode !== null ? ` · exit ${output.exitCode}` : ''}]`);
-          term.options.disableStdin = true; session.current = null; setStatus('ended');
-          void invoke('terminal_close', { id }).catch(() => {});
+          // A shell that exits during startup must offer recovery, not respawn forever.
+          if (!receivedInput && Date.now() - startedAt < 1000) {
+            fail(`Terminal closed during startup${output.exitCode !== null ? ` (exit ${output.exitCode})` : ''}. Try opening it again.`);
+            return;
+          }
+          term.options.disableStdin = true; session.current = null;
+          try { await invoke('terminal_close', { id }); }
+          catch (reason) { fail(reason); return; }
+          if (disposed) return;
+          if (tab.slot === 0) { setStatus('starting'); setPendingRestart(true); }
+          else closeTab(tab.slot);
         } else timer = window.setTimeout(() => { void poll(); }, output.data.length ? 10 : 70);
       } catch (reason) { if (session.current === id) fail(reason); }
     };
@@ -305,7 +364,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
         fitToHost();
         const result = await invoke<Info>('terminal_start', { request: { id, workspace, slot: tab.slot, folder: tab.folder, rememberHistory: historyPreference.current, cols: Math.max(2, term.cols), rows: Math.max(1, term.rows) } });
         if (disposed) { await invoke('terminal_close', { id }); return; }
-        session.current = id; setInfo(result); setStatus('running');
+        session.current = id; startedAt = Date.now(); setInfo(result); setStatus('running');
         fitToHost(); queueSize(); if (activeRef.current) term.focus(); void poll();
       } catch (reason) { fail(reason); }
     });
@@ -316,7 +375,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
       if (session.current === id) session.current = null;
       void invoke('terminal_close', { id }).catch(() => {});
     };
-  }, [generation, workspace, tab.slot, tab.folder]);
+  }, [generation, workspace, tab.slot, tab.folder, closeTab]);
 
   useEffect(() => {
     activeRef.current = active;
@@ -324,7 +383,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
       const frame = requestAnimationFrame(() => { fit.current?.(); if (focusInput) terminal.current?.focus(); });
       return () => cancelAnimationFrame(frame);
     }
-  }, [active, expanded, focusInput, focusRequest]);
+  }, [active, focusInput, focusRequest]);
 
   useEffect(() => {
     fontSizeRef.current = fontSize;
@@ -338,7 +397,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     if (!searchOpen || !active) return;
     searchInput.current?.focus();
     searchInput.current?.select();
-  }, [searchOpen, active, expanded]);
+  }, [searchOpen, active]);
 
   useEffect(() => {
     if (searchOpen && query) setMatchFound(search.current?.findNext(query, { incremental: true }) ?? false);
@@ -379,16 +438,25 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     } catch { setError(`Could not ${action}. Use your terminal’s keyboard shortcut or clipboard permissions.`); }
   }
 
-  async function endSession(restart: boolean, remove = false) {
+  externalBySlot.current[tab.slot] = () => { void openExternal(); };
+
+  async function openExternal() {
+    const id = session.current;
+    if (!id) return;
+    if (toolsMenu.current) toolsMenu.current.open = false;
+    try { await invoke('terminal_external', { id }); }
+    catch (reason) { setError(`Could not open external terminal: ${errorText(reason)}`); }
+  }
+
+  async function endTerminal(restart: boolean) {
     setConfirm(null); setError(null);
     const id = session.current; session.current = null;
     if (terminal.current) terminal.current.options.disableStdin = true;
-    setStatus(restart ? 'starting' : 'ended');
+    setStatus('starting');
     try {
       if (id) await invoke('terminal_close', { id });
-      if (remove) closeTab();
-      else if (restart) setGeneration(value => value + 1);
-      else terminal.current?.writeln('\r\n[Session ended]');
+      if (restart) setPendingRestart(true);
+      else closeTab(tab.slot);
     } catch (reason) { setError(errorText(reason)); setStatus('error'); }
   }
 
@@ -426,25 +494,24 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
     }
   }}>
     {isUiTest && <div className="preview-banner">UI test — simulated terminal. Commands do not run on your computer.</div>}
-    <div className="terminal-panel">
-      <div className="terminal-toolbar">
-        <div className="terminal-toolbar-heading"><span className="terminal-shell"><TerminalIcon size={16} />{info?.shell ?? 'Local shell'}</span><div className="terminal-session-actions">
-          <button className="secondary" disabled={!canControl || status === 'starting' || busy} onClick={() => { if (status === 'running') setConfirm('restart'); else void endSession(true); }}><RefreshCw size={14} />{status === 'running' ? 'Restart' : 'New session'}</button>
-          <button className="secondary" disabled={status !== 'running' || !canControl} onClick={() => setConfirm('stop')}><Square size={13} />End session</button>
-          {canClose && <button className="secondary" onClick={() => { if (status === 'running') setConfirm('close'); else void endSession(false, true); }} disabled={status === 'starting'}><X size={14} />Close tab</button>}
-        </div></div>
-        <div className="terminal-actions">
-        <button className="secondary" disabled={!canControl} onClick={() => { terminal.current?.clear(); terminal.current?.focus(); }}><Eraser size={14} />Clear</button>
-        <button className="secondary" disabled={!hasSelection} onClick={() => { void clipboard('copy'); }}>{copied ? <Check size={14} /> : <Copy size={14} />}Copy</button>
-        <button className="secondary" disabled={status !== 'running' || !canControl} onClick={() => { void clipboard('paste'); }}><Clipboard size={14} />Paste</button>
-        <button className="secondary" disabled={!canControl} title="Find output (Ctrl/Cmd+F)" aria-expanded={searchOpen} aria-controls={`terminal-search-${tab.slot}`} onClick={() => { setSearchOpen(true); searchInput.current?.focus(); searchInput.current?.select(); }}><Search size={14} />Find</button>
-        <div className="terminal-zoom" role="group" aria-label="Terminal text size">
-          <button className="secondary" aria-label="Decrease terminal text size" disabled={!canControl || fontSize <= 10} onClick={() => zoom(-1)}><Minus size={14} /></button>
-          <button className="secondary terminal-font-size" aria-label={`Reset terminal text size (${fontSize} pixels)`} disabled={!canControl} title="Reset text size (Ctrl/Cmd+0)" onClick={resetZoom}>{fontSize} px</button>
-          <button className="secondary" aria-label="Increase terminal text size" disabled={!canControl || fontSize >= 24} onClick={() => zoom(1)}><Plus size={14} /></button>
+    {canControl && <details className="terminal-tools" ref={toolsMenu} onToggle={event => { if (!event.currentTarget.open) setContextPosition(null); }}>
+      <summary aria-label="Terminal options" title="Terminal options" onClick={() => setContextPosition(null)}><MoreHorizontal size={18} /></summary>
+      <div className="terminal-popover terminal-options" style={contextPosition ? { position: 'fixed', ...contextPosition, right: 'auto', maxWidth: 'calc(100vw - 24px)' } : undefined}>
+        <div className="terminal-menu-label">{info?.shell ?? 'Local shell'}</div>
+        <button onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; setSearchOpen(true); }}><Search size={14} />Find output<span className="terminal-shortcut">⌘/Ctrl F</span></button>
+        <button onClick={() => { terminal.current?.clear(); if (toolsMenu.current) toolsMenu.current.open = false; terminal.current?.focus(); }}><Eraser size={14} />Clear output</button>
+        <button disabled={!hasSelection} onClick={() => { void clipboard('copy'); }}>{copied ? <Check size={14} /> : <Copy size={14} />}Copy</button>
+        <button disabled={status !== 'running'} onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; void clipboard('paste'); }}><Clipboard size={14} />Paste</button>
+        <div className="terminal-zoom terminal-menu-divider" role="group" aria-label="Terminal text size">
+          <span>Text size</span><button aria-label="Decrease terminal text size" disabled={fontSize <= 10} onClick={() => zoom(-1)}><Minus size={14} /></button>
+          <button className="terminal-font-size" aria-label={`Reset terminal text size (${fontSize} pixels)`} title="Reset text size (Ctrl/Cmd+0)" onClick={resetZoom}>{fontSize} px</button>
+          <button aria-label="Increase terminal text size" disabled={fontSize >= 24} onClick={() => zoom(1)}><Plus size={14} /></button>
         </div>
-        <button className="secondary" aria-label={expanded ? 'Restore terminal size' : 'Expand terminal'} aria-pressed={expanded} disabled={!canControl} onClick={toggleExpanded}>{expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
-      </div></div>
+        {historySupported && <label className="terminal-history terminal-menu-divider"><input type="checkbox" checked={rememberHistory} onChange={event => setRememberHistory(event.target.checked)} /><span>Remember commands<small>Applies to new terminals. A leading space skips saving.</small></span></label>}
+        <button className="terminal-menu-divider" disabled={status === 'starting' || busy} onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; if (status === 'running') setConfirm('restart'); else void endTerminal(true); }}><RefreshCw size={14} />{status === 'running' ? 'Restart terminal' : 'Retry terminal'}</button>
+        <div className="terminal-details"><span>Started in</span><code>{info?.directory ?? tab.label ?? tab.folder ?? defaultDirectory}</code><small>Ctrl+C interrupts a command. Type exit to finish.<br />Terminals keep running until you quit Fairway XMP.</small></div>
+      </div>
+    </details>}
       {searchOpen && <div id={`terminal-search-${tab.slot}`} className="terminal-search" role="search" aria-label="Terminal output">
         <input ref={searchInput} type="text" aria-label="Find in terminal" placeholder="Find in terminal" value={query} spellCheck={false} autoComplete="off" onChange={event => setQuery(event.target.value)} onKeyDown={event => {
           if (event.key === 'Enter') { event.preventDefault(); findMatch(event.shiftKey); }
@@ -454,10 +521,12 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, bu
         <button className="secondary" aria-label="Next terminal match" disabled={!query} onClick={() => findMatch()}><ChevronDown size={14} /></button>
         <button className="secondary" aria-label="Close terminal search" onClick={closeSearch}><X size={14} /></button>
       </div>}
-      {canControl ? <div ref={host} className="terminal-host" /> : <p className="terminal-unavailable">Open the Fairway XMP desktop app to use the terminal.</p>}
-      <div className="terminal-directory"><span>Started in</span><code title={info?.directory}>{info?.directory ?? 'Default folder'}</code></div>
-    </div>
-    <p className="terminal-hint">Ctrl+C interrupts a command. Switching pages or closing the window keeps this session running. Quitting Fairway XMP ends it.</p>
-    {confirm && <div className="modal-backdrop"><div ref={dialog} className="modal terminal-confirm" role="dialog" aria-modal="true" aria-labelledby={`terminal-confirm-${tab.slot}`}><h2 id={`terminal-confirm-${tab.slot}`}>{confirm === 'restart' ? 'Restart terminal?' : confirm === 'close' ? 'Close terminal tab?' : 'End terminal session?'}</h2><p>This ends this shell and its running commands. {confirm === 'restart' ? 'A new shell will open in the same starting folder.' : confirm === 'close' ? 'Your other terminal keeps running.' : 'You can start a new session afterward.'}</p><div className="button-row"><button className="secondary" onClick={() => setConfirm(null)}>Cancel</button><button className="primary" onClick={() => { void endSession(confirm === 'restart', confirm === 'close'); }}>{confirm === 'restart' ? 'Restart terminal' : confirm === 'close' ? 'Close tab' : 'End session'}</button></div></div></div>}
+      {canControl ? <div ref={host} className="terminal-host" onContextMenu={event => {
+        event.preventDefault();
+        setContextPosition({ left: Math.max(8, Math.min(event.clientX, window.innerWidth - 306)), top: Math.max(8, Math.min(event.clientY, window.innerHeight - Math.min(460, window.innerHeight * .65) - 8)) });
+        if (toolsMenu.current) { toolsMenu.current.open = true; toolsMenu.current.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true }); }
+      }} /> : <p className="terminal-unavailable">Open the Fairway XMP desktop app to use the terminal.</p>}
+      {canControl && status === 'error' && <div className="terminal-recovery"><span>Could not open or reconnect to this terminal.</span><button className="secondary" disabled={busy} onClick={() => { void endTerminal(true); }}>Retry terminal</button></div>}
+    {confirm && <div className="modal-backdrop"><div ref={dialog} className="modal terminal-confirm" role="dialog" aria-modal="true" aria-labelledby={`terminal-confirm-${tab.slot}`}><h2 id={`terminal-confirm-${tab.slot}`}>{confirm === 'restart' ? 'Restart terminal?' : 'Close terminal tab?'}</h2><p>This ends this terminal and its running commands. {confirm === 'restart' ? 'A fresh terminal will open in the same starting folder.' : 'Your first terminal keeps running.'}</p><div className="button-row"><button className="secondary" onClick={() => setConfirm(null)}>Cancel</button><button className="primary" onClick={() => { void endTerminal(confirm === 'restart'); }}>{confirm === 'restart' ? 'Restart terminal' : 'Close tab'}</button></div></div></div>}
   </section>;
 }
