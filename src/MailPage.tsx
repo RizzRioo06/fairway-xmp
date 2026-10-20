@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, Inbox, Mail, Paperclip, Play, ScrollText, Search, Settings2, Square, Trash2 } from 'lucide-react';
 import { canControl, invoke } from './bridge';
+import Workspace, { MaximizeWorkspace } from './Workspace';
+import { handleLayerKey } from './modal-focus';
 import type { MailAddress, MailAttachment, MailList, MailMessage, Snapshot } from './types';
 
 type Props = {
@@ -142,7 +144,10 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
 
   const unread = list?.messages_unread ?? 0;
   const actionNotice = error ? { error: true, text: error } : saved ? { error: false, text: saved } : null;
-  return <div className="mail-page">
+  const headingActions = <div className="mail-heading-actions"><span className={`status-label ${ready ? 'ready' : mail?.running ? 'pending' : ''}`}><span className={`status-dot ${ready ? 'running' : mail?.running ? 'pending' : ''}`} />{ready ? 'Running' : mail?.running ? 'Waiting' : 'Stopped'}</span>
+        <button className="secondary" onClick={settings}><Settings2 size={14} />SMTP settings</button>
+        {mail?.running ? <button className="primary" disabled={!canControl || busy} onClick={stop}><Square size={14} />Stop mail</button> : <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</div>;
+  return <Workspace id="mail" title="Mail" className="mail-page" actions={headingActions}>
     <div className={`mail-notice${actionNotice ? ` notice ${actionNotice.error ? 'error' : 'success'}` : ''}`}>
       <div className="mail-notice-message">
         <div role={actionNotice && !actionNotice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{actionNotice && !actionNotice.error ? actionNotice.text : null}</div>
@@ -151,9 +156,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
       {actionNotice && <button aria-label="Dismiss mail message" onClick={() => { setError(null); setSaved(null); }}>×</button>}
     </div>
     <div className="page-heading"><div><h1>Mail</h1><p>Local inbox for emails sent by your apps.</p></div>
-      <div className="mail-heading-actions"><span className={`status-label ${ready ? 'ready' : mail?.running ? 'pending' : ''}`}><span className={`status-dot ${ready ? 'running' : mail?.running ? 'pending' : ''}`} />{ready ? 'Running' : mail?.running ? 'Waiting' : 'Stopped'}</span>
-        <button className="secondary" onClick={settings}><Settings2 size={14} />SMTP settings</button>
-        {mail?.running ? <button className="primary" disabled={!canControl || busy} onClick={stop}><Square size={14} />Stop mail</button> : <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</div>
+      <div className="workspace-heading-actions">{headingActions}<MaximizeWorkspace id="mail" title="Mail" /></div>
     </div>
     {mail?.message && <div className="notice error" role="alert"><span>{mail.message}</span></div>}
     {!ready ? <section className="mail-inbox mail-empty"><Mail size={26} /><h2>{mail?.running ? 'Mail is starting…' : unavailable ? 'Mail is unavailable.' : 'Mail is stopped.'}</h2>{unavailable ? <p>Mail catcher files are missing. Reinstall Fairway XMP to restore mail; your projects and data will be kept.</p> : <p>Start mail to catch the emails your apps send. <strong>Start all</strong> on Environment also starts it.</p>}{!mail?.running && !unavailable && <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</section> :
@@ -179,12 +182,35 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
             {selected.Attachments?.length ? <ul className="mail-attachments" aria-label="Attachments">{selected.Attachments.map(item => <li key={item.PartID}><button title="Save attachment" disabled={!canControl} onClick={() => { void save(selected.ID, item); }}><Download size={12} />{item.FileName || 'Attachment'}<span>{size(item.Size)}</span></button></li>)}</ul> : null}
             <div className="mail-tabs" role="tablist">{selected.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
           </div>
-          {/* Scripts, forms, and navigation stay disabled; email HTML is untrusted. */}
-          {tab === 'html' && selected.HTML ? <iframe className="mail-body" title="Email content" sandbox="" srcDoc={emailBase + selected.HTML} /> : <pre className="mail-body mail-text">{selected.Text || 'This email has no text version.'}</pre>}
+          {/* No scripts or forms. Same-origin access lets the parent handle modal keyboard focus. */}
+          {tab === 'html' && selected.HTML ? <MailBody html={selected.HTML} /> : <pre className="mail-body mail-text">{selected.Text || 'This email has no text version.'}</pre>}
         </> : <div className="mail-list-empty"><Mail size={22} /><p>Select an email to read it.</p></div>}</div>
       </section>}
     <div className="mail-footer">
-      <button className="secondary" disabled={!canControl} onClick={logs}><ScrollText size={14} />View logs</button>
+      <button className="secondary workspace-navigation" disabled={!canControl} onClick={logs}><ScrollText size={14} />View logs</button>
       <button className="secondary" disabled={!ready || busy || !canControl} onClick={open}><ExternalLink size={14} />Open in browser</button></div>
-  </div>;
+  </Workspace>;
+}
+
+function MailBody({ html }: { html: string }) {
+  const detach = useRef<(() => void) | null>(null);
+  useEffect(() => () => detach.current?.(), []);
+  return <iframe className="mail-body" title="Email content" sandbox="allow-same-origin" srcDoc={emailBase + html} onLoad={event => {
+    detach.current?.(); detach.current = null;
+    const document = event.currentTarget.contentDocument;
+    if (!document) return;
+    // The frame cannot execute email scripts. These parent-owned listeners keep
+    // Escape and focus containment working without granting script permission.
+    const preventNavigation = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest('a[href], area[href]')) event.preventDefault();
+    };
+    document.addEventListener('keydown', handleLayerKey);
+    document.addEventListener('click', preventNavigation);
+    document.addEventListener('auxclick', preventNavigation);
+    detach.current = () => {
+      document.removeEventListener('keydown', handleLayerKey);
+      document.removeEventListener('click', preventNavigation);
+      document.removeEventListener('auxclick', preventNavigation);
+    };
+  }} />;
 }

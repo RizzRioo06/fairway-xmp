@@ -13,6 +13,8 @@ import MailPage from './MailPage';
 import LogsPage from './LogsPage';
 import { insideDocumentRoot, siteSaveMessage } from './sites';
 import type { TerminalLaunch } from './TerminalPage';
+import { WorkspaceProvider, WorkspaceFeedback, useMaximizedWorkspace } from './Workspace';
+import { useModalFocus } from './modal-focus';
 
 const UiTestToolbar = isUiTest ? lazy(() => import('./ui-test/Toolbar')) : null;
 const TerminalPage = lazy(() => import('./TerminalPage'));
@@ -60,12 +62,18 @@ const trustApproval: Record<string, string> = {
 };
 
 export default function App() {
+  return <WorkspaceProvider><AppContent /></WorkspaceProvider>;
+}
+
+function AppContent() {
+  const maximized = useMaximizedWorkspace();
   const [data, setData] = useState<Snapshot>(preview);
   const [view, setCurrentView] = useState<View>('environment');
   const navigation = useRef({ view: 'environment' as View, id: 0 });
   const pageId = navigation.current.id;
 
   function setView(next: View) {
+    if (maximized && next !== navigation.current.view) return;
     if (navigation.current.view !== next) {
       navigation.current = { view: next, id: navigation.current.id + 1 };
       setNoticeState(null);
@@ -400,14 +408,14 @@ export default function App() {
           </section>
         </>}
       </div>
-      <div className={`operation-notice${notice ? ` notice ${notice.kind}` : ''}`}>
+      <WorkspaceFeedback><div className={`operation-notice${notice ? ` notice ${notice.kind}` : ''}`}>
         <div className="operation-notice-message">
           <div role={notice?.kind === 'success' ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice?.kind === 'success' ? notice.text : null}</div>
           <div role={notice?.kind === 'error' ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{notice?.kind === 'error' ? notice.text : null}</div>
         </div>
         {notice && <button aria-label="Dismiss message" onClick={() => setNoticeState(null)}><X size={17} /></button>}
       </div>
-      {busy && !databaseBusy && <div className="operation-status" role="status"><LoaderCircle className="spin" size={16} />{busy}</div>}
+      {busy && !databaseBusy && <div className="operation-status" role="status"><LoaderCircle className="spin" size={16} />{busy}</div>}</WorkspaceFeedback>
     </main>
 
     {report !== null && <Modal title="Diagnostic report" onClose={() => setReport(null)}><p>Copy this report when asking for help. You can review everything included below.</p><pre className="log-output">{report}</pre><button className="secondary" onClick={() => { void copy(report, 'diagnostics'); }}>{copied === 'diagnostics' ? <Check size={14} /> : <Clipboard size={14} />}{copied === 'diagnostics' ? 'Copied' : 'Copy diagnostic report'}</button></Modal>}
@@ -462,25 +470,6 @@ function ServiceCard({ service, version, unavailable, disabled, busy, onAction, 
 
 function Modal({ title, onClose, children, backdropCloses = true }: { title: string; onClose: () => void; children: React.ReactNode; backdropCloses?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
-  useEffect(() => { close.current = onClose; }, [onClose]);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const first = container.current?.querySelector<HTMLElement>('form input:not(:disabled), button');
-    const field = container.current?.querySelector<HTMLInputElement>('form input:not(:disabled)');
-    (field ?? first)?.focus();
-    function key(event: KeyboardEvent) {
-      if (event.key === 'Escape') close.current();
-      if (event.key === 'Tab') {
-        const focusable = container.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a, input:not(:disabled), select:not(:disabled)');
-        if (!focusable?.length) return;
-        const first = focusable[0], last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-      }
-    }
-    document.addEventListener('keydown', key);
-    return () => { document.removeEventListener('keydown', key); previous?.focus(); };
-  }, []);
+  useModalFocus(container, true, onClose);
   return <div className="modal-backdrop" onClick={event => { if (backdropCloses && event.target === event.currentTarget) onClose(); }}><div ref={container} className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="card-title"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20} /></button></div>{children}</div></div>;
 }

@@ -7,6 +7,7 @@ import RowFields, { initialInsertValues } from './RowFields';
 import TableWorkspace from './TableWorkspace';
 import ActionMenu from './ActionMenu';
 import HelpTip from '../HelpTip';
+import Workspace, { MaximizeWorkspace, useMaximizedWorkspace } from '../Workspace';
 import IndexFields, { indexableColumns, suggestedIndexName, type IndexDefinition } from './IndexFields';
 import SchemaDetails from './SchemaDetails';
 import { editableColumn, fromColumn, newColumn, type Column, type Definition, type Page, type QueryResult, type Row, type Structure, type Table, type TableIndex } from './types';
@@ -29,6 +30,7 @@ function recentFiles(): string[] {
 }
 
 export default function DataBrowser({ ready, busy: appBusy, start, open }: { ready: boolean; busy: boolean; start: () => void; open: (target: string) => void }) {
+  const maximized = useMaximizedWorkspace() === 'data';
   const [source, setSource] = useState<Source>({ driver: 'mysql' });
   const [recent, setRecent] = useState(recentFiles);
   const sqlite = source.driver === 'sqlite';
@@ -207,7 +209,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   }, []);
   useEffect(() => {
     const element = rowsScroll.current;
-    if (!element) return;
+    if (!element || maximized) return;
     const measure = () => {
       const below = element.nextElementSibling instanceof HTMLElement ? element.nextElementSibling.offsetHeight : 0;
       const room = window.innerHeight - element.getBoundingClientRect().top - below - 20;
@@ -218,7 +220,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     if (element.parentElement) observer.observe(element.parentElement);
     window.addEventListener('resize', measure);
     return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
-  }, [pane, table, database, sqlite, page, catalogLoaded]);
+  }, [pane, table, database, sqlite, page, catalogLoaded, maximized]);
 
   function begin(kind: EditKind, row?: Row, column?: Column, index?: TableIndex) {
     setNotice(null); setName(kind === 'rename_database' ? database : kind === 'rename_table' ? table : '');
@@ -274,8 +276,9 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const columnForm = edit && ['add_column', 'change_column'].includes(edit.kind);
   const pageNotice = notice && !edit ? notice : null;
 
-  return <div className="db-browser" aria-busy={!!pending}>
-    <div className="page-heading"><div><h1>Data browser</h1><p>Query and edit MySQL databases or SQLite files.</p></div><div className="db-actions" inert={browsing}><button className="secondary" disabled={blocked} onClick={() => void openSqlite()}><FolderOpen size={14} />Open SQLite file…</button>{!sqlite && <button className="secondary" disabled={blocked || !ready} onClick={() => open('phpmyadmin')}>phpMyAdmin<ArrowUpRight size={14} /></button>}</div></div>
+  const headingActions = <div className="db-actions" inert={browsing}><button className="secondary" disabled={blocked} onClick={() => void openSqlite()}><FolderOpen size={14} />Open SQLite file…</button>{!sqlite && <button className="secondary" disabled={blocked || !ready} onClick={() => open('phpmyadmin')}>phpMyAdmin<ArrowUpRight size={14} /></button>}</div>;
+  return <Workspace id="data" title="Data browser" className="db-browser" busy={!!pending} actions={headingActions}>
+    <div className="page-heading"><div><h1>Data browser</h1><p>Query and edit MySQL databases or SQLite files.</p></div><div className="workspace-heading-actions">{headingActions}<MaximizeWorkspace id="data" title="Data browser" /></div></div>
     <div className={`db-notice${pageNotice ? ` notice ${pageNotice.error ? 'error' : 'success'}` : ''}`}>
       <div className="db-notice-message">
         <div role={pageNotice && !pageNotice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{pageNotice && !pageNotice.error ? pageNotice.text : null}</div>
@@ -287,7 +290,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
       <div className="db-source-tabs" role="tablist" aria-label="Data source"><button role="tab" aria-selected={!sqlite} disabled={blocked} onClick={selectMysql}>MySQL</button><button role="tab" aria-selected={sqlite} disabled={blocked} onClick={selectSqlite}>SQLite</button></div>
       {sqlitePath && <section className="db-file-card" aria-label="SQLite file"><p className="db-file-path" title={sqlitePath}><strong>{fileName(sqlitePath)}</strong><span aria-label="SQLite file path">{sqlitePath}</span><small>Editing the original project file. Changes are saved immediately.</small></p><div className="db-file-actions"><button className="secondary" disabled={blocked} onClick={backupSqlite}>Back up SQLite file</button><button className="secondary" disabled={blocked} onClick={closeSqlite}>Close SQLite file</button></div></section>}
     </section>
-    {sqlite && !sqlitePath ? <section className="settings-card db-empty"><FolderOpen size={28} /><h2>Open a SQLite file to browse your data</h2><p>Choose a project database. SQLite needs no running services.</p><div className="db-empty-actions"><button className="primary" disabled={blocked} onClick={() => void openSqlite()}>Open SQLite file</button>{recent[0] && <button className="secondary" disabled={blocked} title={recent[0]} onClick={() => void reopenSqlite()}>Reopen {fileName(recent[0])}</button>}</div></section> : !available ? <section className="settings-card db-empty"><Database size={28} /><h2>Start MySQL to browse your data</h2><p>Or choose <strong>Open SQLite file…</strong> above to browse a project database. SQLite needs no running services.</p><button className="primary" disabled={blocked} onClick={start}>Start MySQL</button></section> : <div inert={browsing}>
+    {sqlite && !sqlitePath ? <section className="settings-card db-empty"><FolderOpen size={28} /><h2>Open a SQLite file to browse your data</h2><p>Choose a project database. SQLite needs no running services.</p><div className="db-empty-actions"><button className="primary" disabled={blocked} onClick={() => void openSqlite()}>Open SQLite file</button>{recent[0] && <button className="secondary" disabled={blocked} title={recent[0]} onClick={() => void reopenSqlite()}>Reopen {fileName(recent[0])}</button>}</div></section> : !available ? <section className="settings-card db-empty"><Database size={28} /><h2>Start MySQL to browse your data</h2><p>Or choose <strong>Open SQLite file…</strong> above to browse a project database. SQLite needs no running services.</p><button className="primary" disabled={blocked} onClick={start}>Start MySQL</button></section> : <div className="db-content" inert={browsing}>
       {!sqlite && <>
       <section className="db-catalog" aria-label="Database controls">
         <label>Database<select aria-label="Database" value={database} disabled={blocked || !databases.length} onChange={e => void run('Loading database…', () => load(e.target.value, ''))}>{!databases.length && <option value="">No databases</option>}{databases.map(db => <option key={db}>{db}</option>)}</select></label>
@@ -314,7 +317,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
           {tableError && <div className="notice error" role="alert"><span>Could not load {table}. {tableError} Choose another table or use SQL to repair it.</span><button className="secondary" disabled={blocked} onClick={() => void run('Refreshing table…', () => load())}>Retry table</button></div>}
           {!table && pane !== 'query' ? <div className="db-empty"><p>Create a table or open SQL query to begin.</p><div className="db-empty-actions"><button className="secondary" disabled={blocked} onClick={() => begin('create_table')}>Create table</button><button className="secondary" disabled={blocked} onClick={() => showPane('query')}>Open SQL query</button></div></div> : pane === 'rows' && page ? <>
             {!canEdit && <p className="db-hint">{writable ? 'No non-null primary or unique key: browse and insert are available. Use SQL for row updates and deletes.' : page.kind === 'VIEW' ? 'This view is read-only. Use SQL for advanced changes.' : 'This virtual table is read-only in forms. Use SQL for advanced changes.'}</p>}
-            <div ref={rowsScroll} className="db-grid-scroll" tabIndex={0} role="region" aria-label="Table rows" style={rowsHeight ? { maxHeight: rowsHeight } : undefined}><table className="db-grid"><thead><tr><th>Actions</th>{page.columns.map(c => <th key={c.name}><button disabled={blocked} onClick={() => { const next = { sort: c.name, direction: sort.sort === c.name && sort.direction === 'ASC' ? 'DESC' : 'ASC' }; setSort(next); void run('Sorting rows…', () => loadRows(database, table, 0, next)); }}>{c.name}{sort.sort === c.name ? sort.direction === 'ASC' ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead><tbody>{page.rows.map((row, index) => <tr key={index}><td className="db-actions-cell"><div className="db-row-actions"><button className="icon-button" title={`View row ${index + 1}`} aria-label={`View row ${index + 1}`} disabled={blocked} onClick={() => begin('view', row)}><Eye size={14} /></button>{canEdit && <><button className="icon-button" title={`Edit row ${index + 1}`} aria-label={`Edit row ${index + 1}`} disabled={blocked} onClick={() => begin('update', row)}><Pencil size={14} /></button><button className="icon-button db-icon-danger" title={`Delete row ${index + 1}`} aria-label={`Delete row ${index + 1}`} disabled={blocked} onClick={() => begin('delete', row)}><Trash2 size={14} /></button></>}</div></td>{page.columns.map(c => <td key={c.name}><span className="db-cell" title={row[c.name] ?? 'SQL NULL'}>{cell(row[c.name])}</span></td>)}</tr>)}</tbody></table>{!page.rows.length && <p className="db-grid-empty">{writable ? 'No rows yet. Insert a row to get started.' : 'This view has no rows.'}</p>}</div>
+            <div ref={rowsScroll} className="db-grid-scroll" tabIndex={0} role="region" aria-label="Table rows" style={!maximized && rowsHeight ? { maxHeight: rowsHeight } : undefined}><table className="db-grid"><thead><tr><th>Actions</th>{page.columns.map(c => <th key={c.name}><button disabled={blocked} onClick={() => { const next = { sort: c.name, direction: sort.sort === c.name && sort.direction === 'ASC' ? 'DESC' : 'ASC' }; setSort(next); void run('Sorting rows…', () => loadRows(database, table, 0, next)); }}>{c.name}{sort.sort === c.name ? sort.direction === 'ASC' ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead><tbody>{page.rows.map((row, index) => <tr key={index}><td className="db-actions-cell"><div className="db-row-actions"><button className="icon-button" title={`View row ${index + 1}`} aria-label={`View row ${index + 1}`} disabled={blocked} onClick={() => begin('view', row)}><Eye size={14} /></button>{canEdit && <><button className="icon-button" title={`Edit row ${index + 1}`} aria-label={`Edit row ${index + 1}`} disabled={blocked} onClick={() => begin('update', row)}><Pencil size={14} /></button><button className="icon-button db-icon-danger" title={`Delete row ${index + 1}`} aria-label={`Delete row ${index + 1}`} disabled={blocked} onClick={() => begin('delete', row)}><Trash2 size={14} /></button></>}</div></td>{page.columns.map(c => <td key={c.name}><span className="db-cell" title={row[c.name] ?? 'SQL NULL'}>{cell(row[c.name])}</span></td>)}</tr>)}</tbody></table>{!page.rows.length && <p className="db-grid-empty">{writable ? 'No rows yet. Insert a row to get started.' : 'This view has no rows.'}</p>}</div>
             <div className="db-pagination"><span>{page.rows.length ? page.offset + 1 : 0}–{page.offset + page.rows.length} of {page.total}</span><div className="db-actions"><button className="icon-button" aria-label="Previous page" disabled={blocked || page.offset === 0} onClick={() => void run('Loading rows…', () => loadRows(database, table, Math.max(0, page.offset - page.limit)))}><ChevronLeft size={17} /></button><button className="icon-button" aria-label="Next page" disabled={blocked || BigInt(page.offset + page.rows.length) >= BigInt(page.total)} onClick={() => void run('Loading rows…', () => loadRows(database, table, page.offset + page.limit))}><ChevronRight size={17} /></button><button className="icon-button" aria-label="Refresh rows" disabled={blocked} onClick={() => void run('Refreshing rows…', () => loadRows(database, table, page.offset))}><RefreshCw size={14} /></button></div></div>
           </> : pane === 'structure' && page ? <>
             <div className="db-row-tools"><p className="db-hint">{page.key.length ? `Row identity: ${page.key.join(', ')}` : 'No safe row identity found.'}</p><button className="secondary" disabled={blocked || !writable} onClick={() => begin('add_column')}><Plus size={14} />Column</button></div>
@@ -343,5 +346,5 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
       {edit.kind === 'create_index' && page && <IndexFields value={indexDefinition} table={table} columns={indexableColumns(page.columns, sqlite)} onChange={setIndexDefinition} />}
       {destructive && <><p>{edit.kind === 'delete' ? 'Delete this row permanently? The original values will be checked before deletion.' : edit.kind === 'drop_index' ? `Remove index “${target}”? Rows are kept.${edit.index?.unique ? ' This stops enforcing uniqueness through this index.' : ''} A ${sqlite ? 'SQLite' : 'SQL'} backup of this database will be saved first.` : `Delete “${target}” permanently? A ${sqlite ? 'SQLite' : 'SQL'} backup of this database will be saved first. Related application code may need changes.`}</p>{edit.kind !== 'delete' && <label>Type {target} to confirm<input autoComplete="off" value={confirmation} onChange={e => setConfirmation(e.target.value)} required /></label>}</>}
     </Dialog>}
-  </div>;
+  </Workspace>;
 }

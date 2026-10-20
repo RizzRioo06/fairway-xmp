@@ -4,6 +4,7 @@ import { canControl, invoke } from './bridge';
 import type { LogEntry, LogSnapshot, Project, ServiceStatus } from './types';
 import { entriesSinceClear, logViewBaseline, serviceLogEntries } from './log-view';
 import ActionMenu from './data/ActionMenu';
+import Workspace, { MaximizeWorkspace } from './Workspace';
 import './logs.css';
 
 const sources: Record<string, string> = { php: 'PHP', nginx: 'Web server', requests: 'Requests', mysql: 'MySQL', mail: 'Mail' };
@@ -177,7 +178,8 @@ export default function LogsPage({ active, busy, services, projects, request, op
     } finally { setSettled(value => value + 1); }
   }
 
-  return <div className={`logs-page${site ? ' logs-site-active' : ''}`}>
+  const folderAction = <button className="secondary" disabled={!canControl || busy} onClick={openFolder}><FolderOpen size={14} />Open log folder</button>;
+  return <Workspace id="logs" title="Logs" actions={folderAction} className={`logs-page${site ? ' logs-site-active' : ''}`}>
     <div className={`logs-notice${copyError ? ' notice error' : ''}`}>
       <div className="logs-notice-message">
         <div role={copyError ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{copyError}</div>
@@ -185,7 +187,7 @@ export default function LogsPage({ active, busy, services, projects, request, op
       {copyError && <button onClick={() => { void copy(); }}>Retry copy</button>}
       {copyError && <button aria-label="Dismiss logs message" onClick={() => setCopyError(null)}>×</button>}
     </div>
-    <div className="page-heading"><div><h1>Logs</h1><p>Recent output from all sites and services.</p></div><button className="secondary" disabled={!canControl || busy} onClick={openFolder}><FolderOpen size={14} />Open log folder</button></div>
+    <div className="page-heading"><div><h1>Logs</h1><p>Recent output from all sites and services.</p></div><div className="workspace-heading-actions">{folderAction}<MaximizeWorkspace id="logs" title="Logs" /></div></div>
     <section className="logs-workspace" aria-label="Environment logs">
       <div className="logs-toolbar">
         <label className="logs-source logs-site">Site<select aria-label="Log site" value={site} onChange={event => changeFilter(() => {
@@ -217,5 +219,5 @@ export default function LogsPage({ active, busy, services, projects, request, op
       </div>
 
     </section>
-  </div>;
+  </Workspace>;
 }

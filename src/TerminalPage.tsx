@@ -4,6 +4,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { canControl, invoke, isUiTest } from './bridge';
+import Workspace, { MaximizeWorkspace } from './Workspace';
+import { useModalFocus } from './modal-focus';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 
@@ -147,9 +149,10 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
     : contextError ? { error: true, text: `Could not refresh folders: ${contextError}`, action: 'Retry', onAction: () => { void refreshContext(); }, onDismiss: () => setContextError(null) }
     : null;
   const cannotAdd = busy || tabs.length >= 2 || tabs.some(tab => statuses[tab.slot] === 'starting');
-  return <div className="terminal-workspace">
+  const connectionStatus = <span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span>;
+  return <Workspace id="terminal" title="Terminal" className="terminal-workspace" actions={connectionStatus}>
     <FixedNotice notice={workspaceNotice} />
-    <div className="page-heading"><div><h1>Terminal</h1><p>Local shell with bundled PHP and Composer.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
+    <div className="page-heading"><div><h1>Terminal</h1><p>Local shell with bundled PHP and Composer.</p></div>{connectionStatus}</div>
     <div className="terminal-panel">
       {canControl && <div className="terminal-header">
         <div role="tablist" aria-label="Terminals" className="terminal-tabs">{tabs.map(tab => <div className={`terminal-tab${activeSlot === tab.slot ? ' selected' : ''}`} key={tab.key}>
@@ -173,6 +176,7 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
           </div>
         </details>
         <button className="terminal-external" aria-label="Open in external terminal" title="Open your system terminal in the current folder" disabled={statuses[activeSlot] !== 'running' || busy} onClick={() => externalBySlot.current[activeSlot]?.()}><ExternalLink size={14} aria-hidden="true" /><span>External terminal</span></button>
+        <MaximizeWorkspace id="terminal" title="Terminal" />
       </div>}
       {tabs.map(tab => <div key={tab.key} id={`terminal-panel-${tab.slot}`} className="terminal-tab-panel" role="tabpanel" aria-labelledby={canControl ? `terminal-tab-${tab.slot}` : undefined} hidden={activeSlot !== tab.slot}>
         <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} setRememberHistory={checked => {
@@ -182,7 +186,7 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
       </div>)}
 
     </div>
-  </div>;
+  </Workspace>;
 }
 
 function TerminalSession({ active, focusInput, focusRequest, rememberHistory, setRememberHistory, historySupported, defaultDirectory, busy, workspace, tab, closeTab, closeBySlot, externalBySlot, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
@@ -414,22 +418,7 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, se
     return () => clearTimeout(timer);
   }, [copied]);
 
-  useEffect(() => {
-    if (!confirm) return;
-    const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.querySelector('button')?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setConfirm(null); }
-      if (event.key !== 'Tab') return;
-      const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>('button');
-      if (!buttons?.length) return;
-      const first = buttons[0], last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener('keydown', key);
-    return () => { document.removeEventListener('keydown', key); previous?.focus({ preventScroll: true }); };
-  }, [confirm]);
+  useModalFocus(dialog, !!confirm, () => setConfirm(null));
 
   async function clipboard(action: 'copy' | 'paste') {
     try {
