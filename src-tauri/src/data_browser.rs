@@ -158,6 +158,32 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
     )
 }
 
+fn php_sqlite_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+        let mut components = path.components();
+        if let Some(Component::Prefix(prefix)) = components.next() {
+            let mut local = match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:\\", drive as char)),
+                Prefix::VerbatimUNC(server, share) => PathBuf::from(format!(
+                    r"\\{}\{}",
+                    server.to_string_lossy(),
+                    share.to_string_lossy()
+                )),
+                _ => return path.to_path_buf(),
+            };
+            for component in components {
+                if !matches!(component, Component::RootDir) {
+                    local.push(component.as_os_str());
+                }
+            }
+            return local;
+        }
+    }
+    path.to_path_buf()
+}
+
 fn execute_sqlite(layout: &Layout, mut request: Value, cancel: Arc<AtomicBool>) -> Result<Value> {
     let path = Path::new(
         request["path"]
@@ -174,6 +200,9 @@ fn execute_sqlite(layout: &Layout, mut request: Value, cancel: Arc<AtomicBool>) 
     if size != 0 && (size != 16 || &header != b"SQLite format 3\0") {
         return Err("Choose an unencrypted SQLite 3 database or an empty file.".into());
     }
+    // PHP expands the PDO path itself and treats a leading "\\" as the current
+    // drive root, so the \\?\ prefix from canonicalize never reaches the file.
+    let path = php_sqlite_path(&path);
     request["path"] = json!(path);
     let op = request["op"]
         .as_str()
@@ -523,4 +552,25 @@ pub fn cli(layout: &Layout, args: &[String]) -> Result<()> {
             .map_err(|e| e.to_string())?
     );
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::php_sqlite_path;
+
+    #[test]
+    fn sqlite_worker_path_drops_verbatim_prefix() {
+        let file = std::env::temp_dir().join(format!(
+            "fairway-sqlite-path-{}.sqlite",
+            std::process::id()
+        ));
+        std::fs::write(&file, b"").unwrap();
+        let canonical = std::fs::canonicalize(&file).unwrap();
+        let worker = php_sqlite_path(&canonical);
+        assert!(canonical.to_string_lossy().starts_with(r"\\?\"));
+        assert!(!worker.to_string_lossy().starts_with(r"\\?\"));
+        assert!(worker.is_file());
+        assert_eq!(std::fs::canonicalize(&worker).unwrap(), canonical);
+        std::fs::remove_file(&file).unwrap();
+    }
 }
