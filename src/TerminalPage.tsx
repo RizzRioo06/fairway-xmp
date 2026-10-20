@@ -268,6 +268,8 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, se
     const searchAddon = new SearchAddon();
     term.loadAddon(addon); term.loadAddon(searchAddon); term.open(host.current);
     term.textarea?.setAttribute('aria-label', 'Terminal input');
+    // The mount is unpadded: FitAddon measures its full computed size. Keep
+    // visual spacing on the outer host so the last row and cursor fit inside it.
     // Fit both the display and native PTY to the same supported dimensions.
     const fitToHost = () => {
       if (disposed || !host.current?.clientWidth || !host.current.clientHeight) return;
@@ -510,11 +512,11 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, se
         <button className="secondary" aria-label="Next terminal match" disabled={!query} onClick={() => findMatch()}><ChevronDown size={14} /></button>
         <button className="secondary" aria-label="Close terminal search" onClick={closeSearch}><X size={14} /></button>
       </div>}
-      {canControl ? <div ref={host} className="terminal-host" onContextMenu={event => {
+      {canControl ? <div className="terminal-host" onContextMenu={event => {
         event.preventDefault();
         setContextPosition({ left: Math.max(8, Math.min(event.clientX, window.innerWidth - 306)), top: Math.max(8, Math.min(event.clientY, window.innerHeight - Math.min(460, window.innerHeight * .65) - 8)) });
         if (toolsMenu.current) { toolsMenu.current.open = true; toolsMenu.current.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true }); }
-      }} /> : <p className="terminal-unavailable">Open the Fairway XMP desktop app to use the terminal.</p>}
+      }}><div ref={host} className="terminal-mount" /></div> : <p className="terminal-unavailable">Open the Fairway XMP desktop app to use the terminal.</p>}
       {canControl && status === 'error' && <div className="terminal-recovery"><span>Could not open or reconnect to this terminal.</span><button className="secondary" disabled={busy} onClick={() => { void endTerminal(true); }}>Retry terminal</button></div>}
     {confirm && <div className="modal-backdrop"><div ref={dialog} className="modal terminal-confirm" role="dialog" aria-modal="true" aria-labelledby={`terminal-confirm-${tab.slot}`}><h2 id={`terminal-confirm-${tab.slot}`}>{confirm === 'restart' ? 'Restart terminal?' : 'Close terminal tab?'}</h2><p>This ends this terminal and its running commands. {confirm === 'restart' ? 'A fresh terminal will open in the same starting folder.' : 'Your first terminal keeps running.'}</p><div className="button-row"><button className="secondary" onClick={() => setConfirm(null)}>Cancel</button><button className="primary" onClick={() => { void endTerminal(confirm === 'restart'); }}>{confirm === 'restart' ? 'Restart terminal' : 'Close tab'}</button></div></div></div>}
   </section>;

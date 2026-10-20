@@ -8,7 +8,6 @@
 .workspace-maximized-header h2{font-size:14px;color:#304b3c}
 .workspace-maximized-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .workspace-maximized .workspace-restore{width:32px;height:32px;color:#fff;background:var(--green);border:1px solid var(--green)}
-.workspace-maximized.terminal-workspace{padding-bottom:16px}
 .workspace-maximized .terminal-panel{display:flex;flex-direction:column;flex:1;min-height:180px}
 .workspace-maximized .terminal-header{flex-shrink:0}
 .workspace-maximized .terminal-tab-panel:not([hidden]),.workspace-maximized .terminal-page{display:flex;flex-direction:column;flex:1;min-height:0}

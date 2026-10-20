@@ -38,7 +38,7 @@ test('logs preserve filters, pause state, page scroll and focus across maximize 
   await expect(workspace).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await expect(page.getByRole('searchbox', { name: 'Search logs' })).toHaveValue('php');
-  await expect(page.locator('.logs-status')).toContainText('Paused');
+  await expect(page.getByRole('status').filter({ hasText: /^Paused$/ })).toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBe(position);
   expect(await page.locator('.sidebar').evaluate(element => element.hasAttribute('inert'))).toBe(false);
 });

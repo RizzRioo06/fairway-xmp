@@ -535,6 +535,23 @@ async fn remove_https_trust(app: tauri::AppHandle, state: State<'_, Shared>) -> 
 }
 
 #[tauri::command]
+async fn pick_sql_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Import SQL file")
+            .add_filter("SQL dump (.sql)", &["sql"])
+            .add_filter("All files", &["*"])
+            .blocking_pick_file()
+            .map(|path| path.into_path().map_err(|e| e.to_string()))
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn pick_sqlite_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
@@ -966,6 +983,7 @@ pub fn run() {
             set_project_https,
             remove_https_trust,
             pick_folder,
+            pick_sql_file,
             pick_sqlite_file,
             open_target,
             read_logs,

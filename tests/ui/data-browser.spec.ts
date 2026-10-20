@@ -17,6 +17,26 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
+test('SQL import confirms the database and backups are available outside the CLI disclosure', async ({ page }) => {
+  await open(page);
+  const backups = page.locator('.db-footer').getByRole('button', { name: 'Open backups', exact: true });
+  await expect(backups).toBeVisible();
+  expect(await page.locator('.db-cli').evaluate(element => (element as HTMLDetailsElement).open)).toBe(false);
+  await action(page, 'Database', 'Import SQL file…');
+  const dialog = page.getByRole('dialog', { name: 'Import SQL', exact: true });
+  await expect(dialog).toContainText('school.sql');
+  await expect(dialog).toContainText('only this target is backed up automatically');
+  const submit = dialog.getByRole('button', { name: 'Import SQL', exact: true });
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel('Type fairway to confirm', { exact: true }).fill('other_database');
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel('Type fairway to confirm', { exact: true }).fill('fairway');
+  await submit.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: /SQL imported into fairway/ })).toBeVisible();
+  await expect(backups).toBeVisible();
+});
+
 test('controls align and the table sidebar resizes, collapses, and restores without losing data', async ({ page }, info) => {
   await open(page);
   const database = await page.getByLabel('Database', { exact: true }).boundingBox();

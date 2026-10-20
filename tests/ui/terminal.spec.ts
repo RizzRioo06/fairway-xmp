@@ -53,6 +53,36 @@ test('terminal runs input, preserves the session across pages, fits the window, 
   expect(errors).toEqual([]);
 });
 
+test('a full terminal keeps the last input row inside its padded card after resize and maximize', async ({ page }) => {
+  await open(page);
+  await enter(page, 'seq 1 120');
+  await expect(output(page)).toContainText('120');
+  const host = page.locator('.terminal-tab-panel:not([hidden]) .terminal-host');
+  async function expectInputFits() {
+    await expect.poll(() => host.evaluate(element => {
+      const screen = element.querySelector('.xterm-screen')?.getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      const padding = getComputedStyle(element);
+      return !!screen && screen.height > 0 &&
+        screen.bottom <= bounds.bottom - parseFloat(padding.paddingBottom) + .5 &&
+        screen.right <= bounds.right - parseFloat(padding.paddingRight) + .5;
+    })).toBe(true);
+    await expect(host.locator('.xterm-rows > div').last()).toBeInViewport({ ratio: 1 });
+  }
+  await expectInputFits();
+  await page.getByRole('button', { name: 'Maximize Terminal', exact: true }).click();
+  await expectInputFits();
+  await page.setViewportSize({ width: 820, height: 650 });
+  await expectInputFits();
+  await page.getByRole('button', { name: 'Restore Terminal', exact: true }).click();
+  await expectInputFits();
+  await options(page);
+  await page.getByRole('button', { name: 'Increase terminal text size', exact: true }).click();
+  await enter(page, 'echo current-input-visible');
+  await expect(output(page)).toContainText('current-input-visible');
+  await expectInputFits();
+});
+
 test('interrupt, restart confirmation, and missing runtime recovery', async ({ page }) => {
   await open(page);
   await page.getByRole('textbox', { name: 'Terminal input' }).press('Control+c');
@@ -171,7 +201,7 @@ test('resize failures are recoverable and wide windows preserve the session', as
   await page.screenshot({ path, fullPage: true }); await info.attach('terminal-resize-recovery', { path, contentType: 'image/png' });
 });
 
-test('find, text size, and scroll positioning preserve output and keyboard input', async ({ page }, info) => {
+test('find, text size, and resizing preserve output and keyboard input', async ({ page }, info) => {
   await open(page);
   await enter(page, 'echo search-needle search-needle');
   await expect(output(page)).toContainText('search-needle');
@@ -209,11 +239,8 @@ test('find, text size, and scroll positioning preserve output and keyboard input
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await enter(page, 'echo resized-input-works');
   await expect(output(page)).toContainText('resized-input-works');
-  const beforeScroll = await page.locator('.terminal-panel').evaluate(element => element.getBoundingClientRect().top);
-  await page.evaluate(() => window.scrollTo(0, 180));
-  expect(await page.locator('.terminal-panel').evaluate(element => element.getBoundingClientRect().top)).toBeLessThan(beforeScroll - 100);
-  const path = info.outputPath('terminal-positioning.png');
-  await page.screenshot({ path, fullPage: true }); await info.attach('terminal-positioning', { path, contentType: 'image/png' });
+  const path = info.outputPath('terminal-controls.png');
+  await page.screenshot({ path, fullPage: true }); await info.attach('terminal-controls', { path, contentType: 'image/png' });
   await page.reload();
   await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await options(page);

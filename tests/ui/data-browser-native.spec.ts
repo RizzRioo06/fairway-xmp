@@ -36,10 +36,31 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(rows).toContainText('Edited through native PHP');
     await page.getByRole('tab', { name: 'SQL query', exact: true }).click();
+    for (const [sql, summary] of [
+      ["INSERT INTO students (name) VALUES ('SQL result label')", '1 row inserted'],
+      ["UPDATE students SET name='SQL updated label' WHERE name='SQL result label'", '1 row updated'],
+      ["DELETE FROM students WHERE name='SQL updated label'", '1 row deleted'],
+    ]) {
+      await page.locator('#db-sql').fill(sql);
+      await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
+      await expect(page.getByRole('heading', { name: summary, exact: true })).toBeVisible();
+      await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
+    }
     await page.locator('#db-sql').fill('SELECT 9007199254740993 AS exact_number, name FROM students');
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Query result 1', exact: true })).toContainText('9007199254740993');
     await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
+    await page.getByRole('button', { name: 'Database actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Import SQL file…', exact: true }).click();
+    const importing = page.getByRole('dialog', { name: 'Import SQL', exact: true });
+    await importing.getByLabel('Type native_classroom to confirm', { exact: true }).fill('native_classroom');
+    await importing.getByRole('button', { name: 'Import SQL', exact: true }).click();
+    await expect(importing).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: /SQL imported into native_classroom/ })).toBeVisible();
+    await page.getByRole('button', { name: 'imported_from_file', exact: true }).click();
+    await page.getByRole('tab', { name: 'Rows', exact: true }).click();
+    await expect(rows).toContainText('Imported through the desktop');
+    await page.getByRole('tab', { name: 'SQL query', exact: true }).click();
     await page.locator('#db-sql').fill('SELECT 1;'.repeat(11));
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
     await expect(page.getByRole('region', { name: /^Query result \d+$/ })).toHaveCount(10);

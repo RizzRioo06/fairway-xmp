@@ -5,7 +5,7 @@ test('SQLite is discoverable with stopped services and shares the table editor',
   await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
   const openFile = page.getByRole('button', { name: 'Open SQLite file…', exact: true });
   await expect(openFile).toBeEnabled();
-  await expect(page.getByText('Browse your MySQL databases and SQLite files.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Query and edit MySQL databases or SQLite files.', { exact: true })).toBeVisible();
   const mysqlTab = page.getByRole('tab', { name: 'MySQL', exact: true });
   const sqliteTab = page.getByRole('tab', { name: 'SQLite', exact: true });
   await expect(mysqlTab).toBeEnabled();
@@ -109,4 +109,23 @@ test('SQLite is discoverable with stopped services and shares the table editor',
   await page.getByRole('tab', { name: 'SQLite', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Back up SQLite file', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('MySQL remembers the chosen database when switching to SQLite and back', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Running');
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
+  const database = page.getByLabel('Database', { exact: true });
+  await expect(database).toBeEnabled();
+  await database.selectOption('school');
+  await expect(database).toHaveValue('school');
+  await page.getByRole('button', { name: 'Open SQLite file…', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Back up SQLite file', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Database actions', exact: true })).toHaveCount(0);
+  await expect(page.locator('.db-footer').getByRole('button', { name: 'Open backups', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'MySQL', exact: true }).click();
+  await expect(database).toHaveValue('school');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
+  await expect(database).toHaveValue('school');
 });

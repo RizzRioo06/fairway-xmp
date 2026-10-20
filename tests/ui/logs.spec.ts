@@ -124,7 +124,7 @@ test('a burst of logs has a bounded display and remains searchable and responsiv
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
   const output = page.getByRole('region', { name: 'Log entries', exact: true });
   await expect(output.locator('.log-entry')).toHaveCount(240);
-  await expect(page.getByText('240 of 900 entries · Live', { exact: true })).toBeVisible();
+  await expect(page.getByText('240 of 900 entries', { exact: true })).toBeVisible();
   await expect(output).toContainText('burst-log-0 '); // A dated failure survives the undated flood.
   await page.getByLabel('Search logs', { exact: true }).fill('burst-log-0 ');
   await expect(output.locator('.log-entry')).toHaveCount(1);

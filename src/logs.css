@@ -6,7 +6,7 @@
 .logs-search{min-width:0;display:flex;align-items:center;position:relative;color:#809086}
 .logs-search svg{position:absolute;left:10px}.logs-search input{padding-left:32px;font-family:inherit}
 .logs-toolbar-actions{display:flex;align-items:center;gap:8px;min-height:34px}
-.logs-status{max-width:105px;font-size:10px;line-height:1.5;color:#7b8b80}
+.logs-count{max-width:105px;font-size:10px;line-height:1.5;color:#7b8b80}
 .logs-menu>.icon-button{width:32px;height:32px;border:1px solid #dfe5e1;border-radius:6px;background:#f8faf9;color:#53665a}
 .logs-menu .db-action-popup{min-width:190px}
 .logs-output{height:clamp(240px,calc(100dvh - 320px),900px);overflow:auto;overscroll-behavior:contain;border-top:1px solid #e8ede9;border-radius:0 0 8px 8px;background:#fafcfb;overflow-anchor:none}
@@ -19,5 +19,5 @@
 .logs-site{min-width:0}.logs-site select{min-width:0;text-overflow:ellipsis}
 .logs-scope{padding:10px 14px;font-size:11px;line-height:1.7;color:#63786b;border-top:1px solid var(--border);background:#f4f8f5;overflow-wrap:anywhere}
 .logs-site-active .logs-output{height:clamp(220px,calc(100dvh - 362px),860px)}
-@media(max-width:900px){.logs-toolbar{gap:10px}.logs-status{max-width:85px;font-size:9px}.log-entry-meta time{margin-left:0}.logs-output{height:clamp(240px,calc(100dvh - 310px),900px)}.logs-site-active .logs-output{height:clamp(220px,calc(100dvh - 352px),860px)}}
-@media(max-width:650px){.logs-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.logs-toolbar-actions{justify-content:flex-end}.logs-status{max-width:none}.logs-output{height:clamp(200px,calc(100dvh - 365px),850px)}.logs-site-active .logs-output{height:clamp(180px,calc(100dvh - 407px),810px)}}
+@media(max-width:900px){.logs-toolbar{gap:10px}.logs-count{max-width:85px;font-size:9px}.log-entry-meta time{margin-left:0}.logs-output{height:clamp(240px,calc(100dvh - 310px),900px)}.logs-site-active .logs-output{height:clamp(220px,calc(100dvh - 352px),860px)}}
+@media(max-width:650px){.logs-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.logs-toolbar-actions{justify-content:flex-end}.logs-count{max-width:none}.logs-output{height:clamp(200px,calc(100dvh - 365px),850px)}.logs-site-active .logs-output{height:clamp(180px,calc(100dvh - 407px),810px)}}

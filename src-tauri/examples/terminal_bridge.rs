@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project = manager.layout.www.join("Project with spaces 日本");
     std::fs::create_dir_all(&project)?;
     std::fs::write(project.join("database.sqlite"), b"")?;
+    std::fs::write(project.join("school-import.sql"), b"CREATE TABLE imported_from_file (id INT PRIMARY KEY, label VARCHAR(100)); INSERT INTO imported_from_file VALUES (1, 'Imported through the desktop');")?;
     std::fs::write(
         manager.layout.www.join(".fairway-terminal-location"),
         b"COURSEWORK_FOLDER_VERIFIED",
@@ -95,6 +96,12 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
         Ok(match request["command"].as_str().unwrap_or_default() {
+            "pick_sql_file" => json!(manager
+                .lock()
+                .unwrap()
+                .layout
+                .www
+                .join("Project with spaces 日本/school-import.sql")),
             "pick_sqlite_file" => json!(manager
                 .lock()
                 .unwrap()

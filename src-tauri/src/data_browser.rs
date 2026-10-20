@@ -158,7 +158,17 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
         .map(|path| json!({"message":format!("SQL export saved: {}",path.display()),"path":path}));
     }
     if op == "import" {
-        return Err("Import SQL files with fairway db import. The query editor accepts SQL scripts up to 1 MiB.".into());
+        if request["confirmed"].as_bool() != Some(true) {
+            return Err("Confirm the SQL import first.".into());
+        }
+        let path = Path::new(request["sqlFile"].as_str().ok_or("Choose a SQL file.")?);
+        if !path.is_absolute() {
+            return Err("Choose a SQL file using its full path.".into());
+        }
+        let backup = import_sql(layout, name(&request["database"])?, path, cancel)?;
+        return Ok(
+            json!({"message":format!("SQL imported into {}. Backup saved: {}", name(&request["database"])?, backup.display()), "backupPath":backup}),
+        );
     }
     if op == "rename_database" && request["confirmed"].as_bool() != Some(true) {
         return Err("Confirm the database rename first.".into());
@@ -475,14 +485,41 @@ pub fn export(
     result
 }
 pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
+    import_sql(layout, database, path, Arc::new(AtomicBool::new(false))).map(|_| ())
+}
+
+fn import_sql(
+    layout: &Layout,
+    database: &str,
+    path: &Path,
+    cancel: Arc<AtomicBool>,
+) -> Result<PathBuf> {
     name(&json!(database))?;
     connection(layout)?;
     if database.starts_with('-') {
         return Err("Invalid database name.".into());
     }
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    export(layout, database, None, None, "all")?;
-    let output = mysql(layout, "mysql")
+    if cancel.load(Ordering::SeqCst) {
+        return Err("Import canceled before changing the database.".into());
+    }
+    if !path.is_file() {
+        return Err("Choose an existing SQL file.".into());
+    }
+    let file = File::open(path).map_err(|e| format!("Cannot open the SQL file: {e}"))?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return Err("Choose a non-empty SQL file.".into());
+    }
+    let backup = export(layout, database, None, None, "all").map_err(|e| {
+        format!("Could not create the pre-import backup. Nothing was imported. {e}")
+    })?;
+    if cancel.load(Ordering::SeqCst) {
+        return Err(format!(
+            "Import canceled before changing the database. Backup saved: {}",
+            backup.display()
+        ));
+    }
+    let mut child = mysql(layout, "mysql")
         .args([
             "--binary-mode",
             "--default-character-set=utf8mb4",
@@ -492,15 +529,57 @@ pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
         .stdin(Stdio::from(file))
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "Cannot start SQL import: {e}. Backup saved: {}",
+                backup.display()
+            )
+        })?;
+    let mut stderr = child.stderr.take().expect("import stderr is piped");
+    // Drain diagnostics without keeping an unbounded SQL error response in memory.
+    let errors = thread::spawn(move || {
+        let mut kept = Vec::new();
+        let mut buffer = [0; 4096];
+        while let Ok(count) = stderr.read(&mut buffer) {
+            if count == 0 {
+                break;
+            }
+            let take = count.min(16384_usize.saturating_sub(kept.len()));
+            kept.extend_from_slice(&buffer[..take]);
+        }
+        String::from_utf8_lossy(&kept).into_owned()
+    });
+    let result = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Ok(status),
+            Err(error) => break Err(format!("Cannot read import status: {error}")),
+            Ok(None) => (),
+        }
+        if cancel.load(Ordering::SeqCst) {
+            break Err("Import canceled".to_string());
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+    if result.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let errors = errors.join().unwrap_or_default();
+    let status = result.map_err(|e| {
+        format!(
+            "{e}; completed statements are not undone. Backup saved: {}",
+            backup.display()
+        )
+    })?;
+    if !status.success() {
         return Err(format!(
-            "Import failed; earlier statements may have completed. A backup was saved first. {}",
-            String::from_utf8_lossy(&output.stderr)
+            "Import failed; earlier statements may have completed. Backup saved: {}\n{}",
+            backup.display(),
+            errors.trim()
         ));
     }
-    Ok(())
+    Ok(backup)
 }
 
 pub fn cli(layout: &Layout, args: &[String]) -> Result<()> {

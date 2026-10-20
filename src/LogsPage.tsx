@@ -179,7 +179,9 @@ export default function LogsPage({ active, busy, services, projects, request, op
   }
 
   const folderAction = <button className="secondary" disabled={!canControl || busy} onClick={openFolder}><FolderOpen size={14} />Open log folder</button>;
-  return <Workspace id="logs" title="Logs" actions={folderAction} className={`logs-page${site ? ' logs-site-active' : ''}`}>
+  const liveStatus = <span className={`status-label ${canControl && live ? 'ready' : ''}`} role="status"><span className={`status-dot ${canControl && live ? 'running' : ''}`} />{canControl ? live ? 'Live' : 'Paused' : 'Desktop app required'}</span>;
+  const headingActions = <>{liveStatus}{folderAction}</>;
+  return <Workspace id="logs" title="Logs" actions={headingActions} className={`logs-page${site ? ' logs-site-active' : ''}`}>
     <div className={`logs-notice${copyError ? ' notice error' : ''}`}>
       <div className="logs-notice-message">
         <div role={copyError ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{copyError}</div>
@@ -187,7 +189,7 @@ export default function LogsPage({ active, busy, services, projects, request, op
       {copyError && <button onClick={() => { void copy(); }}>Retry copy</button>}
       {copyError && <button aria-label="Dismiss logs message" onClick={() => setCopyError(null)}>×</button>}
     </div>
-    <div className="page-heading"><div><h1>Logs</h1><p>Recent output from all sites and services.</p></div><div className="workspace-heading-actions">{folderAction}<MaximizeWorkspace id="logs" title="Logs" /></div></div>
+    <div className="page-heading"><div><h1>Logs</h1><p>Recent output from all sites and services.</p></div><div className="workspace-heading-actions">{headingActions}<MaximizeWorkspace id="logs" title="Logs" /></div></div>
     <section className="logs-workspace" aria-label="Environment logs">
       <div className="logs-toolbar">
         <label className="logs-source logs-site">Site<select aria-label="Log site" value={site} onChange={event => changeFilter(() => {
@@ -197,7 +199,7 @@ export default function LogsPage({ active, busy, services, projects, request, op
         <label className="logs-source">Source<select aria-label="Log source" value={source} onChange={event => changeFilter(() => setSource(event.target.value))}><option value="all">All sources</option>{Object.entries(sources).filter(([value]) => !site || value === 'requests' || value === 'php').map(([value, label]) => <option key={value} value={value}>{value === 'php' ? 'Shared PHP' : label}</option>)}</select></label>
         <label className="logs-search"><Search size={15} /><input type="search" aria-label="Search logs" placeholder="Search logs" value={query} onChange={event => changeFilter(() => setQuery(event.target.value))} /></label>
         <div className="logs-toolbar-actions">
-          <span className="logs-status" role="status" title={matching.length > MAX_VISIBLE ? `Showing up to ${MAX_VISIBLE} matches, prioritizing errors and warnings. Narrow the source or search for other entries.` : snapshot.limited ? 'Older entries are outside this recent view.' : undefined}>{loaded ? `${entries.length}${matching.length > MAX_VISIBLE ? ` of ${matching.length}` : ''} ${entries.length === 1 ? 'entry' : 'entries'} · ${live ? 'Live' : 'Paused'}` : canControl ? 'Loading logs…' : 'Desktop app required'}</span>
+          <span className="logs-count" role="status" title={matching.length > MAX_VISIBLE ? `Showing up to ${MAX_VISIBLE} matches, prioritizing errors and warnings. Narrow the source or search for other entries.` : snapshot.limited ? 'Older entries are outside this recent view.' : undefined}>{loaded ? `${entries.length}${matching.length > MAX_VISIBLE ? ` of ${matching.length}` : ''} ${entries.length === 1 ? 'entry' : 'entries'}` : canControl ? 'Loading logs…' : 'Desktop app required'}</span>
           <ActionMenu label="Log options" className="logs-menu" disabled={!canControl} actions={[
             { label: 'Problems only', checked: problems, icon: problems ? <Check size={14} /> : <span />, onSelect: () => changeFilter(() => setProblems(value => !value)) },
             { label: live ? 'Pause' : 'Resume', icon: live ? <Pause size={14} /> : <Play size={14} />, separatorBefore: true, onSelect: () => setLive(value => !value) },

@@ -150,6 +150,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     return response as T;
   }
   if (command === 'cancel_data_browser') { cancelData(String(args.id)); return undefined as T; }
+  if (command === 'pick_sql_file') return '/Users/Student May/Downloads/school.sql' as T;
   if (command === 'pick_sqlite_file') return '/Users/Student May/projects/classroom/database.sqlite' as T;
   if (command === 'data_browser') {
     if ((args.request as { driver?: string }).driver !== 'sqlite' && !data.services.find(service => service.id === 'mysql')?.ready) throw new Error('Start MySQL before browsing data.');

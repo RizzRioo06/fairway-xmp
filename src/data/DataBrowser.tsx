@@ -10,12 +10,13 @@ import HelpTip from '../HelpTip';
 import Workspace, { MaximizeWorkspace, useMaximizedWorkspace } from '../Workspace';
 import IndexFields, { indexableColumns, suggestedIndexName, type IndexDefinition } from './IndexFields';
 import SchemaDetails from './SchemaDetails';
+import { summarizeQueryResults } from './query-results';
 import { editableColumn, fromColumn, newColumn, type Column, type Definition, type Page, type QueryResult, type Row, type Structure, type Table, type TableIndex } from './types';
 import './data.css';
 
-type EditKind = 'create_database' | 'rename_database' | 'drop_database' | 'create_table' | 'rename_table' | 'drop_table' | 'add_column' | 'change_column' | 'drop_column' | 'create_index' | 'drop_index' | 'insert' | 'update' | 'delete' | 'view';
-type Edit = { kind: EditKind; row?: Row; column?: Column; index?: TableIndex };
-const titles: Record<EditKind, string> = { create_database: 'Create database', rename_database: 'Rename database', drop_database: 'Delete database', create_table: 'Create table', rename_table: 'Rename table', drop_table: 'Delete table', add_column: 'Add column', change_column: 'Edit column', drop_column: 'Delete column', create_index: 'Create index', drop_index: 'Remove index', insert: 'Insert row', update: 'Edit row', delete: 'Delete row', view: 'View row' };
+type EditKind = 'import_sql' | 'create_database' | 'rename_database' | 'drop_database' | 'create_table' | 'rename_table' | 'drop_table' | 'add_column' | 'change_column' | 'drop_column' | 'create_index' | 'drop_index' | 'insert' | 'update' | 'delete' | 'view';
+type Edit = { kind: EditKind; path?: string; row?: Row; column?: Column; index?: TableIndex };
+const titles: Record<EditKind, string> = { import_sql: 'Import SQL', create_database: 'Create database', rename_database: 'Rename database', drop_database: 'Delete database', create_table: 'Create table', rename_table: 'Rename table', drop_table: 'Delete table', add_column: 'Add column', change_column: 'Edit column', drop_column: 'Delete column', create_index: 'Create index', drop_index: 'Remove index', insert: 'Insert row', update: 'Edit row', delete: 'Delete row', view: 'View row' };
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 const idColumn = (): Definition => ({ ...newColumn('id'), type: 'BIGINT', nullable: false, primary: true, autoIncrement: true });
 const cell = (value: string | null) => value === null ? <span className="db-null">NULL</span> : value === '' ? <span className="db-null">empty</span> : value;
@@ -65,6 +66,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const restoreRecent = useRef(true);
   const operationFocus = useRef<HTMLElement | null>(null);
   const rowsScroll = useRef<HTMLDivElement>(null);
+  const mysqlSelection = useRef({ database: '', table: '' });
   const [rowsHeight, setRowsHeight] = useState<number>();
   const browsing = !!pending && /^(Loading|Refreshing|Sorting) /.test(pending);
   const [showPending, setShowPending] = useState(false);
@@ -95,7 +97,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     const result = await request<Page>({ op: 'rows', database: db, table: selected, offset, ...(order.sort ? order : {}) });
     setPage(result);
   }
-  async function load(preferredDb = database, preferredTable = table, targetSource = source) {
+  async function load(preferredDb = database || (!sqlite ? mysqlSelection.current.database : ''), preferredTable = table || (!sqlite ? mysqlSelection.current.table : ''), targetSource = source) {
     const list = await request<{ databases: string[] }>({ op: 'databases' }, targetSource);
     const db = list.databases.includes(preferredDb) ? preferredDb : (list.databases[0] ?? '');
     const result = db ? await request<{ tables: Table[] }>({ op: 'tables', database: db }, targetSource) : { tables: [] };
@@ -121,6 +123,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     setTableError(failure);
     setCatalogLoaded(true);
     setSort({ sort: '', direction: 'ASC' });
+    if (targetSource.driver === 'mysql') mysqlSelection.current = { database: db, table: selected };
   }
   function remember(paths: string[]) {
     setRecent(paths);
@@ -131,7 +134,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     if ((next.driver === 'mysql' && !ready) || (next.driver === 'sqlite' && !opened)) {
       setDatabases([]); setDatabase(''); setTables([]); setTable(''); setPage(null); setStructure(null); setCatalogLoaded(false);
       setTableError(null);
-    } else await load('', '', next);
+    } else await load(next.driver === 'mysql' ? mysqlSelection.current.database : '', next.driver === 'mysql' ? mysqlSelection.current.table : '', next);
     setSource(next); setPane('rows'); setQuery(null); setHistory([]);
     setSql(next.driver === 'sqlite' ? 'SELECT sqlite_version();' : 'SELECT VERSION();');
     if (opened) {
@@ -253,6 +256,31 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   function showPane(next: typeof pane) {
     setPane(next);
   }
+  async function chooseImport() {
+    await run('Choosing SQL file…', async () => {
+      const path = await invoke<string | null>('pick_sql_file');
+      if (path) { setConfirmation(''); setEdit({ kind: 'import_sql', path }); }
+    });
+  }
+  async function importSql() {
+    if (!edit?.path || confirmation !== database || sqlite) return;
+    const path = edit.path;
+    await run('Importing SQL…', async () => {
+      let result: { message: string };
+      try {
+        result = await request<{ message: string }>({ op: 'import', database, sqlFile: path, confirmed: true });
+      } catch (error) {
+        setConfirmation(''); setQuery(null);
+        // A failed/canceled import may have committed earlier statements.
+        try { if (mounted.current) await load(); } catch { /* Preserve the import error and backup path. */ }
+        throw error;
+      }
+      setEdit(null); setQuery(null);
+      try { await load(); }
+      catch (error) { setNotice({ error: true, text: `${result.message}\nImport completed, but the browser could not refresh: ${errorText(error)}` }); return; }
+      setNotice({ error: false, text: result.message });
+    });
+  }
   async function exportSql(selectedTable?: string) {
     await run(selectedTable ? 'Exporting table…' : 'Exporting database…', async () => {
       const result = await request<{ message: string }>({ op: 'export', database, ...(selectedTable ? { table: selectedTable } : {}) });
@@ -265,7 +293,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     setQuery(null);
     await run('Running SQL…', async () => {
       const result = await request<QueryResult>({ op: 'query', database, sql: text });
-      setQuery(result); setHistory(previous => [text, ...previous.filter(item => item !== text)].slice(0, 10));
+      setQuery(summarizeQueryResults(text, result, sqlite)); setHistory(previous => [text, ...previous.filter(item => item !== text)].slice(0, 10));
       // SQL can change or remove the selected table. Refresh the catalog after execution.
       await load();
     });
@@ -296,6 +324,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
         <label>Database<select aria-label="Database" value={database} disabled={blocked || !databases.length} onChange={e => void run('Loading database…', () => load(e.target.value, ''))}>{!databases.length && <option value="">No databases</option>}{databases.map(db => <option key={db}>{db}</option>)}</select></label>
         <div className="db-actions"><button className="secondary" disabled={blocked} onClick={() => begin('create_database')}><Plus size={14} />Database</button><button className="icon-button" aria-label="Refresh databases" disabled={blocked} onClick={() => void run('Refreshing databases…', () => load())}><RefreshCw size={15} /></button><ActionMenu label="Database actions" disabled={blocked || !database} actions={[
           { label: 'Export database SQL', onSelect: () => void exportSql() },
+          { label: 'Import SQL file…', onSelect: () => void chooseImport() },
           { label: 'Rename database', onSelect: () => begin('rename_database') },
           { label: 'Delete database', danger: true, onSelect: () => begin('drop_database') },
         ]} /></div>
@@ -326,19 +355,26 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
             {structure && <SchemaDetails structure={structure} database={database} sqlite={sqlite} writable={!!writable} blocked={blocked} canCreate={indexableColumns(page.columns, sqlite).length > 0} onCreate={() => begin('create_index')} onRemove={index => begin('drop_index', undefined, undefined, index)} />}
             {structure?.sql && <details className="db-ddl"><summary>Table SQL</summary><pre>{structure.sql}</pre></details>}
           </> : pane === 'query' ? <div className="db-query">
-            <div className="db-query-heading"><label htmlFor="db-sql">SQL for <strong>{sqlite ? fileName(database) : database}</strong></label><HelpTip label="SQL query help"><p>SQL changes run immediately. Cancel cannot undo completed statements.</p><p>Results show up to 200 rows per statement.{!sqlite && ' SELECT without a LIMIT is capped at 201.'} Use LIMIT and OFFSET to see more.</p><p>{sqlite ? 'Run up to ten statements and 1 MiB of SQL at once. Finish transactions within the same run. SQL changes do not create automatic backups.' : 'All statements run; only the first ten result sets are displayed. Finish transactions with COMMIT or ROLLBACK in the same run. Use the CLI to import full SQL dumps with DELIMITER commands.'}</p></HelpTip></div><textarea ref={editor} id="db-sql" value={sql} disabled={blocked} onChange={e => setSql(e.target.value)} rows={8} spellCheck={false} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !blocked && sql.trim()) { e.preventDefault(); void runQuery(); } }} />
+            <div className="db-query-heading"><label htmlFor="db-sql">SQL for <strong>{sqlite ? fileName(database) : database}</strong></label><HelpTip label="SQL query help"><p>SQL changes run immediately. Cancel cannot undo completed statements.</p><p>Results show up to 200 rows per statement.{!sqlite && ' SELECT without a LIMIT is capped at 201.'} Use LIMIT and OFFSET to see more.</p><p>{sqlite ? 'Run up to ten statements and 1 MiB of SQL at once. Finish transactions within the same run. SQL changes do not create automatic backups.' : 'All statements run; only the first ten result sets are displayed. Finish transactions with COMMIT or ROLLBACK in the same run. Import full SQL dumps through Database actions → Import SQL file.'}</p></HelpTip></div><textarea ref={editor} id="db-sql" value={sql} disabled={blocked} onChange={e => setSql(e.target.value)} rows={8} spellCheck={false} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !blocked && sql.trim()) { e.preventDefault(); void runQuery(); } }} />
             <div className="db-row-tools"><button className="primary" disabled={blocked || !sql.trim()} onClick={() => void runQuery()}>Run selection / all</button><span className="db-hint">⌘ / Ctrl + Enter</span>{history.length > 0 && <select aria-label="Query history" value="" disabled={blocked} onChange={e => setSql(e.target.value)}><option value="">Recent queries (this session)</option>{history.map((text, i) => <option key={i} value={text}>{text.slice(0, 70)}</option>)}</select>}</div>
-            {query && <div aria-label="Query results"><p className="db-hint">Completed in {query.elapsedMs} ms</p>{query.resultsTruncated && <p className="db-hint" role="status">All statements ran; only the first ten result sets are shown.</p>}{query.sets.map((set, index) => <section key={index} className="db-query-result"><h3>Result {index + 1} <span>{set.columns.length ? `${set.rows.length} rows` : `${set.affected} affected`}</span></h3>{set.truncated && <p className="db-hint">Showing the first 200 rows. Use a LIMIT and OFFSET to see more.</p>}{set.columns.length > 0 && <div className="db-grid-scroll" tabIndex={0} role="region" aria-label={`Query result ${index + 1}`}><table className="db-grid"><thead><tr>{set.columns.map((column, i) => <th key={i}>{column}</th>)}</tr></thead><tbody>{set.rows.map((row, i) => <tr key={i}>{row.map((value, j) => <td key={j}><span className="db-cell">{cell(value)}</span></td>)}</tr>)}</tbody></table></div>}</section>)}</div>}
+            {query && <div aria-label="Query results"><p className="db-hint">Completed in {query.elapsedMs} ms</p>{query.resultsTruncated && <p className="db-hint" role="status">All statements ran; only the first ten result sets are shown.</p>}{query.sets.map((set, index) => <section key={index} className="db-query-result"><h3>{query.sets.length === 1 ? set.summary : <>Result {index + 1} <span>{set.summary}</span></>}</h3>{set.truncated && <p className="db-hint">Showing the first 200 rows. Use a LIMIT and OFFSET to see more.</p>}{set.columns.length > 0 && <div className="db-grid-scroll" tabIndex={0} role="region" aria-label={`Query result ${index + 1}`}><table className="db-grid"><thead><tr>{set.columns.map((column, i) => <th key={i}>{column}</th>)}</tr></thead><tbody>{set.rows.map((row, i) => <tr key={i}>{row.map((value, j) => <td key={j}><span className="db-cell">{cell(value)}</span></td>)}</tr>)}</tbody></table></div>}</section>)}</div>}
           </div> : null}
         </section>
       }</TableWorkspace>}
-      {sqlite ? <div className="db-row-tools"><p className="db-hint">Backups are SQLite database files. Opening a file does not copy or import it into Fairway.</p><button className="secondary" disabled={blocked} onClick={() => open('backups')}>Open backups</button></div> : <details className="db-cli"><summary>Command-line administration</summary><p>Add command-line tools to your user PATH in Settings, then open a new terminal. Exports never overwrite an existing file; imports back up the target database first.</p><pre>fairway db list{'\n'}fairway db export {database || 'my_database'} --output ~/Desktop/backup.sql{'\n'}fairway db import {database || 'my_database'} ~/Desktop/backup.sql --yes{'\n'}fairway db --help</pre><button className="secondary" disabled={blocked} onClick={() => open('backups')}>Open backups</button></details>}
+
     </div>}
+    <footer className="db-footer" inert={browsing}>{available && (sqlite ? <p className="db-hint">Backups are SQLite database files. Opening a file does not copy or import it into Fairway.</p> : <details className="db-cli"><summary>Command-line administration</summary><p>Add command-line tools to your user PATH in Settings, then open a new terminal. Exports never overwrite an existing file; imports back up the target database first.</p><pre>fairway db list{'\n'}fairway db export {database || 'my_database'} --output ~/Desktop/backup.sql{'\n'}fairway db import {database || 'my_database'} ~/Desktop/backup.sql --yes{'\n'}fairway db --help</pre></details>)}<button className="secondary" disabled={blocked} onClick={() => open('backups')}><FolderOpen size={14} />Open backups</button></footer>
     {pending && showPending && <div className="db-pending" role="status"><LoaderCircle className="spin" size={14} />{pending}{['Running SQL…', 'Loading rows…', 'Sorting rows…'].includes(pending) && <button className="secondary" disabled={!job.current} onClick={() => { if (job.current) void invoke('cancel_data_browser', { id: job.current }).catch(error => setNotice({ error: true, text: errorText(error) })); }}>Cancel query</button>}</div>}
-    {edit && <Dialog key={edit.kind} title={titles[edit.kind]} busy={blocked} onClose={() => setEdit(null)} onSubmit={() => { if (edit.kind === 'view') { if (canEdit && edit.row) begin('update', edit.row); return; } void save(); }} cancel={edit.kind === 'view' ? 'Close' : 'Cancel'} showSubmit={edit.kind !== 'view' || canEdit} submit={edit.kind === 'view' ? 'Edit' : edit.kind === 'drop_index' ? 'Remove' : destructive ? 'Delete' : edit.kind.startsWith('create_') ? 'Create' : 'Save'} danger={destructive} valid={edit.kind === 'view' || (edit.kind === 'create_index' ? !!indexDefinition.name.trim() && indexDefinition.columns.length > 0 && indexDefinition.columns.every(Boolean) : !destructive || edit.kind === 'delete' || confirmation === target)}>
+    {edit && <Dialog key={edit.kind} title={titles[edit.kind]} busy={blocked} onClose={() => setEdit(null)} onSubmit={() => { if (edit.kind === 'import_sql') { void importSql(); return; } if (edit.kind === 'view') { if (canEdit && edit.row) begin('update', edit.row); return; } void save(); }} cancel={edit.kind === 'view' ? 'Close' : 'Cancel'} showSubmit={edit.kind !== 'view' || canEdit} onCancelBusy={edit.kind === 'import_sql' && pending === 'Importing SQL…' ? () => { if (job.current) void invoke('cancel_data_browser', { id: job.current }).catch(error => setNotice({ error: true, text: errorText(error) })); } : undefined} submit={edit.kind === 'import_sql' ? 'Import SQL' : edit.kind === 'view' ? 'Edit' : edit.kind === 'drop_index' ? 'Remove' : destructive ? 'Delete' : edit.kind.startsWith('create_') ? 'Create' : 'Save'} danger={destructive} valid={edit.kind === 'import_sql' ? confirmation === database : edit.kind === 'view' || (edit.kind === 'create_index' ? !!indexDefinition.name.trim() && indexDefinition.columns.length > 0 && indexDefinition.columns.every(Boolean) : !destructive || edit.kind === 'delete' || confirmation === target)}>
       {notice?.error && <div className="notice error" role="alert"><span>{notice.text}</span></div>}
+      {edit.kind === 'import_sql' && <>
+        <p>Import <strong>{fileName(edit.path ?? '')}</strong> into <strong>{database}</strong>.</p>
+        <p className="db-import-path">{edit.path}</p>
+        <p>Existing data may be replaced. Fairway backs up <strong>{database}</strong> first. SQL can also change other databases; only this target is backed up automatically. Errors or cancellation can leave partial changes.</p>
+        <label>Type {database} to confirm<input autoComplete="off" value={confirmation} onChange={event => setConfirmation(event.target.value)} required /></label>
+      </>}
       {needsName && <label>{edit.kind.includes('database') ? 'Database name' : 'Table name'}<input required maxLength={64} value={name} onChange={e => setName(e.target.value)} /></label>}
-      {edit.kind === 'rename_database' && <p>Only empty databases can be renamed. For a populated database, export it, create a new database, and import with the CLI. Update your project’s connection settings afterward.</p>}
+      {edit.kind === 'rename_database' && <p>Only empty databases can be renamed. For a populated database, export it, create a new database, and import it into the new database. Update your project’s connection settings afterward.</p>}
       {edit.kind === 'create_table' && <div className="db-new-columns">{definitions.map((definition, index) => <section className="db-column-card" key={index}><h3>Column {index + 1}</h3><ColumnFields sqlite={sqlite} value={definition} onChange={value => setDefinitions(previous => previous.map((c, i) => i === index ? value : c))} /><button type="button" className="db-danger-text" disabled={definitions.length === 1} onClick={() => setDefinitions(previous => previous.filter((_, i) => i !== index))}>Remove column</button></section>)}<button type="button" className="secondary" onClick={() => setDefinitions(previous => [...previous, { ...newColumn('', sqlite), ...(sqlite ? { type: 'TEXT' } : {}) }])} disabled={definitions.length >= 100}><Plus size={14} />Add column</button></div>}
       {columnForm && <><ColumnFields sqlite={sqlite} adding={edit.kind === 'add_column'} value={definitions[0]} existing={edit.kind === 'change_column'} hasPrimary={edit.kind === 'add_column' && (sqlite || !!page?.columns.some(c => c.columnKey === 'PRI'))} onChange={value => setDefinitions([value])} />{edit.kind === 'change_column' && <p>Changing type or length can alter existing values. A database backup is saved first. Primary keys are preserved; manage indexes in SQL.</p>}</>}
       {edit.kind === 'view' && page && <div className="db-row-fields">{page.columns.map(c => <div key={c.name} className="db-row-field"><label>{c.name}<small>{c.type}{c.columnKey === 'PRI' ? ' · primary key' : ''}</small></label><p className="db-view-value">{cell(edit.row?.[c.name] ?? null)}</p></div>)}</div>}
