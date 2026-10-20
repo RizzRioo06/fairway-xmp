@@ -1,6 +1,6 @@
 # Desktop data browser
 
-**Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The MySQL browser shipped in beta 2; SQLite file browsing, index management and foreign-key inspection are unreleased additions after RC 1 and need a fresh candidate and native acceptance before release. The existing Linux terminal edition is unchanged.
+**Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The MySQL browser shipped in beta 2. SQLite file browsing, index management and foreign-key inspection ship in 0.1.0-rc.2. The existing Linux terminal edition does not include the desktop data browser.
 
 ## Indexes and foreign keys
 

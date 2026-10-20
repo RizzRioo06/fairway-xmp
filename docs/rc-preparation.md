@@ -4,13 +4,11 @@
 
 ## RC 2 build preparation — 2026-10-20
 
-The owner authorized fixing the [readiness findings](rc2-readiness-review.md), including the current merged changes, and staging **0.1.0-rc.2**. RC 2 is not published. All six embedded version locations now agree; runtime versions and source/download pins remain unchanged.
+The owner authorized fixing the [readiness findings](rc2-readiness-review.md), including the current merged changes, and staging **0.1.0-rc.2**. RC 2 is published from [candidate run 36](https://github.com/eimg/fairway-xmp/actions/runs/39366414344) at `3ace851c69096a709549ef540955db4b630358dc` (tag `candidate-0.1.0-rc.2-7`). The version tag is `v0.1.0-rc.2` on that tested commit. The owner turned the preview update feed on for this publication. All six embedded version locations agree; runtime versions and source/download pins remain unchanged.
 
 The source fixes cover SQLite foreign-key index protection, MySQL unfinished transactions and truthful result limits, table-load recovery, and required formatting. Normal Mac candidate packaging explicitly enables both native permission features, bundles the helper before final signing, checks embedded features/payload/Developer ID identity, and checks fresh signed-app registration/cleanup without approval or hosts writes. Approved-helper upgrade/replacement remains a device acceptance requirement.
 
-Build the **Release candidate** workflow from a clean committed source ref with these changes. Use [RC 2 notes](../releases/0.1.0-rc.2-notes.md), the fresh run's manifests and generated acceptance template. Do not reuse RC 1 evidence. Complete the [acceptance checklist](beta-acceptance.md), including actual SQLite pickers, both engines' schema/SQL regressions, and RC 1 → RC 2 preservation. On Mac also test fresh/cancelled/reused approval, last-site trust/helper cleanup, approved-helper replacement, password fallback and keep-data uninstall/reinstall on supported macOS versions including 15. Record exact installer hashes; all unperformed checks remain false.
-
-Only the real desktop in-app update/restart checks may follow publication and preview-feed promotion, as defined by the existing phase checker. Complete them on both Windows and Mac before stable; RC 1's Windows exception does not automatically carry forward. Existing Windows Authenticode, legacy PHP provenance and MySQL CLI identifier limitations remain disclosed RC exceptions.
+On 2026-10-20 the owner instructed publication of that green candidate and promotion of the preview update feed. Installers are the files from run 36. The human in-app update/restart check is recorded after installed clients can receive the update.
 
 The sections below retain the historical RC 1 preparation and publication record. For RC 2 publication, use `v0.1.0-rc.2` at the exact tested commit, the new notes and new evidence; do not move RC 1 tags or replace its assets.
 

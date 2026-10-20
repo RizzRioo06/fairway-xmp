@@ -8,22 +8,22 @@ A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. 
 
 ## Downloads
 
-Current release: **[v0.1.0-rc.1](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.1)**.
+Current release: **[v0.1.0-rc.2](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.2)**.
 
 | Computer | Requirements | Download |
 | --- | --- | --- |
-| Windows | Windows 10 22H2 or Windows 11, x64 | [Windows installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.1/fairway-xmp-0.1.0-rc.1-windows-x64-setup.exe) |
-| Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.1/fairway-xmp-0.1.0-rc.1-macos-arm64.pkg) |
-| Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.1/fairway-xmp-0.1.0-rc.1-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.1/fairway-xmp-0.1.0-rc.1-linux-x86_64.tar.gz) |
+| Windows | Windows 10 22H2 or Windows 11, x64 | [Windows installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.2/fairway-xmp-0.1.0-rc.2-windows-x64-setup.exe) |
+| Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.2/fairway-xmp-0.1.0-rc.2-macos-arm64.pkg) |
+| Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.2/fairway-xmp-0.1.0-rc.2-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.2/fairway-xmp-0.1.0-rc.2-linux-x86_64.tar.gz) |
 
-RC 1 installs report `0.1.0-rc.1`. This is a prerelease; see the [release notes](releases/0.1.0-rc.1-notes.md) for changes and known limitations. Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
+RC 2 installs report `0.1.0-rc.2`. This is a prerelease; see the [release notes](releases/0.1.0-rc.2-notes.md) for changes and known limitations. Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
 
 ## Linux terminal edition
 
 Download the Linux `.run` installer or `.tar.gz` archive from the table above. Linux requires x86_64 and glibc 2.35 or newer; Alpine/musl and ARM are not supported. No desktop, root access, distro packages, Docker or systemd service is required.
 
 ```sh
-sh fairway-xmp-0.1.0-rc.1-linux-x86_64.run
+sh fairway-xmp-0.1.0-rc.2-linux-x86_64.run
 # Reopen your shell after installation:
 fairway                      # terminal dashboard
 fairway start                # start all services
@@ -97,9 +97,9 @@ Beta 2 adds an embedded **Terminal** page on macOS and Windows. Press **Ctrl+bac
 
 On macOS, Fairway remembers roughly 1,000 commands privately on your device, separately from your usual shell history. Start a command with a space to omit it, or turn off **Remember commands in new sessions** before creating or restarting a shell. Windows keeps its normal Command Prompt history within each session. macOS and Windows also add a **Data browser** beside phpMyAdmin, with `fairway db` commands for SQL import/export. Both features ship in beta 2.
 
-The staged, unpublished **0.1.0-rc.2** desktop update also lets you choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits. This addition is not included in the existing RC 1 download.
+RC 2 lets you choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits.
 
-The unreleased **Structure** tab also supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
+The **Structure** tab supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
 
 Fairway includes PHP 8.0 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.0` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. PHP 8.0 and 8.1 are end of life; use newer versions for internet-facing projects.
 
@@ -154,7 +154,7 @@ If a port is already in use, Fairway XMP shows the conflict. Stop all services, 
 
 From beta 3 onward, macOS and Windows users can choose **Updates → Check for updates → Install update**. Fairway verifies the signed download before backing up databases, stopping services, and installing the update.
 
-**Beta 2 and earlier need one manual installation of RC 1.** Stop services and quit Fairway before installing. Projects, databases, settings, and saved sites are kept.
+On macOS and Windows, **Updates → Check for updates** offers RC 2 to installed beta and RC 1 copies. Stop services and quit Fairway before it installs. Projects, databases, settings, and saved sites are kept. Beta 2 and earlier still need one manual installation before later in-app updates apply.
 
 Linux updates remain manual: download and run the newer `.run` installer over the existing installation, using the same `--prefix` if you chose a custom directory. It backs up databases and stops services before switching versions; projects and data are preserved.
 
@@ -170,4 +170,4 @@ The uninstaller removes the app and its command-line integration. Your projects 
 
 For problems or suggestions, [open an issue](https://github.com/eimg/fairway-xmp/issues). Include your operating system, what you tried, and any error shown in Fairway XMP.
 
-Fairway XMP’s application code uses the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). Release checksums and bundled-tool sources are available on the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.1). For contributing to the app, see [Contributing](CONTRIBUTING.md).
+Fairway XMP’s application code uses the [MIT license](LICENSE). Included tools have [their own licenses](THIRD_PARTY_NOTICES.md). Release checksums and bundled-tool sources are available on the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.2). For contributing to the app, see [Contributing](CONTRIBUTING.md).

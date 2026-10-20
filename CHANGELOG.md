@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.2 — 2026-10-20
 
-Staged as **0.1.0-rc.2**; candidate build and exact-installer acceptance are pending.
+Published from [candidate run 36](https://github.com/eimg/fairway-xmp/actions/runs/39366414344), source `3ace851c69096a709549ef540955db4b630358dc`. The preview update feed offers this release to installed macOS and Windows beta and RC clients.
 
 - Mac candidates include native login-keychain HTTPS trust installation/removal and the signed background address helper, with packaged-feature/payload checks before distribution. Authorization focus handoffs and concise site help are included; actual dialog/helper upgrade acceptance remains required.
 - A simpler welcome page for newly created document roots; existing or customized `index.php` files are preserved.
@@ -22,7 +22,7 @@ Staged as **0.1.0-rc.2**; candidate build and exact-installer acceptance are pen
 - The main sidebar can fold to icons from the workspace breadcrumb. Unfold restores the labels. Show and hide tables is the same kind of icon, placed in front of the table name.
 - Table rows use the height left in the window. A new MySQL column starts required, and a new SQLite column still allows NULL. The expanded terminal lines up with a folded sidebar.
 
-These changes require a new candidate and native acceptance; published RC 1 artifacts are unchanged.
+Installed macOS and Windows clients receive this release through the preview update feed. Linux updates stay manual.
 
 ## 0.1.0-rc.1 — 2026-10-19
 
