@@ -58,6 +58,7 @@ jobs:
           save-if: ${{ github.ref_type != 'tag' }}
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npm run test:unit
       - run: npm run test:scripts
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked

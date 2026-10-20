@@ -381,7 +381,9 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
     };
     command.env("PATH", tools_path(layout)?);
     #[cfg(windows)]
-    command.env("PROMPT", "$E]9;9;$P$E\\$G ");
+    // CMD expands $P on every prompt. Its full current path is the native
+    // equivalent of zsh's folder name; no startup script or cd hook is needed.
+    command.env("PROMPT", "$E]9;9;$P$E\\$E[32m➜$E[0m  $P ");
     #[cfg(all(unix, not(target_os = "macos")))]
     command.env("PS1", "> ");
     command.env("TERM", "xterm-256color");
@@ -1545,6 +1547,17 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn external_windows_terminal_uses_only_the_current_directory() {
+        let folder = std::path::Path::new(r"C:\Student's projects 日本\shop");
+        let command = external_command(folder);
+        assert!(std::path::Path::new(command.get_program()).ends_with("cmd.exe"));
+        assert_eq!(command.get_current_dir(), Some(folder));
+        assert_eq!(command.get_args().count(), 0);
+        assert_eq!(command.get_envs().count(), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn native_windows_shell_accepts_input_resizes_and_exits() {
         let fixture = Fixture::new();
         fs::write(
@@ -1553,7 +1566,7 @@ mod tests {
         )
         .unwrap();
         fixture.start("windows");
-        fixture.until("windows", ">");
+        fixture.until("windows", "➜");
         fixture.terminals.resize("windows", 100, 32).unwrap();
         fixture
             .terminals

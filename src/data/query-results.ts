@@ -51,7 +51,7 @@ export function summarizeQueryResults(sql: string, result: QueryResult, sqlite =
   return { ...result, sets: result.sets.map((set, index) => {
     const tokens = aligned ? statements[index] : [];
     const verb = tokens[0] === 'WITH' ? tokens.find(token => ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REPLACE'].includes(token)) : tokens[0];
-    let action = verb === 'INSERT' ? 'inserted' : verb === 'UPDATE' ? 'updated' : verb === 'DELETE' ? 'deleted' : null;
+    let action = verb === 'INSERT' ? 'inserted' : verb === 'UPDATE' ? sqlite ? 'matched for update' : 'updated' : verb === 'DELETE' ? 'deleted' : null;
     if (verb === 'INSERT' && (tokens.includes('DUPLICATE') || tokens.includes('CONFLICT') || tokens.includes('REPLACE'))) action = null;
     const count = set.columns.length ? set.rows.length : set.affected;
     const rows = `${count} ${count === 1 ? 'row' : 'rows'}`;

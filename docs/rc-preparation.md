@@ -2,6 +2,12 @@
 
 **0.1.0-rc.1 was published on 2026-10-19**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
 
+## RC 3 source preparation — 2026-10-20
+
+The owner authorized the terminal/workspace/log/data-browser changes and resolution of the [RC 3 review findings](rc3-readiness-review.md). Source versions are staged as **0.1.0-rc.3**. [RC 3 notes](../releases/0.1.0-rc.3-notes.md) describe the changes; no candidate, publication or human acceptance is claimed yet. Runtime versions and dependency pins are unchanged.
+
+Before publication, build from the final committed inputs using the cross-platform candidate workflow, require all automated gates, and obtain new exact-installer acceptance. Verify RC 2 → RC 3 upgrade preservation and the signed Mac app's SQLite protected-folder prompts. The local unsigned app cannot settle the reported duplicate-prompt behavior. Complete actual in-app update/restart checks after feed promotion. Do not reuse RC 2 acceptance for new binaries or alter the published RC 2 assets.
+
 ## RC 2 build preparation — 2026-10-20
 
 The owner authorized fixing the [readiness findings](rc2-readiness-review.md), including the current merged changes, and staging **0.1.0-rc.2**. RC 2 is published from [candidate run 36](https://github.com/eimg/fairway-xmp/actions/runs/39366414344) at `3ace851c69096a709549ef540955db4b630358dc` (tag `candidate-0.1.0-rc.2-7`). The version tag is `v0.1.0-rc.2` on that tested commit. The owner turned the preview update feed on for this publication. All six embedded version locations agree; runtime versions and source/download pins remain unchanged.

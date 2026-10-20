@@ -9,7 +9,7 @@ test.use({ baseURL: 'http://127.0.0.1:1422' });
 // No listener is opened and the packaged runtime is read only.
 test('React input reaches the real native PTY and packaged PHP/Composer', async ({ page }, info) => {
   test.skip(!process.env.FAIRWAY_TEST_RUNTIME, 'Set FAIRWAY_TEST_RUNTIME and build the terminal_bridge example.');
-  const { close, errors } = await nativeBridge(page, info);
+  const { close, errors, externalDirectories } = await nativeBridge(page, info);
   try {
     await page.goto('/');
     await page.getByRole('button', { name: 'Terminal', exact: true }).click();
@@ -17,7 +17,7 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
     const rows = page.locator('.terminal-tab-panel:not([hidden]) .terminal-host .xterm-rows');
     const enter = async (command: string) => { await input.focus(); await input.pressSequentially(command); await input.press('Enter'); };
-    if (process.platform === 'win32') await expect(rows).toContainText('>', { timeout: 15000 });
+    await expect(rows).toContainText('➜', { timeout: 15000 });
     await enter('php --version'); await expect(rows).toContainText(/PHP 8\.5\./);
     await enter('php --ri pdo_mysql'); await expect(rows).toContainText('PDO Driver for MySQL => enabled');
     await enter('composer --version'); await expect(rows).toContainText('Composer version');
@@ -39,6 +39,10 @@ test('React input reaches the real native PTY and packaged PHP/Composer', async 
     await expect(rows).toContainText(process.platform === 'win32' ? 'Project with spaces' : 'Project with spaces 日本');
     await enter('php -r "echo file_get_contents(\'.fairway-terminal-location\');"');
     await expect(rows).toContainText('PROJECT_FOLDER_VERIFIED');
+    await enter('cd ..');
+    await enter(process.platform === 'win32' ? 'cd' : 'pwd');
+    await page.getByRole('button', { name: 'Open in external terminal', exact: true }).click();
+    await expect.poll(() => externalDirectories().at(-1)).toMatch(/[/\\]www$/);
     await enter('php -r "echo \'SECOND_SHELL_READY\';"');
     await expect(rows).toContainText('SECOND_SHELL_READY');
     await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();

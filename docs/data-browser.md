@@ -2,6 +2,12 @@
 
 **Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The MySQL browser shipped in beta 2. SQLite file browsing, index management and foreign-key inspection ship in 0.1.0-rc.2. The existing Linux terminal edition does not include the desktop data browser.
 
+## Reading a row
+
+Choose the eye action to open **View row**, a dedicated reader rather than a disabled edit form. The table name, row position and field count stay visible above a scrollable list. Column names/types and primary-key/generated/hex markers sit beside full, selectable values. Long text wraps without clipping, line breaks are preserved, and SQL NULL is distinct from empty text. This is a snapshot of the row displayed in the table.
+
+Use a field's copy button for its exact displayed value; NULL copies as the SQL token `NULL`, and empty text copies an empty string. **Copy row JSON** copies all fields with nulls/empty strings preserved and numeric values retained as exact strings. Binary values use the displayed hex representation. **Edit** switches to the row form only when the current source/table still supports safe keyed editing. Close or Escape returns to the table, including inside a maximized workspace.
+
 ## Indexes and foreign keys
 
 Open a table's **Structure** tab to inspect its columns, **Indexes**, and **Foreign keys**. This metadata loads with the table, so switching from Rows does not start another request. Filtering remains in the SQL editor.
@@ -47,7 +53,7 @@ Start MySQL from the browser's empty state or Environment. phpMyAdmin also needs
 
 ## Import MySQL SQL files
 
-Choose the target MySQL database, then **Database actions → Import SQL file…**. Pick an uncompressed SQL dump and type the target database name to confirm. Create the target database first if needed. The native backend streams the file through the bundled MySQL client, supporting full dumps and stored-program `DELIMITER` directives without the query editor's 1 MiB/30-second limits. It never loads the whole dump into the browser. A full backup of the selected database must succeed before import begins, and the result/error includes its path. **Cancel import** stops the client; backup generation finishes before cancellation is checked. Completed statements are not undone. Errors can leave partial changes, and the browser refreshes its catalog afterward. Canceling or failing an import clears the typed confirmation before another attempt.
+Choose the target MySQL database, then **Database actions → Import SQL file…**. Pick an uncompressed SQL dump and type the target database name to confirm. Create the target database first if needed. The native backend streams the file through the bundled MySQL client, supporting full dumps and stored-program `DELIMITER` directives without the query editor's 1 MiB/30-second limits. It never loads the whole dump into the browser. A full backup of the selected database must succeed before import begins, and the result/error includes its path. The dialog distinguishes creating a backup, importing SQL, cancellation and recovery refresh. **Cancel import** stops the client; backup generation finishes before cancellation is checked and the dialog explains this wait. Completed statements are not undone. Errors can leave partial changes, and the browser refreshes its catalog afterward. Canceling or failing an import clears the typed confirmation before another attempt.
 
 SQL dumps can explicitly switch or qualify databases; only the selected target is backed up automatically. Review dumps and avoid concurrent database writers. Client shell commands and LOCAL INFILE remain disabled, using the same implementation as `fairway db import`. SQLite stays backup-only; open the original database file rather than importing SQL into it.
 
@@ -56,6 +62,8 @@ Both database adapters run bundled PHP/PDO over private stdin/stdout; they add n
 Database/table/column deletion, index removal and supported column changes require confirmation and first create a full SQL export of the selected database. A failed backup prevents the change. Row deletions use a confirmation dialog and do not export the database. Arbitrary SQL is explicitly an administrative tool and does not receive automatic backups. Completed statements in a failing SQL script may already have changed data; refresh before retrying. System databases are hidden/protected by forms; the SQL editor has administrator access.
 
 The display caps query results at 200 rows and ten result sets. MySQL executes all submitted statements, drains later results to detect errors and transaction completion, and explicitly reports when only the first ten result sets are shown. Ten is a display limit, not an execution guard. Finish COMMIT or ROLLBACK within the same run; unfinished transactions roll back with an error instead of reporting success. SELECT without an explicit LIMIT has a 201-row session cap. Queries use unbuffered results, a 128 MiB worker limit, an 8 MiB response limit, 15-second SELECT limit, five-second lock waits and a 30-second worker timeout. Cancel kills the current owned connection's query and closes its worker. Exports and protective backups finish before cancellation can be checked; full-file imports (UI or CLI) and exports are not given the interactive query timeout.
+
+Query UPDATE summaries count changed rows on MySQL, so assigning an existing value reports zero rows updated. Form saves still count matched rows to preserve no-op save/conflict behavior. SQLite counts matching rows even if values were unchanged, so its UPDATE summary explicitly says rows matched for update.
 
 ## Desktop command line
 
@@ -83,6 +91,8 @@ fairway db import school ~/Desktop/school.sql --yes
 MySQL must be running. Results are JSON. Export modes are `all`, `structure`, and `data`; without `--output`, exports go to the app's backups directory. An export is published only after success and never overwrites an existing file. Create the target database before importing. Single-database exports omit `CREATE DATABASE` so ordinary tables can be imported into another selected database. Views/routines/triggers may contain explicit original-schema references; review those when migrating names. Incoming SQL may explicitly switch databases. Import stops on SQL errors and may leave partial changes, with a pre-import backup available. Local client shell commands and LOCAL INFILE are disabled during import. Avoid other database writers or stopping MySQL during administration.
 
 ## Verification and review
+
+Run `npm run test:unit` for the fast log-view and SQL-result helper regressions. The native browser bridge also supports real database cancellation and observes external-terminal working directories without opening host terminal windows.
 
 `npm run dev:ui` provides the same interface with clearly labeled in-memory fixtures. Select Running, then Data browser. Fixtures cover ordinary/keyless tables, views, exact large numbers, NULL/empty text, CRUD/schema forms and query pending/error/cancel states. Fixture SQL intentionally supports only a few SELECT examples; it is not a SQL engine.
 

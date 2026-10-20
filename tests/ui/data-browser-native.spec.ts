@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { nativeBridge } from './native-bridge';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 // Use the same production frontend that is packaged in the desktop app.
 test.use({ baseURL: 'http://127.0.0.1:1422' });
@@ -39,6 +41,7 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     for (const [sql, summary] of [
       ["INSERT INTO students (name) VALUES ('SQL result label')", '1 row inserted'],
       ["UPDATE students SET name='SQL updated label' WHERE name='SQL result label'", '1 row updated'],
+      ["UPDATE students SET name='SQL updated label' WHERE name='SQL updated label'", '0 rows updated'],
       ["DELETE FROM students WHERE name='SQL updated label'", '1 row deleted'],
     ]) {
       await page.locator('#db-sql').fill(sql);
@@ -65,6 +68,23 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
     await expect(page.getByRole('region', { name: /^Query result \d+$/ })).toHaveCount(10);
     await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
+    // Exercise the real UI cancellation command and phase events, with a fresh
+    // dump that cannot finish before Cancel import is clicked.
+    await writeFile(join(bridge.root, "Student May's home 日本/fairway/www/Project with spaces 日本/school-import.sql"), 'SELECT SLEEP(10); CREATE TABLE must_not_import(id INT);');
+    await page.getByRole('button', { name: 'Database actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Import SQL file…', exact: true }).click();
+    const canceling = page.getByRole('dialog', { name: 'Import SQL', exact: true });
+    const confirmation = canceling.getByLabel('Type native_classroom to confirm', { exact: true });
+    await confirmation.fill('native_classroom');
+    await canceling.getByRole('button', { name: 'Import SQL', exact: true }).click();
+    await expect(canceling.getByRole('status')).toHaveText('Importing SQL…');
+    await canceling.getByRole('button', { name: 'Cancel import', exact: true }).click();
+    await expect(canceling.getByRole('alert')).toContainText('canceled');
+    await expect(canceling.getByRole('alert')).toContainText('Backup saved:');
+    await expect(confirmation).toHaveValue('');
+    await expect(canceling.getByRole('button', { name: 'Import SQL', exact: true })).toBeDisabled();
+    await canceling.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'must_not_import', exact: true })).toHaveCount(0);
     const path = info.outputPath('native-data-browser.png');
     await page.screenshot({ path, fullPage: true });
     await info.attach('native-data-browser', { path, contentType: 'image/png' });

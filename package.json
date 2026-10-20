@@ -1,7 +1,7 @@
 {
   "name": "fairway-xmp",
   "private": true,
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -10,6 +10,7 @@
     "tauri": "cargo tauri",
     "runtime:prepare": "python3 scripts/prepare_runtime.py",
     "test:scripts": "python3 -m unittest discover -s tests -v",
+    "test:unit": "node scripts/test_unit.mjs",
     "dev:ui": "vite --host 127.0.0.1 --mode ui-test",
     "test:ui": "playwright test",
     "test:ui:report": "playwright show-report"

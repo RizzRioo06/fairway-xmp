@@ -162,6 +162,7 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(rows).toContainText('NULL');
   await page.getByRole('button', { name: 'View row 1', exact: true }).click();
   let view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.locator('form, input, textarea, select')).toHaveCount(0);
   await expect(view.getByText('Student May', { exact: true })).toBeVisible();
   await expect(view.getByText('NULL', { exact: true })).toBeVisible();
   await view.getByRole('button', { name: 'Close', exact: true }).click();
@@ -199,6 +200,59 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(page.getByRole('button', { name: 'View row 1', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: /^Edit row/ })).toHaveCount(0);
   await expect(page.getByText('This view is read-only. Use SQL for advanced changes.')).toBeVisible();
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+  await expect(view.getByRole('button', { name: 'Copy row JSON', exact: true })).toBeEnabled();
+});
+
+test('row viewer copies exact values and JSON, keeps full text readable, and handles clipboard errors', async ({ page }) => {
+  const copied: string[] = [];
+  await page.exposeFunction('recordRowCopy', (value: string) => { copied.push(value); });
+  await page.addInitScript(() => {
+    const bridge = window as unknown as { recordRowCopy: (value: string) => Promise<void> };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: bridge.recordRowCopy } });
+  });
+  await open(page);
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  let view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.locator('form, input, textarea, select')).toHaveCount(0);
+  await view.getByRole('button', { name: 'Copy id', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('9007199254740993');
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('NULL');
+  await view.getByRole('button', { name: 'Copy row JSON', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe(JSON.stringify({ id: '9007199254740993', name: 'Student May', notes: null }, null, 2));
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } }));
+  await view.getByRole('button', { name: 'Copy id', exact: true }).click();
+  await expect(view.getByRole('alert')).toContainText('Could not copy');
+  await expect(view.getByText('9007199254740993', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const bridge = window as unknown as { recordRowCopy: (value: string) => Promise<void> };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: bridge.recordRowCopy } });
+  });
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'View row 2', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByText('empty', { exact: true })).toBeVisible();
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('');
+  await view.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const fullText = 'A multiline value\n' + 'unbroken-long-content'.repeat(160) + '\n<script>plain text</script>\n';
+  await page.getByRole('button', { name: 'Edit row 1', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit row', exact: true });
+  await edit.getByLabel('notes value', { exact: true }).fill(fullText);
+  await edit.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  expect(await view.locator('dd').nth(2).locator('pre').textContent()).toBe(fullText);
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe(fullText);
+  await expect(view.locator('script')).toHaveCount(0);
+  expect(await view.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await view.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit row', exact: true }).getByLabel('notes value', { exact: true })).toHaveValue(fullText);
 });
 
 test('create database/table, insert default and NULL, edit empty text, delete with confirmation', async ({ page }, info) => {

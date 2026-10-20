@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { entriesSinceClear, logViewBaseline, serviceLogEntries } from '../src/log-view.ts';
+import { entriesSinceClear, logViewBaseline, serviceLogEntries, updateClearedServices } from '../src/log-view.ts';
 import type { LogEntry, ServiceStatus } from '../src/types.ts';
 
 const entry = (id: string, text: string): LogEntry => ({ id, text, source: 'php', file: 'php.log', severity: 'error', time: null });
@@ -33,4 +33,18 @@ test('clearing captures all snapshot rows even when filters or the display cap h
   const incoming = entry('new', 'fresh event');
   assert.deepEqual(entriesSinceClear([incoming], baseline), [incoming]);
   assert.deepEqual(entriesSinceClear([incoming], logViewBaseline([...snapshot, incoming])), []);
+});
+
+test('service errors recur after an observed recovery or a different error without restoring file history', () => {
+  const file = entry('php.log:0:abc', 'Old PHP failure');
+  const original = [{ id: 'mysql', message: 'Connection failed' } as ServiceStatus];
+  for (const message of [null, 'Port is occupied']) {
+    const baseline = logViewBaseline([file, ...serviceLogEntries(original)]);
+    assert.equal(updateClearedServices(baseline, original), baseline);
+    const advanced = updateClearedServices(baseline, [{ ...original[0], message }]);
+    assert.deepEqual(entriesSinceClear([file, ...serviceLogEntries(original)], advanced), serviceLogEntries(original));
+    assert.equal(baseline.get('current:mysql'), 'Connection failed');
+    assert.equal(updateClearedServices(advanced, original), advanced);
+  }
+  assert.equal(updateClearedServices(null, original), null);
 });

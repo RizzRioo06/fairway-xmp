@@ -265,7 +265,10 @@ function run_request($db, $r) {
 try {
     if (!extension_loaded('pdo_mysql')) throw new Exception('The bundled PHP MySQL driver is unavailable. Check the PHP log and the selected runtime before retrying.');
     $input=json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR);
-    $db=new PDO('mysql:host=127.0.0.1;port=' . (int)$input['port'] . ';charset=utf8mb4','root',$input['password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_STRINGIFY_FETCHES=>true,PDO::ATTR_EMULATE_PREPARES=>false,PDO::MYSQL_ATTR_MULTI_STATEMENTS=>true,PDO::MYSQL_ATTR_FOUND_ROWS=>true,PDO::ATTR_TIMEOUT=>3]);
+    // Forms need matched rows for no-op optimistic saves. SQL feedback instead
+    // reports changed rows, so an unchanged UPDATE accurately returns zero.
+    $foundRows=($input['request']['op'] ?? '') !== 'query';
+    $db=new PDO('mysql:host=127.0.0.1;port=' . (int)$input['port'] . ';charset=utf8mb4','root',$input['password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_STRINGIFY_FETCHES=>true,PDO::ATTR_EMULATE_PREPARES=>false,PDO::MYSQL_ATTR_MULTI_STATEMENTS=>true,PDO::MYSQL_ATTR_FOUND_ROWS=>$foundRows,PDO::ATTR_TIMEOUT=>3]);
     fwrite(STDERR,'FAIRWAY_CONNECTION_ID=' . $db->query('SELECT CONNECTION_ID()')->fetchColumn() . "\n");
     $db->exec('SET SESSION innodb_lock_wait_timeout=5'); $db->exec('SET SESSION lock_wait_timeout=5'); $db->exec('SET SESSION max_execution_time=15000');
     $start=microtime(true); $result=run_request($db,$input['request']); $result['elapsedMs']=(int)((microtime(true)-$start)*1000);

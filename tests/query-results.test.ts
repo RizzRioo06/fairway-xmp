@@ -9,6 +9,8 @@ function summaries(sql: string, counts: number[], sqlite = false) {
 test('DML results name the change with correct singular, plural and zero counts', () => {
   assert.deepEqual(summaries('INSERT INTO t VALUES (1); UPDATE t SET x=2; DELETE FROM t;', [1, 2, 0]), ['1 row inserted', '2 rows updated', '0 rows deleted']);
   assert.deepEqual(summaries('CREATE TABLE t(x int); ALTER TABLE t ADD y int;', [0, 1]), ['Statement completed', 'Statement completed']);
+  assert.deepEqual(summaries('UPDATE t SET x=1; UPDATE t SET x=2;', [0, 2]), ['0 rows updated', '2 rows updated']);
+  assert.deepEqual(summaries('UPDATE t SET x=1; UPDATE t SET x=2;', [1, 2], true), ['1 row matched for update', '2 rows matched for update']);
 });
 
 test('comments, quoted semicolons and CTEs do not shift result labels', () => {

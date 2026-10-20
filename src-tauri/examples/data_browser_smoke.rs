@@ -115,6 +115,13 @@ fn main() -> Result<(), String> {
             )?;
             assert_eq!(sets["sets"][0]["rows"][0][0], "9007199254740993");
             assert!(sets["sets"][1]["rows"][0][0].is_null());
+            let counts = call(
+                l,
+                json!({"op":"query","database":db,"sql":"CREATE TABLE update_counts(id INT PRIMARY KEY, value INT); INSERT INTO update_counts VALUES(1,10),(2,20); UPDATE update_counts SET value=10 WHERE id=1; UPDATE update_counts SET value=20; UPDATE update_counts SET value=20; DROP TABLE update_counts;"}),
+            )?;
+            assert_eq!(counts["sets"][2]["affected"], 0);
+            assert_eq!(counts["sets"][3]["affected"], 1);
+            assert_eq!(counts["sets"][4]["affected"], 0);
             let limited = call(
                 l,
                 json!({"op":"query","database":db,"sql":"WITH RECURSIVE n AS (SELECT 1 x UNION ALL SELECT x+1 FROM n WHERE x<250) SELECT x FROM n LIMIT 250; SELECT 42 AS answer;"}),

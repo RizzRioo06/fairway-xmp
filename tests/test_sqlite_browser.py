@@ -104,6 +104,12 @@ class SQLiteBrowserTests(unittest.TestCase):
             self.sql("INSERT INTO audit VALUES('must not run');" + 'SELECT 1;' * 10)
         self.assertEqual(self.sql('SELECT count(*) FROM audit')['sets'][0]['rows'], [['6']])
 
+    def test_update_counts_include_unchanged_matching_rows(self):
+        self.sql('CREATE TABLE counts(id INTEGER PRIMARY KEY, value INTEGER); INSERT INTO counts VALUES(1,10),(2,20);')
+        result = self.sql('UPDATE counts SET value=10 WHERE id=1; UPDATE counts SET value=20; UPDATE counts SET value=20; UPDATE counts SET value=30 WHERE id=99;')
+        self.assertEqual([s['affected'] for s in result['sets']], [1, 2, 2, 0])
+        self.assertEqual(self.sql('SELECT value FROM counts ORDER BY id')['sets'][0]['rows'], [['20'], ['20']])
+
     def test_keys_binary_and_views_are_conservative(self):
         self.sql("""CREATE TABLE nullable_key(id TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE keyed(a TEXT NOT NULL, b TEXT NOT NULL, payload TEXT, UNIQUE(a,b));

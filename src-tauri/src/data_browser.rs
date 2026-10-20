@@ -120,6 +120,15 @@ fn connection(layout: &Layout) -> Result<()> {
     Ok(())
 }
 pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Result<Value> {
+    execute_with_progress(layout, request, cancel, |_| {})
+}
+
+pub fn execute_with_progress(
+    layout: &Layout,
+    request: Value,
+    cancel: Arc<AtomicBool>,
+    progress: impl Fn(&str),
+) -> Result<Value> {
     match request["driver"].as_str() {
         Some("sqlite") => return execute_sqlite(layout, request, cancel),
         None | Some("mysql") => (),
@@ -165,7 +174,7 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
         if !path.is_absolute() {
             return Err("Choose a SQL file using its full path.".into());
         }
-        let backup = import_sql(layout, name(&request["database"])?, path, cancel)?;
+        let backup = import_sql(layout, name(&request["database"])?, path, cancel, &progress)?;
         return Ok(
             json!({"message":format!("SQL imported into {}. Backup saved: {}", name(&request["database"])?, backup.display()), "backupPath":backup}),
         );
@@ -485,7 +494,14 @@ pub fn export(
     result
 }
 pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
-    import_sql(layout, database, path, Arc::new(AtomicBool::new(false))).map(|_| ())
+    import_sql(
+        layout,
+        database,
+        path,
+        Arc::new(AtomicBool::new(false)),
+        &|_| {},
+    )
+    .map(|_| ())
 }
 
 fn import_sql(
@@ -493,6 +509,7 @@ fn import_sql(
     database: &str,
     path: &Path,
     cancel: Arc<AtomicBool>,
+    progress: &dyn Fn(&str),
 ) -> Result<PathBuf> {
     name(&json!(database))?;
     connection(layout)?;
@@ -510,6 +527,7 @@ fn import_sql(
     if !metadata.is_file() || metadata.len() == 0 {
         return Err("Choose a non-empty SQL file.".into());
     }
+    progress("backup");
     let backup = export(layout, database, None, None, "all").map_err(|e| {
         format!("Could not create the pre-import backup. Nothing was imported. {e}")
     })?;
@@ -519,6 +537,7 @@ fn import_sql(
             backup.display()
         ));
     }
+    progress("import");
     let mut child = mysql(layout, "mysql")
         .args([
             "--binary-mode",

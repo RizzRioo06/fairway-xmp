@@ -281,9 +281,16 @@ async fn data_browser(
     let jobs = app.state::<crate::data_browser::Jobs>();
     let cancel = jobs.register(&id)?;
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await;
+    let progress_app = app.clone();
+    let progress_id = id.clone();
     let result = match layout {
         Ok(layout) => tauri::async_runtime::spawn_blocking(move || {
-            crate::data_browser::execute(&layout, request, cancel)
+            crate::data_browser::execute_with_progress(&layout, request, cancel, |phase| {
+                let _ = progress_app.emit(
+                    "data-browser-progress",
+                    serde_json::json!({ "id": progress_id, "phase": phase }),
+                );
+            })
         })
         .await
         .map_err(|e| e.to_string())

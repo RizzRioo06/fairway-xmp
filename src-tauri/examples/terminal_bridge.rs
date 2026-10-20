@@ -11,7 +11,7 @@ use std::{
     io::{self, BufRead, Write},
     net::TcpListener,
     path::PathBuf,
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,16 +64,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(io::Error::other)?;
     drop(listeners);
     let terminals = Arc::new(Terminals::default());
+    let jobs = Arc::new(data_browser::Jobs::default());
     let manager = Arc::new(Mutex::new(manager));
     let mut workers = Vec::new();
     for line in io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line?)?;
         let manager = manager.clone();
         let terminals = terminals.clone();
+        let jobs = jobs.clone();
         // Tauri dispatches PTY read/write/resize independently. A serial test
         // transport can deadlock ConPTY waiting for its cursor-query response.
         workers.push(std::thread::spawn(move || {
-            respond(request, &manager, &terminals)
+            respond(request, &manager, &terminals, &jobs)
         }));
     }
     terminals.close_all();
@@ -91,7 +93,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> io::Result<()> {
+fn respond(
+    request: Value,
+    manager: &Mutex<Manager>,
+    terminals: &Terminals,
+    jobs: &data_browser::Jobs,
+) -> io::Result<()> {
     let args = &request["args"];
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
@@ -144,11 +151,24 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
             }
             "data_browser" => {
                 let layout = manager.lock().unwrap().layout.clone();
-                data_browser::execute(
+                let cancel = jobs.register(id)?;
+                let result = data_browser::execute_with_progress(
                     &layout,
                     args["request"].clone(),
-                    Arc::new(AtomicBool::new(false)),
-                )?
+                    cancel,
+                    |phase| {
+                        let event = json!({"event":"data-browser-progress","payload":{"id":id,"phase":phase}});
+                        let mut stdout = io::stdout().lock();
+                        let _ = writeln!(stdout, "{event}");
+                        let _ = stdout.flush();
+                    },
+                );
+                jobs.finish(id);
+                result?
+            }
+            "cancel_data_browser" => {
+                jobs.cancel(id);
+                Value::Null
             }
             "read_logs" => serde_json::to_value(fairway_core::logs::read(
                 &manager.lock().unwrap().layout.data.join("logs"),
@@ -166,6 +186,9 @@ fn respond(request: Value, manager: &Mutex<Manager>, terminals: &Terminals) -> i
             )?)
             .unwrap(),
             "terminal_read" => serde_json::to_value(terminals.read(id)?).unwrap(),
+            // Observe the production path resolution without opening a terminal
+            // window on the test host. Native launch construction has unit tests.
+            "terminal_external" => json!({"directory":terminals.current_directory(id)?}),
             "terminal_write" => {
                 terminals.write(id, args["data"].as_str().unwrap_or_default())?;
                 Value::Null

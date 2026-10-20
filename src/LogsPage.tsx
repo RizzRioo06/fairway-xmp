@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clipboard, Eraser, FolderOpen, Pause, Play, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { canControl, invoke } from './bridge';
 import type { LogEntry, LogSnapshot, Project, ServiceStatus } from './types';
-import { entriesSinceClear, logViewBaseline, serviceLogEntries } from './log-view';
+import { entriesSinceClear, logViewBaseline, serviceLogEntries, updateClearedServices } from './log-view';
 import ActionMenu from './data/ActionMenu';
 import Workspace, { MaximizeWorkspace } from './Workspace';
 import './logs.css';
@@ -87,7 +87,9 @@ export default function LogsPage({ active, busy, services, projects, request, op
         if (!disposed) {
           const nextRevision = next.revision ?? JSON.stringify(next);
           if (revision.current !== nextRevision) { setSnapshot(next); revision.current = nextRevision; }
-          setShownServices(previous => previous.length === servicesRef.current.length && previous.every((service, index) => service.id === servicesRef.current[index].id && service.message === servicesRef.current[index].message) ? previous : servicesRef.current);
+          const nextServices = servicesRef.current;
+          setCleared(previous => updateClearedServices(previous, nextServices));
+          setShownServices(previous => previous.length === nextServices.length && previous.every((service, index) => service.id === nextServices[index].id && service.message === nextServices[index].message) ? previous : nextServices);
           setError(null); setLoaded(true); loadedRef.current = true;
         }
       } catch (reason) { if (!disposed) setError(String(reason)); }
