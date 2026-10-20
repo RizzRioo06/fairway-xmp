@@ -123,6 +123,8 @@ function result_set($s, $limit = 200) {
         foreach ($row as &$v) if ($v !== null && !preg_match('//u',(string)$v)) $v = '0x' . bin2hex($v);
         unset($v); $data[] = $row;
     }
+    // Unbuffered MySQL refuses the next result while any row is still unread.
+    if ($truncated) while ($s->fetch(PDO::FETCH_NUM) !== false) {}
     return ['columns'=>$columns,'rows'=>$data,'affected'=>$s->rowCount(),'truncated'=>$truncated];
 }
 function run_request($db, $r) {
@@ -161,7 +163,10 @@ function run_request($db, $r) {
             // so later errors and COMMIT/ROLLBACK are observed before success.
             do {
                 if (count($sets)<10) $sets[]=result_set($s);
-                else $resultsTruncated=true;
+                else {
+                    $resultsTruncated=true;
+                    if ($s->columnCount()) while ($s->fetch(PDO::FETCH_NUM) !== false) {}
+                }
             } while ($s->nextRowset());
             $s->closeCursor();
             if ($db->inTransaction()) throw new Exception('Finish the transaction with COMMIT or ROLLBACK in the same run.');
