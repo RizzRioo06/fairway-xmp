@@ -28,7 +28,8 @@ for (const driver of ['mysql', 'sqlite'] as const) test(`${driver}: an unreadabl
     if (driver === 'sqlite') {
       await page.getByRole('button', { name: 'Open SQLite file…', exact: true }).click();
       await expect(page.getByRole('tab', { name: 'SQLite', exact: true })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByLabel('SQLite file path', { exact: true })).toHaveText(path);
+      const shown = await page.getByLabel('SQLite file path', { exact: true }).innerText();
+      expect(shown.replaceAll('\\', '/')).toBe(path.replaceAll('\\', '/'));
     } else await page.getByLabel('Database', { exact: true }).selectOption('recovery');
     await expect(page.getByRole('alert')).toContainText('Could not load a_broken.');
     await expect(page.getByRole('button', { name: 'Insert row', exact: true })).toBeDisabled();
