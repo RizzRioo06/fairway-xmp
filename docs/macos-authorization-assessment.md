@@ -1,5 +1,11 @@
 # macOS authorization assessment — 2026-10-19
 
+## RC 2 integration update — 2026-10-20
+
+PR #8 is merged, and the owner has authorized RC 2 with the welcome, site-form and native permission changes. The normal Mac candidate workflow now explicitly enables both native features, builds and copies the helper before distribution signing, verifies the packaged feature flags/fixed payload/Developer ID identity, and exercises fresh registration/cleanup on the exact notarized app. Certificate removal uses the in-process Security API. Development Cargo defaults still leave the native features opt-in.
+
+The historical experiment/checkpoint notes below describe their state at that time; statements that normal packaging omits the helper or that no focus fix exists are superseded by this update. RC 2 remains unpublished. Fresh exact-installer approval/cancellation, password fallback, last-site cleanup, supported macOS 15 behavior, approved-helper upgrade/replacement and uninstall/reinstall still need device acceptance. No current user's hosts, keychain or service registration is mutated by local build verification.
+
 Status: assessment plus opt-in native HTTPS-trust and hosts-helper prototypes, prepared after RC 1 at the owner's request for a local Mac comparison build. Standard builds keep the existing authorization behavior. The owner will decide separately whether the proposed work warrants another RC.
 
 ## Findings in the current source

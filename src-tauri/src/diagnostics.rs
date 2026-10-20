@@ -5,7 +5,11 @@ use serde_json::{json, Value};
 pub fn build_identity() -> Value {
     json!({ "version": env!("CARGO_PKG_VERSION"), "commit": env!("FAIRWAY_BUILD_COMMIT"),
         "modifiedSources": env!("FAIRWAY_BUILD_DIRTY") == "true",
-        "os": std::env::consts::OS, "architecture": std::env::consts::ARCH })
+        "os": std::env::consts::OS, "architecture": std::env::consts::ARCH,
+        "features": {
+            "nativeMacosHosts": cfg!(all(target_os = "macos", feature = "native-macos-hosts")),
+            "nativeMacosTrust": cfg!(all(target_os = "macos", feature = "native-macos-trust")),
+        } })
 }
 
 fn os_version() -> Option<String> {

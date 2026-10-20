@@ -97,7 +97,7 @@ Beta 2 adds an embedded **Terminal** page on macOS and Windows. Press **Ctrl+bac
 
 On macOS, Fairway remembers roughly 1,000 commands privately on your device, separately from your usual shell history. Start a command with a space to omit it, or turn off **Remember commands in new sessions** before creating or restarting a shell. Windows keeps its normal Command Prompt history within each session. macOS and Windows also add a **Data browser** beside phpMyAdmin, with `fairway db` commands for SQL import/export. Both features ship in beta 2.
 
-The next unreleased desktop update also lets you choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits. This addition is not included in the existing RC 1 download.
+The staged, unpublished **0.1.0-rc.2** desktop update also lets you choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits. This addition is not included in the existing RC 1 download.
 
 The unreleased **Structure** tab also supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
 

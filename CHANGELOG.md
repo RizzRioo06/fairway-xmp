@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Staged as **0.1.0-rc.2**; candidate build and exact-installer acceptance are pending.
+
+- Mac candidates include native login-keychain HTTPS trust installation/removal and the signed background address helper, with packaged-feature/payload checks before distribution. Authorization focus handoffs and concise site help are included; actual dialog/helper upgrade acceptance remains required.
+- A simpler welcome page for newly created document roots; existing or customized `index.php` files are preserved.
+- Protect SQLite unique indexes backing foreign keys even when referenced columns are reordered.
+- MySQL SQL runs reject unfinished transactions and report rollback. The ten-result display cap now drains all statements, reports omitted results, and preserves later errors instead of emitting a late execution-limit error.
+- A broken view or unreadable table no longer prevents opening the database catalog, choosing another table, or using SQL to repair it.
+
 - MySQL/SQLite Structure now shows indexes and incoming/outgoing foreign keys. Create ordinary or composite unique indexes with ordered columns; remove supported indexes with confirmation and a protective backup. Primary, constraint-owned, advanced and relationship-dependent definitions stay protected in forms. Foreign-key inspection is read-only; filtering stays in SQL.
 
 - SQLite project files in the desktop Data browser: a visible Open SQLite file action, recent paths, shared table/row editing and SQL workspace, and consistent file backups without starting services or installing an editor extension.

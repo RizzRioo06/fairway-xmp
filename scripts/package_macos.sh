@@ -6,6 +6,7 @@ ARTIFACTS="$ROOT/artifacts"
 STAGE="$ROOT/.runtime-work/pkg-root"
 COMPONENTS="$ROOT/.runtime-work/fairway-components.plist"
 [ -d "$APP" ] || { echo 'Build the Tauri application bundle first.' >&2; exit 1; }
+python3 "$ROOT/scripts/verify_macos_permissions.py" "$APP"
 mkdir -p "$ARTIFACTS" "$ROOT/.runtime-work"
 chmod +x "$APP/Contents/Resources/Uninstall Fairway XMP.command"
 VERSION=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])).version)' "$ROOT/package.json")
@@ -27,6 +28,7 @@ notarize() {
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   python3 "$ROOT/scripts/sign_macos.py" "$APP" "$APPLE_SIGNING_IDENTITY"
   python3 "$ROOT/scripts/check_signed_php.py" "$APP"
+  python3 "$ROOT/scripts/verify_macos_permissions.py" "$APP" --team-id 4Q27NQ2UAF
 fi
 if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   ZIP="$ROOT/.runtime-work/notarize-app.zip"
@@ -35,6 +37,9 @@ if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
   python3 "$ROOT/scripts/staple_macos.py" "$APP"
   codesign --verify --deep --strict "$APP"
   spctl --assess --type execute --verbose=2 "$APP"
+  # Exact distribution app: register and unregister without approval, Settings,
+  # XPC or hosts writes. Approved-helper migration remains a device check.
+  "$APP/Contents/MacOS/fairway" --test-native-hosts-registration
   rm -f "$ZIP"
 fi
 rm -rf "$STAGE"

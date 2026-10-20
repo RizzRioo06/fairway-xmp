@@ -151,6 +151,17 @@ Download its versioned artifact, for example `gh run download RUN_ID --name fair
 
 The initial release is `v0.1.0-alpha.1`, an unsigned GitHub prerelease with manual updates. Publish alpha builds with clear installation limitations and never mark them as the latest stable release. Stable releases require installation, updates, backups, and removal checks on the supported systems.
 
+For RC 2 Mac installers, build the fixed address helper before the desktop feature build:
+
+```sh
+python3 scripts/build_macos_hosts_helper.py --team-id 4Q27NQ2UAF --output artifacts/hosts-helper
+cargo tauri build --bundles app --features native-macos-trust,native-macos-hosts --no-sign
+ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
+python3 scripts/verify_macos_permissions.py 'src-tauri/target/release/bundle/macos/Fairway XMP.app'
+```
+
+The helper build is offline and requires dependencies already present (`cargo fetch --locked --target aarch64-apple-darwin` on a new builder). `package_macos.sh` verifies both embedded permission features and the fixed helper payload, then signs all nested code before sealing the app. Signed packaging also checks the helper Developer ID and exercises fresh registration/cleanup after notarization. That check refuses an existing registration and performs no approval, XPC request or hosts write; run distribution packaging in the intended clean builder account. Installed helper upgrades and real prompts remain human acceptance.
+
 On the Mac builder, after staging the locked runtime, run `python3 scripts/package_sources.py`. For a reviewed runtime version change, add `--refresh-lock`; ordinary source distributions retain their archive checksums. Gitiles snapshots with a committed revision and full Git tree can be recompressed upstream: every file, symlink and executable mode must still reproduce that pinned tree, and the source inventory records the actual archive checksum. Candidate builds use `--locked`, preserve the committed pins, and reject new inputs or changed content. The collector verifies the cached bottles, saves their recipes and build metadata, downloads version-matched upstream source and patches, and creates a bundled-tool source archive under `artifacts/alpha-VERSION`. Review and commit `runtime-sources.lock.json` when changing source versions. Use `--source-ref BUILD_COMMIT` when collecting sources from a newer checkout for existing installers. The archive also contains the application source at that build commit, Windows PHP dependency sources identified by the official SBOM or the pinned older-version manifest, and the runtime staging scripts. Source packages are distributed beside the installers; students only need their platform's installer.
 
 The PHP 8.0 and 8.1 Windows ZIPs predate the official embedded SBOM. `scripts/windows_legacy_sources.json` records version-matched source commits for their Windows dependency packages; the source archive includes these trees and the distribution notices. The older ZIPs do not identify the exact dependency build commits, so review the mapping and any package-specific patches before publishing a Windows installer containing those versions.

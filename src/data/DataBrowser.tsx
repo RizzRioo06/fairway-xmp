@@ -41,6 +41,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const [table, setTable] = useState('');
   const [page, setPage] = useState<Page | null>(null);
   const [structure, setStructure] = useState<Structure | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
   const [pane, setPane] = useState<'rows' | 'structure' | 'query'>('rows');
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
@@ -97,12 +98,25 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     const db = list.databases.includes(preferredDb) ? preferredDb : (list.databases[0] ?? '');
     const result = db ? await request<{ tables: Table[] }>({ op: 'tables', database: db }, targetSource) : { tables: [] };
     const selected = result.tables.find(t => t.name === preferredTable)?.name ?? result.tables[0]?.name ?? '';
-    const nextPage = selected ? await request<Page>({ op: 'rows', database: db, table: selected, offset: 0 }, targetSource) : null;
-    const nextStructure = selected ? await request<Structure>({ op: 'structure', database: db, table: selected }, targetSource) : null;
-    // Publish a complete catalog together: never pair a new database/table with old rows.
+    let nextPage: Page | null = null;
+    let nextStructure: Structure | null = null;
+    let failure: string | null = null;
+    try {
+      if (selected) {
+        nextPage = await request<Page>({ op: 'rows', database: db, table: selected, offset: 0 }, targetSource);
+        nextStructure = await request<Structure>({ op: 'structure', database: db, table: selected }, targetSource);
+      }
+    } catch (error) {
+      if (!mounted.current) throw error;
+      nextPage = null; nextStructure = null;
+      failure = errorText(error);
+    }
+    // A table failure must not hide the catalog or SQL repair tools. Publish
+    // the new selection with empty data rather than pairing it with old rows.
     if (db !== database) setQuery(null);
     setDatabases(list.databases); setDatabase(db); setTables(result.tables);
     setTable(selected); setPage(nextPage); setStructure(nextStructure);
+    setTableError(failure);
     setCatalogLoaded(true);
     setSort({ sort: '', direction: 'ASC' });
   }
@@ -114,6 +128,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     const opened = next.driver === 'sqlite' ? next.path : null;
     if ((next.driver === 'mysql' && !ready) || (next.driver === 'sqlite' && !opened)) {
       setDatabases([]); setDatabase(''); setTables([]); setTable(''); setPage(null); setStructure(null); setCatalogLoaded(false);
+      setTableError(null);
     } else await load('', '', next);
     setSource(next); setPane('rows'); setQuery(null); setHistory([]);
     setSql(next.driver === 'sqlite' ? 'SELECT sqlite_version();' : 'SELECT VERSION();');
@@ -296,6 +311,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
             { label: 'Delete table', disabled: !writable, danger: true, onSelect: () => begin('drop_table') },
           ]} /></>}</div></div>
           <div className="db-tabs" role="tablist" aria-label="Data views">{(['rows', 'structure', 'query'] as const).map(tab => <button key={tab} role="tab" aria-selected={pane === tab} disabled={blocked || (tab !== 'query' && !table)} onClick={() => showPane(tab)}>{tab === 'query' ? 'SQL query' : tab === 'rows' ? 'Rows' : 'Structure'}</button>)}</div>
+          {tableError && <div className="notice error" role="alert"><span>Could not load {table}. {tableError} Choose another table or use SQL to repair it.</span><button className="secondary" disabled={blocked} onClick={() => void run('Refreshing table…', () => load())}>Retry table</button></div>}
           {!table && pane !== 'query' ? <div className="db-empty"><p>Create a table or open SQL query to begin.</p><div className="db-empty-actions"><button className="secondary" disabled={blocked} onClick={() => begin('create_table')}>Create table</button><button className="secondary" disabled={blocked} onClick={() => showPane('query')}>Open SQL query</button></div></div> : pane === 'rows' && page ? <>
             {!canEdit && <p className="db-hint">{writable ? 'No non-null primary or unique key: browse and insert are available. Use SQL for row updates and deletes.' : page.kind === 'VIEW' ? 'This view is read-only. Use SQL for advanced changes.' : 'This virtual table is read-only in forms. Use SQL for advanced changes.'}</p>}
             <div ref={rowsScroll} className="db-grid-scroll" tabIndex={0} role="region" aria-label="Table rows" style={rowsHeight ? { maxHeight: rowsHeight } : undefined}><table className="db-grid"><thead><tr><th>Actions</th>{page.columns.map(c => <th key={c.name}><button disabled={blocked} onClick={() => { const next = { sort: c.name, direction: sort.sort === c.name && sort.direction === 'ASC' ? 'DESC' : 'ASC' }; setSort(next); void run('Sorting rows…', () => loadRows(database, table, 0, next)); }}>{c.name}{sort.sort === c.name ? sort.direction === 'ASC' ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead><tbody>{page.rows.map((row, index) => <tr key={index}><td className="db-actions-cell"><div className="db-row-actions"><button className="icon-button" title={`View row ${index + 1}`} aria-label={`View row ${index + 1}`} disabled={blocked} onClick={() => begin('view', row)}><Eye size={14} /></button>{canEdit && <><button className="icon-button" title={`Edit row ${index + 1}`} aria-label={`Edit row ${index + 1}`} disabled={blocked} onClick={() => begin('update', row)}><Pencil size={14} /></button><button className="icon-button db-icon-danger" title={`Delete row ${index + 1}`} aria-label={`Delete row ${index + 1}`} disabled={blocked} onClick={() => begin('delete', row)}><Trash2 size={14} /></button></>}</div></td>{page.columns.map(c => <td key={c.name}><span className="db-cell" title={row[c.name] ?? 'SQL NULL'}>{cell(row[c.name])}</span></td>)}</tr>)}</tbody></table>{!page.rows.length && <p className="db-grid-empty">{writable ? 'No rows yet. Insert a row to get started.' : 'This view has no rows.'}</p>}</div>
@@ -307,9 +323,9 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
             {structure && <SchemaDetails structure={structure} database={database} sqlite={sqlite} writable={!!writable} blocked={blocked} canCreate={indexableColumns(page.columns, sqlite).length > 0} onCreate={() => begin('create_index')} onRemove={index => begin('drop_index', undefined, undefined, index)} />}
             {structure?.sql && <details className="db-ddl"><summary>Table SQL</summary><pre>{structure.sql}</pre></details>}
           </> : pane === 'query' ? <div className="db-query">
-            <div className="db-query-heading"><label htmlFor="db-sql">SQL for <strong>{sqlite ? fileName(database) : database}</strong></label><HelpTip label="SQL query help"><p>SQL changes run immediately. Cancel cannot undo completed statements.</p><p>Results show up to 200 rows per statement.{!sqlite && ' SELECT without a LIMIT is capped at 201.'} Use LIMIT and OFFSET to see more.</p><p>{sqlite ? 'Run up to ten statements and 1 MiB of SQL at once. Finish transactions within the same run. SQL changes do not create automatic backups.' : 'Use the CLI to import full SQL dumps with DELIMITER commands.'}</p></HelpTip></div><textarea ref={editor} id="db-sql" value={sql} disabled={blocked} onChange={e => setSql(e.target.value)} rows={8} spellCheck={false} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !blocked && sql.trim()) { e.preventDefault(); void runQuery(); } }} />
+            <div className="db-query-heading"><label htmlFor="db-sql">SQL for <strong>{sqlite ? fileName(database) : database}</strong></label><HelpTip label="SQL query help"><p>SQL changes run immediately. Cancel cannot undo completed statements.</p><p>Results show up to 200 rows per statement.{!sqlite && ' SELECT without a LIMIT is capped at 201.'} Use LIMIT and OFFSET to see more.</p><p>{sqlite ? 'Run up to ten statements and 1 MiB of SQL at once. Finish transactions within the same run. SQL changes do not create automatic backups.' : 'All statements run; only the first ten result sets are displayed. Finish transactions with COMMIT or ROLLBACK in the same run. Use the CLI to import full SQL dumps with DELIMITER commands.'}</p></HelpTip></div><textarea ref={editor} id="db-sql" value={sql} disabled={blocked} onChange={e => setSql(e.target.value)} rows={8} spellCheck={false} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !blocked && sql.trim()) { e.preventDefault(); void runQuery(); } }} />
             <div className="db-row-tools"><button className="primary" disabled={blocked || !sql.trim()} onClick={() => void runQuery()}>Run selection / all</button><span className="db-hint">⌘ / Ctrl + Enter</span>{history.length > 0 && <select aria-label="Query history" value="" disabled={blocked} onChange={e => setSql(e.target.value)}><option value="">Recent queries (this session)</option>{history.map((text, i) => <option key={i} value={text}>{text.slice(0, 70)}</option>)}</select>}</div>
-            {query && <div aria-label="Query results"><p className="db-hint">Completed in {query.elapsedMs} ms</p>{query.sets.map((set, index) => <section key={index} className="db-query-result"><h3>Result {index + 1} <span>{set.columns.length ? `${set.rows.length} rows` : `${set.affected} affected`}</span></h3>{set.truncated && <p className="db-hint">Showing the first 200 rows. Use a LIMIT and OFFSET to see more.</p>}{set.columns.length > 0 && <div className="db-grid-scroll" tabIndex={0} role="region" aria-label={`Query result ${index + 1}`}><table className="db-grid"><thead><tr>{set.columns.map((column, i) => <th key={i}>{column}</th>)}</tr></thead><tbody>{set.rows.map((row, i) => <tr key={i}>{row.map((value, j) => <td key={j}><span className="db-cell">{cell(value)}</span></td>)}</tr>)}</tbody></table></div>}</section>)}</div>}
+            {query && <div aria-label="Query results"><p className="db-hint">Completed in {query.elapsedMs} ms</p>{query.resultsTruncated && <p className="db-hint" role="status">All statements ran; only the first ten result sets are shown.</p>}{query.sets.map((set, index) => <section key={index} className="db-query-result"><h3>Result {index + 1} <span>{set.columns.length ? `${set.rows.length} rows` : `${set.affected} affected`}</span></h3>{set.truncated && <p className="db-hint">Showing the first 200 rows. Use a LIMIT and OFFSET to see more.</p>}{set.columns.length > 0 && <div className="db-grid-scroll" tabIndex={0} role="region" aria-label={`Query result ${index + 1}`}><table className="db-grid"><thead><tr>{set.columns.map((column, i) => <th key={i}>{column}</th>)}</tr></thead><tbody>{set.rows.map((row, i) => <tr key={i}>{row.map((value, j) => <td key={j}><span className="db-cell">{cell(value)}</span></td>)}</tr>)}</tbody></table></div>}</section>)}</div>}
           </div> : null}
         </section>
       }</TableWorkspace>}
