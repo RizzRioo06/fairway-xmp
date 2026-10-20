@@ -25,7 +25,7 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Insert row', exact: true }).click();
     dialog = page.getByRole('dialog', { name: 'Insert row', exact: true });
-    await dialog.getByLabel('name value mode', { exact: true }).selectOption('value');
+    await expect(dialog.getByLabel('name value', { exact: true })).toBeEnabled();
     await dialog.getByLabel('name value', { exact: true }).fill("Student May's 日本");
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     const rows = page.getByRole('region', { name: 'Table rows', exact: true });

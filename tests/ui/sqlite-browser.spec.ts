@@ -52,7 +52,8 @@ test('SQLite is discoverable with stopped services and shares the table editor',
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('button', { name: 'Insert row', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Insert row', exact: true });
-  await dialog.getByLabel('name value mode', { exact: true }).selectOption('value');
+  await expect(dialog.getByLabel('name value mode', { exact: true })).toHaveValue('null');
+  await expect(dialog.getByLabel('name value', { exact: true })).toBeEnabled();
   await dialog.getByLabel('name value', { exact: true }).fill('SQLite Student 日本');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Table rows', exact: true })).toContainText('SQLite Student 日本');
