@@ -88,13 +88,21 @@ class SQLiteBrowserTests(unittest.TestCase):
         self.assertEqual(result['sets'][3]['rows'], [['1']])
         self.assertEqual(result['sets'][4]['rows'], [['yes;ok'], ['second']])
         self.assertEqual(self.sql('SELECT count(*) FROM students')['sets'][0]['rows'], [['1']])
-        with self.assertRaisesRegex(RuntimeError, 'Finish the transaction'):
+        with self.assertRaisesRegex(RuntimeError, 'Finish the transaction') as unfinished:
             self.sql("BEGIN; INSERT INTO students(name) VALUES('rolled back')")
+        self.assertIn('rolled back', str(unfinished.exception))
+        self.assertNotIn('Earlier committed', str(unfinished.exception))
         self.assertEqual(self.sql('SELECT count(*) FROM students')['sets'][0]['rows'], [['1']])
+        with self.assertRaisesRegex(RuntimeError, 'no such table') as failed:
+            self.sql('SELECT * FROM missing_table')
+        self.assertNotIn('Earlier committed', str(failed.exception))
+        with self.assertRaisesRegex(RuntimeError, 'Earlier committed'):
+            self.sql("INSERT INTO students(name) VALUES('kept'); SELECT * FROM missing_table")
+        self.assertEqual(self.sql('SELECT count(*) FROM students')['sets'][0]['rows'], [['2']])
         self.sql("BEGIN; INSERT INTO students(name) VALUES('committed'); COMMIT;")
         with self.assertRaisesRegex(RuntimeError, 'at most ten'):
             self.sql("INSERT INTO audit VALUES('must not run');" + 'SELECT 1;' * 10)
-        self.assertEqual(self.sql('SELECT count(*) FROM audit')['sets'][0]['rows'], [['4']])
+        self.assertEqual(self.sql('SELECT count(*) FROM audit')['sets'][0]['rows'], [['6']])
 
     def test_keys_binary_and_views_are_conservative(self):
         self.sql("""CREATE TABLE nullable_key(id TEXT PRIMARY KEY, value TEXT);
@@ -206,6 +214,23 @@ class SQLiteBrowserTests(unittest.TestCase):
         for parts in [['a', 'a'], ['missing'], []]:
             with self.assertRaises(RuntimeError):
                 self.call('create_index', table='t', name='invalid', indexColumns=parts)
+        with self.assertRaisesRegex(RuntimeError, 'literal default'):
+            self.call('add_column', table='t', column=dict(name='required', type='TEXT', nullable=False, defaultMode='none'))
+        self.call('add_column', table='t', column=dict(name='required', type='TEXT', nullable=False, defaultMode='value', defaultValue='ok'))
+        self.assertEqual(self.call('rows', table='t')['rows'][0]['required'], 'ok')
+
+    def test_permuted_foreign_key_columns_protect_the_parent_unique_index(self):
+        self.sql("""CREATE TABLE parent(a TEXT NOT NULL,b TEXT NOT NULL);
+            CREATE UNIQUE INDEX uniq ON parent(a,b);
+            CREATE TABLE child(x TEXT,y TEXT,FOREIGN KEY(x,y) REFERENCES parent(b,a));
+            INSERT INTO parent VALUES('a','b'); INSERT INTO child VALUES('b','a');""")
+        index = self.call('structure', table='parent')['indexes'][0]
+        self.assertFalse(index['removable'])
+        self.assertIn('foreign key', index['reason'])
+        with self.assertRaisesRegex(RuntimeError, 'manage it in SQL'):
+            self.call('drop_index', table='parent', name='uniq', originalIndex=index, confirmed=True)
+        self.call('insert', table='child', values=dict(x='b', y='a'))
+        self.assertEqual(self.call('rows', table='child')['total'], '2')
 
     def test_foreign_keys_composites_implicit_parent_keys_and_protected_indexes(self):
         self.sql("""CREATE TABLE parent(a TEXT NOT NULL,b TEXT NOT NULL, PRIMARY KEY(a,b));

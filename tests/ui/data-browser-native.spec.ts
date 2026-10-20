@@ -40,6 +40,10 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Query result 1', exact: true })).toContainText('9007199254740993');
     await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
+    await page.locator('#db-sql').fill('SELECT 1;'.repeat(11));
+    await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
+    await expect(page.getByRole('region', { name: /^Query result \d+$/ })).toHaveCount(10);
+    await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
     const path = info.outputPath('native-data-browser.png');
     await page.screenshot({ path, fullPage: true });
     await info.attach('native-data-browser', { path, contentType: 'image/png' });

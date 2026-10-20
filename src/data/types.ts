@@ -16,7 +16,7 @@ export type ForeignKey = {
 };
 export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string; indexes?: TableIndex[]; foreignKeys?: ForeignKey[]; referencedBy?: ForeignKey[] };
 export type Page = Structure & { rows: Row[]; total: string; offset: number; limit: number };
-export type QueryResult = { sets: { columns: string[]; rows: (string | null)[][]; affected: number; truncated: boolean }[]; elapsedMs: number };
+export type QueryResult = { sets: { columns: string[]; rows: (string | null)[][]; affected: number; truncated: boolean }[]; elapsedMs: number; resultsTruncated?: boolean };
 export type Definition = {
   name: string; type: string; length: string; scale: string; unsigned: boolean;
   nullable: boolean; primary: boolean; autoIncrement: boolean;

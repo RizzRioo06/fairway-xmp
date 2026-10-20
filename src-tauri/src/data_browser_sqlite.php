@@ -85,7 +85,13 @@ function table_indexes($db, $table, $columns, $links) {
         $primary = $index['origin']==='pk'; $hasPrimary = $hasPrimary || $primary;
         $reason = $primary ? 'Primary key; manage it in SQL.' : ($index['origin']==='u' ? 'Declared UNIQUE constraint; manage it in SQL.' : ($advanced ? 'Advanced index; manage it in SQL.' : ''));
         $names = array_map(fn($part)=>strtolower($part['name']??''),$parts);
-        if ((int)$index['unique']) foreach ($links['referencedBy'] as $fk) if ($names===array_map(fn($name)=>strtolower($name??''),$fk['referencedColumns'])) $reason='Supports a foreign key; manage it in SQL.';
+        // SQLite accepts REFERENCES parent(b,a) backed by UNIQUE(a,b).
+        // Compare the complete column multiset, preserving duplicates, not order.
+        $sortedNames = $names; sort($sortedNames, SORT_STRING);
+        if ((int)$index['unique']) foreach ($links['referencedBy'] as $fk) {
+            $referenced = array_map(fn($name)=>strtolower($name??''),$fk['referencedColumns']); sort($referenced, SORT_STRING);
+            if ($sortedNames === $referenced) $reason='Supports a foreign key; manage it in SQL.';
+        }
         $sql = rows($db,"SELECT sql FROM sqlite_master WHERE type='index' AND name=?",[$index['name']]);
         $result[] = ['name'=>$index['name'],'unique'=>(bool)(int)$index['unique'],'primary'=>$primary,'type'=>'BTREE','parts'=>$parts,'details'=>implode(' · ',array_filter([(int)$index['partial']?'Partial':'',$index['origin']==='u'?'UNIQUE constraint':''])),'sql'=>$sql[0]['sql']??null,'removable'=>$reason==='','reason'=>$reason];
     }
@@ -119,6 +125,7 @@ function column_sql($db, $c, $adding = false) {
     if (!in_array($type, ['INTEGER','TEXT','REAL','NUMERIC','BLOB'], true)) throw new Exception('Choose a SQLite column type.');
     if (!empty($c['unsigned'])) throw new Exception('SQLite does not support unsigned columns.');
     if ($adding && (!empty($c['primary']) || !empty($c['autoIncrement']))) throw new Exception('Use SQL to rebuild a table when changing its primary key.');
+    if ($adding && empty($c['nullable']) && ($c['defaultMode'] ?? 'none') !== 'value') throw new Exception('A new NOT NULL column needs a literal default so existing rows stay valid.');
     $sql = ident($c['name'] ?? '') . ' ' . $type;
     if (!empty($c['autoIncrement'])) {
         if ($type !== 'INTEGER' || empty($c['primary']) || ($c['defaultMode'] ?? 'none') !== 'none') throw new Exception('Automatic IDs require an INTEGER primary key without a default.');
@@ -167,6 +174,7 @@ function statements($sql) {
 function query($db, $sql) {
     if (!is_string($sql) || trim($sql) === '' || strlen($sql) > 1024 * 1024) throw new Exception('Enter SQL up to 1 MiB.');
     $sets = [];
+    $committed = 0;
     try {
         foreach (statements($sql) as $text) {
             $s = $db->query($text); $names = []; $data = []; $truncated = false;
@@ -178,12 +186,17 @@ function query($db, $sql) {
             }
             $sets[] = ['columns'=>$names, 'rows'=>$data, 'affected'=>$names ? 0 : $s->rowCount(), 'truncated'=>$truncated];
             $s->closeCursor();
+            if (!$db->inTransaction()) $committed++;
         }
         // Workers are per request; avoid silently rolling back an unfinished transaction.
         if ($db->inTransaction()) throw new Exception('Finish the transaction with COMMIT or ROLLBACK in the same run.');
     } catch (Throwable $e) {
-        if ($db->inTransaction()) $db->rollBack();
-        throw new Exception($e->getMessage() . ' Earlier committed statements may have completed. Refresh to check the current data.');
+        $open = $db->inTransaction();
+        if ($open) $db->rollBack();
+        $detail = $e->getMessage();
+        if ($committed > 0) $detail .= ' Earlier committed statements may have completed. Refresh to check the current data.';
+        elseif ($open) $detail .= ' Unfinished work in this run was rolled back.';
+        throw new Exception($detail);
     }
     return ['sets'=>$sets, 'message'=>'Query completed.'];
 }

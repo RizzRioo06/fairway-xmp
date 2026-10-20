@@ -2,6 +2,16 @@
 
 **0.1.0-rc.1 was published on 2026-10-19**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
 
+## RC 2 build preparation — 2026-10-20
+
+The owner authorized fixing the [readiness findings](rc2-readiness-review.md), including the current merged changes, and staging **0.1.0-rc.2**. RC 2 is published from [candidate run 36](https://github.com/eimg/fairway-xmp/actions/runs/39366414344) at `3ace851c69096a709549ef540955db4b630358dc` (tag `candidate-0.1.0-rc.2-7`). The version tag is `v0.1.0-rc.2` on that tested commit. The owner turned the preview update feed on for this publication. All six embedded version locations agree; runtime versions and source/download pins remain unchanged.
+
+The source fixes cover SQLite foreign-key index protection, MySQL unfinished transactions and truthful result limits, table-load recovery, and required formatting. Normal Mac candidate packaging explicitly enables both native permission features, bundles the helper before final signing, checks embedded features/payload/Developer ID identity, and checks fresh signed-app registration/cleanup without approval or hosts writes. Approved-helper upgrade/replacement remains a device acceptance requirement.
+
+On 2026-10-20 the owner instructed publication of that green candidate and promotion of the preview update feed. Installers are the files from run 36. The human in-app update/restart check is recorded after installed clients can receive the update.
+
+The sections below retain the historical RC 1 preparation and publication record. For RC 2 publication, use `v0.1.0-rc.2` at the exact tested commit, the new notes and new evidence; do not move RC 1 tags or replace its assets.
+
 ## Scope and owner decisions
 
 The release owner confirmed this scope on 2026-10-17:

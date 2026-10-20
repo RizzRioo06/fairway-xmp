@@ -109,6 +109,12 @@ jobs:
       - name: Build native updater probe
         if: inputs.signed_release
         run: cargo build --release --example updater_probe --manifest-path src-tauri/Cargo.toml --locked
+      - name: Fetch pinned dependencies and build native address helper
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
+          python scripts/build_macos_hosts_helper.py --team-id 4Q27NQ2UAF --output artifacts/hosts-helper
       - name: Import release signing credentials
         if: inputs.signed_release
         env:
@@ -126,7 +132,8 @@ jobs:
         run: |
           test -n "$TAURI_SIGNING_PRIVATE_KEY"
           python scripts/configure_release.py --public-key packaging/updater.pub
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --config artifacts/tauri.release.json
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/tauri.release.json --no-sign
+          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
       - name: Sign and notarize app, installer and updater archive
         if: inputs.signed_release
         env:
@@ -139,7 +146,8 @@ jobs:
       - name: Build unsigned development installer
         if: ${{ !inputs.signed_release }}
         run: |
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app
+          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts
+          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
           sh scripts/package_macos.sh
       - name: Collect exact release artifacts
         id: installer

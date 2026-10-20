@@ -72,10 +72,9 @@ pub(crate) fn show_window(app: &tauri::AppHandle) {
 }
 
 fn report_error(app: &tauri::AppHandle, error: String) {
-    // A pending-helper error follows opening System Settings. Raising Fairway
-    // here can undo that handoff even after the native call has returned.
-    // Keep Mac errors in the panel for the user's return, without activation.
-    #[cfg(not(target_os = "macos"))]
+    // Quit and tray failures must reopen a hidden panel. show_window itself
+    // skips activation while a macOS authorization prompt is still in progress.
+    // Site-save approval returns to the already open panel and does not use this path.
     show_window(app);
     let _ = app.emit("fairway-error", error);
 }
@@ -529,7 +528,10 @@ async fn pick_sqlite_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
         app.dialog()
             .file()
             .set_title("Open SQLite file")
-            .add_filter("SQLite database (.sqlite, .db)", &["sqlite", "db", "sqlite3", "db3"])
+            .add_filter(
+                "SQLite database (.sqlite, .db)",
+                &["sqlite", "db", "sqlite3", "db3"],
+            )
             .add_filter("All files", &["*"])
             .blocking_pick_file()
             .map(|path| path.into_path().map_err(|e| e.to_string()))

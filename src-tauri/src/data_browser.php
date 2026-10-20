@@ -123,6 +123,8 @@ function result_set($s, $limit = 200) {
         foreach ($row as &$v) if ($v !== null && !preg_match('//u',(string)$v)) $v = '0x' . bin2hex($v);
         unset($v); $data[] = $row;
     }
+    // Unbuffered MySQL refuses the next result while any row is still unread.
+    if ($truncated) while ($s->fetch(PDO::FETCH_NUM) !== false) {}
     return ['columns'=>$columns,'rows'=>$data,'affected'=>$s->rowCount(),'truncated'=>$truncated];
 }
 function run_request($db, $r) {
@@ -156,10 +158,27 @@ function run_request($db, $r) {
         $db->setAttribute(PDO::ATTR_EMULATE_PREPARES,true);
         $db->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY,false);
         try {
-            $s = $db->query($sql); $sets=[];
-            do { if (count($sets)>=10) throw new Exception('Run at most ten statements at a time.'); $sets[]=result_set($s); } while ($s->nextRowset());
-        } catch (Throwable $e) { throw new Exception($e->getMessage() . ' Earlier statements may have completed. Refresh to check the current data.'); }
-        return ['sets'=>$sets,'message'=>'Query completed.'];
+            $s = $db->query($sql); $sets=[]; $resultsTruncated=false;
+            // This is a display cap, not an execution limit. Drain every result
+            // so later errors and COMMIT/ROLLBACK are observed before success.
+            do {
+                if (count($sets)<10) $sets[]=result_set($s);
+                else {
+                    $resultsTruncated=true;
+                    if ($s->columnCount()) while ($s->fetch(PDO::FETCH_NUM) !== false) {}
+                }
+            } while ($s->nextRowset());
+            $s->closeCursor();
+            if ($db->inTransaction()) throw new Exception('Finish the transaction with COMMIT or ROLLBACK in the same run.');
+        } catch (Throwable $e) {
+            // An errored multi-statement cursor can still own unread results.
+            // Close it before issuing rollback; preserve the original error.
+            if (isset($s)) { try { $s->closeCursor(); } catch (Throwable $ignored) {} }
+            $open=$db->inTransaction();
+            if ($open) $db->rollBack();
+            throw new Exception($e->getMessage() . ($open ? ' Unfinished work in this run was rolled back.' : '') . ' Earlier committed statements may have completed. Refresh to check the current data.');
+        }
+        return ['sets'=>$sets,'resultsTruncated'=>$resultsTruncated,'message'=>$resultsTruncated?'Query completed. All statements ran; only the first ten result sets are shown.':'Query completed.'];
     }
     $table = $r['table'] ?? ''; $qt = ident($table);
     if ($op === 'create_table') {

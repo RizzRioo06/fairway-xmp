@@ -122,6 +122,84 @@ fn main() -> Result<(), String> {
             assert_eq!(limited["sets"][0]["rows"].as_array().unwrap().len(), 200);
             assert_eq!(limited["sets"][0]["truncated"], true);
             assert_eq!(limited["sets"][1]["rows"][0][0], "42");
+            // Per-request connections must never report uncommitted work as saved.
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":"CREATE TABLE transactions(id INT PRIMARY KEY, value TEXT); INSERT INTO transactions VALUES(1,'initial')"}),
+            )?;
+            for sql in [
+                "START TRANSACTION; UPDATE transactions SET value='lost' WHERE id=1; SELECT * FROM transactions",
+                "SET autocommit=0; UPDATE transactions SET value='lost' WHERE id=1",
+                "START TRANSACTION; UPDATE transactions SET value='lost' WHERE id=1; SELECT * FROM missing_table",
+            ] {
+                let error = call(l, json!({"op":"query","database":db,"sql":sql})).unwrap_err();
+                assert!(error.contains("rolled back"), "{error}");
+                assert_eq!(call(l, json!({"op":"query","database":db,"sql":"SELECT value FROM transactions"}))?["sets"][0]["rows"][0][0], "initial");
+            }
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":"START TRANSACTION; UPDATE transactions SET value='committed' WHERE id=1; COMMIT"}),
+            )?;
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"query","database":db,"sql":"SELECT value FROM transactions"})
+                )?["sets"][0]["rows"][0][0],
+                "committed"
+            );
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":"START TRANSACTION; UPDATE transactions SET value='discarded' WHERE id=1; ROLLBACK"}),
+            )?;
+            let error = call(l, json!({"op":"query","database":db,"sql":"START TRANSACTION; UPDATE transactions SET value='kept after commit' WHERE id=1; COMMIT; SELECT * FROM missing_table"})).unwrap_err();
+            assert!(error.contains("Earlier committed") && !error.contains("rolled back"));
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"query","database":db,"sql":"SELECT value FROM transactions"})
+                )?["sets"][0]["rows"][0][0],
+                "kept after commit"
+            );
+            let error = call(l, json!({"op":"query","database":db,"sql":"UPDATE transactions SET value='kept' WHERE id=1; START TRANSACTION; UPDATE transactions SET value='lost' WHERE id=1; SELECT * FROM missing_table"})).unwrap_err();
+            assert!(error.contains("Earlier committed") && error.contains("rolled back"));
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"query","database":db,"sql":"SELECT value FROM transactions"})
+                )?["sets"][0]["rows"][0][0],
+                "kept"
+            );
+            // Ten is a display cap: all requested writes/commits run and later errors surface.
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":"CREATE TABLE counter(value INT)"}),
+            )?;
+            let many = call(
+                l,
+                json!({"op":"query","database":db,"sql":"INSERT INTO counter VALUES(1);".repeat(11)}),
+            )?;
+            assert_eq!(many["sets"].as_array().unwrap().len(), 10);
+            assert_eq!(many["resultsTruncated"], true);
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"query","database":db,"sql":"SELECT COUNT(*) FROM counter"})
+                )?["sets"][0]["rows"][0][0],
+                "11"
+            );
+            call(
+                l,
+                json!({"op":"query","database":db,"sql":format!("START TRANSACTION; {} COMMIT", "INSERT INTO counter VALUES(2);".repeat(11))}),
+            )?;
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"query","database":db,"sql":"SELECT COUNT(*) FROM counter"})
+                )?["sets"][0]["rows"][0][0],
+                "22"
+            );
+            let error = call(l, json!({"op":"query","database":db,"sql":format!("{} SELECT * FROM missing_table", "SELECT 1;".repeat(11))})).unwrap_err();
+            assert!(error.contains("missing_table"));
             call(
                 l,
                 json!({"op":"query","database":db,"sql":"CREATE TABLE no_key (message TEXT); INSERT INTO no_key VALUES ('hello'); CREATE VIEW student_names AS SELECT id,name FROM students; CREATE TABLE composite (a INT,b INT, PRIMARY KEY(a,b)); INSERT INTO composite VALUES(1,2);"}),
