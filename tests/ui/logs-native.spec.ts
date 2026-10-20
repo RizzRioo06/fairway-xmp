@@ -1,7 +1,23 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { writeFile, mkdir, readFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { nativeBridge } from './native-bridge';
+
+
+async function logOptions(page: Page) {
+  const trigger = page.getByRole('button', { name: 'Log options', exact: true });
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+}
+async function logAction(page: Page, name: string) {
+  await logOptions(page);
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
+async function setProblemsOnly(page: Page, checked: boolean) {
+  await logOptions(page);
+  const toggle = page.getByRole('menuitemcheckbox', { name: 'Problems only', exact: true });
+  if (await toggle.getAttribute('aria-checked') !== String(checked)) await toggle.click();
+  else await page.keyboard.press('Escape');
+}
 
 test.use({ baseURL: 'http://127.0.0.1:1422' });
 test('global logs show real PHP failures and HTTP history from the bundled web server', async ({ page, request }, info) => {
@@ -46,7 +62,7 @@ test('global logs show real PHP failures and HTTP history from the bundled web s
     await expect(output).toContainText('/မြန်မာ/日本');
     await expect(output).not.toContainText('NOTICE: ready to handle connections');
     await page.getByLabel('Log site').selectOption('shop.test');
-    await page.getByRole('checkbox', { name: 'Problems only' }).uncheck();
+    await setProblemsOnly(page, false);
     await expect(output).toContainText(`https://shop.test:${httpsPort} /pretty-route`);
     await expect(output).toContainText('missing_function_for_log_test');
     await expect(output).toContainText('Shared PHP');
@@ -60,7 +76,7 @@ test('global logs show real PHP failures and HTTP history from the bundled web s
     await expect(output).toContainText('Stack trace:');
     await page.getByLabel('Log source').selectOption('requests');
     await expect(output).not.toContainText('private_value');
-    await page.getByRole('checkbox', { name: 'Problems only' }).uncheck();
+    await setProblemsOnly(page, false);
     await request.get(`${base}/`);
     await expect(output).toContainText('→ 200');
     await expect(output).toContainText(`https://shop.test:${httpsPort} /pretty-route`);
@@ -68,11 +84,11 @@ test('global logs show real PHP failures and HTTP history from the bundled web s
     await appendFile(join(bridge.root, 'data 日本/logs/access.log'), String.raw`127.0.0.1 - - [18/Oct/2026:09:35:34 +0630] "\x16\x03\x01\x05\xF7" 400 157 "-" "-"` + '\n');
     await expect(output).toContainText('HTTPS traffic reached an HTTP port');
     await expect(output).not.toContainText(String.raw`\x16\x03`);
-    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await logAction(page, 'Pause');
     await request.get(`${base}/paused-request`);
     await page.waitForTimeout(1800);
     await expect(output).not.toContainText('paused-request');
-    await page.getByRole('button', { name: 'Resume', exact: true }).click();
+    await logAction(page, 'Resume');
     await expect(output).toContainText('paused-request');
     // Reading older output stays stable as fresh entries arrive.
     await page.getByLabel('Log source').selectOption('php');

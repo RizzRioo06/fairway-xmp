@@ -150,7 +150,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
       </div>
       {actionNotice && <button aria-label="Dismiss mail message" onClick={() => { setError(null); setSaved(null); }}>×</button>}
     </div>
-    <div className="page-heading"><div><h1>Mail</h1><p>Catches emails from your apps. Nothing reaches real inboxes.</p></div>
+    <div className="page-heading"><div><h1>Mail</h1><p>Local inbox for emails sent by your apps.</p></div>
       <div className="mail-heading-actions"><span className={`status-label ${ready ? 'ready' : mail?.running ? 'pending' : ''}`}><span className={`status-dot ${ready ? 'running' : mail?.running ? 'pending' : ''}`} />{ready ? 'Running' : mail?.running ? 'Waiting' : 'Stopped'}</span>
         <button className="secondary" onClick={settings}><Settings2 size={14} />SMTP settings</button>
         {mail?.running ? <button className="primary" disabled={!canControl || busy} onClick={stop}><Square size={14} />Stop mail</button> : <button className="primary" disabled={!usable} onClick={start}><Play size={14} fill="currentColor" />Start mail</button>}</div>

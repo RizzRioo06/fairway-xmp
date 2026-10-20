@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clipboard, Pause, Play, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { Check, Clipboard, Eraser, FolderOpen, Pause, Play, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { canControl, invoke } from './bridge';
 import type { LogEntry, LogSnapshot, Project, ServiceStatus } from './types';
+import { entriesSinceClear, logViewBaseline, serviceLogEntries } from './log-view';
+import ActionMenu from './data/ActionMenu';
 import './logs.css';
 
 const sources: Record<string, string> = { php: 'PHP', nginx: 'Web server', requests: 'Requests', mysql: 'MySQL', mail: 'Mail' };
@@ -12,13 +14,14 @@ const empty: LogSnapshot = { entries: [], unavailable: [], limited: false };
 
 function sourceName(entry: LogEntry) { return entry.source === 'php' ? 'Shared PHP (all sites)' : sources[entry.source]; }
 
-export default function LogsPage({ active, services, projects, request }: { active: boolean; services: ServiceStatus[]; projects: Project[]; request: LogRequest | null }) {
+export default function LogsPage({ active, busy, services, projects, request, openFolder }: { active: boolean; busy: boolean; services: ServiceStatus[]; projects: Project[]; request: LogRequest | null; openFolder: () => void }) {
   const [snapshot, setSnapshot] = useState<LogSnapshot>(empty);
   const [source, setSource] = useState('all');
   const [site, setSite] = useState('');
   const [query, setQuery] = useState('');
   const [problems, setProblems] = useState(true);
   const [live, setLive] = useState(true);
+  const [cleared, setCleared] = useState<ReadonlyMap<string, string> | null>(null);
   const refreshSeen = useRef(0);
   const revision = useRef<string | null>(null);
   const pendingRead = useRef<Promise<LogSnapshot> | null>(null);
@@ -102,15 +105,12 @@ export default function LogsPage({ active, services, projects, request }: { acti
     if (site && !hosts.has(site)) hosts.set(site, site);
     return [...hosts].sort(([a], [b]) => a.localeCompare(b));
   }, [projects, snapshot, site]);
-  const unscopedRequests = snapshot.entries.some(entry => entry.source === 'requests' && !entry.host);
 
+  const allEntries = useMemo(() => [...snapshot.entries, ...serviceLogEntries(shownServices)], [snapshot, shownServices]);
+  const freshEntries = useMemo(() => entriesSinceClear(allEntries, cleared), [allEntries, cleared]);
   const matching = useMemo(() => {
-    const current: LogEntry[] = shownServices.filter(service => service.message).map(service => ({
-      id: `current:${service.id}`, source: service.id === 'phpmyadmin' ? 'nginx' : service.id,
-      file: 'Current service status', severity: 'error', time: null, text: service.message!.length > 4000 ? `${service.message!.slice(0, 4000)}\n… Message shortened.` : service.message!,
-    }));
     const needle = query.trim().toLowerCase();
-    return [...snapshot.entries, ...current].filter(entry =>
+    return freshEntries.filter(entry =>
       (!site || entry.source === 'php' || (entry.source === 'requests' && entry.host === site)) &&
       (source === 'all' || entry.source === source) && (!problems || entry.severity !== 'info') &&
       (!needle || `${sourceName(entry)} ${entry.file} ${entry.text}`.toLowerCase().includes(needle)),
@@ -120,7 +120,7 @@ export default function LogsPage({ active, services, projects, request }: { acti
       // Undated output stays in source order after dated entries; do not invent times.
       return (Number.isFinite(aTime) ? aTime : Number.MAX_SAFE_INTEGER) - (Number.isFinite(bTime) ? bTime : Number.MAX_SAFE_INTEGER);
     });
-  }, [snapshot, shownServices, source, site, query, problems]);
+  }, [freshEntries, source, site, query, problems]);
 
   const entries = useMemo(() => {
     if (matching.length <= MAX_VISIBLE) return matching;
@@ -131,10 +131,10 @@ export default function LogsPage({ active, services, projects, request }: { acti
       .slice(0, MAX_VISIBLE).map(item => item.index));
     return matching.filter((_, index) => selected.has(index));
   }, [matching]);
-  const hasHistory = snapshot.entries.length > 0 || shownServices.some(service => service.message);
-  const emptyTitle = !hasHistory ? snapshot.unavailable.length ? 'Logs unavailable' : 'No log entries yet'
+  const hasHistory = freshEntries.length > 0;
+  const emptyTitle = !hasHistory ? snapshot.unavailable.length ? 'Logs unavailable' : cleared ? 'Log view cleared' : 'No log entries yet'
     : query.trim() || site || source !== 'all' ? 'No matching entries' : 'No problems recorded';
-  const emptyHelp = !hasHistory ? snapshot.unavailable.length ? 'Resolve the read errors above, then try again.' : 'Start a service or open a local site, then check here again.'
+  const emptyHelp = !hasHistory ? snapshot.unavailable.length ? 'Resolve the read errors above, then try again.' : cleared ? `${live ? 'Waiting for new log entries.' : 'Resume or refresh to see new log entries.'} Log files are unchanged.` : 'Start a service or open a local site, then check here again.'
     : problems ? 'Try changing the filters or turn off Problems only to see other activity.' : 'Try changing the site, source or search.';
 
   function rememberPosition() {
@@ -156,6 +156,11 @@ export default function LogsPage({ active, services, projects, request }: { acti
   }, [entries]);
 
   function changeFilter(action: () => void) { position.current.bottom = true; action(); }
+  function clearView() {
+    setCleared(logViewBaseline(allEntries));
+    position.current = { bottom: true, top: 0 };
+    setCopied(false); setCopyError(null); window.clearTimeout(copyingTimer.current);
+  }
   async function copy() {
     operationFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     try {
@@ -180,7 +185,7 @@ export default function LogsPage({ active, services, projects, request }: { acti
       {copyError && <button onClick={() => { void copy(); }}>Retry copy</button>}
       {copyError && <button aria-label="Dismiss logs message" onClick={() => setCopyError(null)}>×</button>}
     </div>
-    <div className="page-heading"><div><h1>Logs</h1><p>Check here when something goes wrong.</p></div></div>
+    <div className="page-heading"><div><h1>Logs</h1><p>Recent output from all sites and services.</p></div><button className="secondary" disabled={!canControl || busy} onClick={openFolder}><FolderOpen size={14} />Open log folder</button></div>
     <section className="logs-workspace" aria-label="Environment logs">
       <div className="logs-toolbar">
         <label className="logs-source logs-site">Site<select aria-label="Log site" value={site} onChange={event => changeFilter(() => {
@@ -189,14 +194,18 @@ export default function LogsPage({ active, services, projects, request }: { acti
         })}><option value="">All sites</option>{siteOptions.map(([host, label]) => <option key={host} value={host}>{label}</option>)}</select></label>
         <label className="logs-source">Source<select aria-label="Log source" value={source} onChange={event => changeFilter(() => setSource(event.target.value))}><option value="all">All sources</option>{Object.entries(sources).filter(([value]) => !site || value === 'requests' || value === 'php').map(([value, label]) => <option key={value} value={value}>{value === 'php' ? 'Shared PHP' : label}</option>)}</select></label>
         <label className="logs-search"><Search size={15} /><input type="search" aria-label="Search logs" placeholder="Search logs" value={query} onChange={event => changeFilter(() => setQuery(event.target.value))} /></label>
-        <label className="logs-problems"><input type="checkbox" checked={problems} onChange={event => changeFilter(() => setProblems(event.target.checked))} />Problems only</label>
+        <div className="logs-toolbar-actions">
+          <span className="logs-status" role="status" title={matching.length > MAX_VISIBLE ? `Showing up to ${MAX_VISIBLE} matches, prioritizing errors and warnings. Narrow the source or search for other entries.` : snapshot.limited ? 'Older entries are outside this recent view.' : undefined}>{loaded ? `${entries.length}${matching.length > MAX_VISIBLE ? ` of ${matching.length}` : ''} ${entries.length === 1 ? 'entry' : 'entries'} · ${live ? 'Live' : 'Paused'}` : canControl ? 'Loading logs…' : 'Desktop app required'}</span>
+          <ActionMenu label="Log options" className="logs-menu" disabled={!canControl} actions={[
+            { label: 'Problems only', checked: problems, icon: problems ? <Check size={14} /> : <span />, onSelect: () => changeFilter(() => setProblems(value => !value)) },
+            { label: live ? 'Pause' : 'Resume', icon: live ? <Pause size={14} /> : <Play size={14} />, separatorBefore: true, onSelect: () => setLive(value => !value) },
+            ...(!live ? [{ label: 'Refresh', icon: <RefreshCw size={14} />, onSelect: () => setRefresh(value => value + 1) }] : []),
+            { label: 'Clear view', icon: <Eraser size={14} />, disabled: !loaded || !freshEntries.length, onSelect: clearView },
+            { label: copied ? 'Copied' : 'Copy shown', icon: copied ? <Check size={14} /> : <Clipboard size={14} />, disabled: !entries.length, onSelect: () => { void copy(); } },
+          ]} />
+        </div>
       </div>
-      {site && <p className="logs-scope">Requests for <strong>{site}</strong>. PHP entries are shared across all sites; they may belong to another site. Other service logs are under All sites.</p>}
-      <div className="logs-actions"><span role="status">{loaded ? `${entries.length}${matching.length > MAX_VISIBLE ? ` of ${matching.length}` : ''} ${entries.length === 1 ? 'entry' : 'entries'} · ${live ? 'Live' : 'Paused'}` : canControl ? 'Loading logs…' : 'Open the desktop app to read logs.'}</span><div>
-        <button className="secondary" disabled={!canControl} onClick={() => setLive(value => !value)}>{live ? <Pause size={14} /> : <Play size={14} />}{live ? 'Pause' : 'Resume'}</button>
-        {!live && <button className="secondary" disabled={!canControl} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={14} />Refresh</button>}
-        <button className="secondary" disabled={!entries.length} onClick={() => { void copy(); }}>{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? 'Copied' : 'Copy shown'}</button>
-      </div></div>
+      {site && <p className="logs-scope">Requests for <strong>{site}</strong>. PHP output is shared and may belong to another site.</p>}
       {error && <div className="logs-error" role="alert">{error} <button className="text-button" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>}
       {!!snapshot.unavailable.length && <div className="logs-error" role="alert"><strong>Some logs could not be read.</strong>{snapshot.unavailable.map(item => <p key={item}>{item}</p>)}</div>}
       <div className="logs-output" ref={scrolling} onScroll={rememberPosition} tabIndex={0} role="region" aria-label="Log entries">
@@ -206,7 +215,7 @@ export default function LogsPage({ active, services, projects, request }: { acti
         </article>)}
         {loaded && !entries.length && <div className="logs-empty"><ScrollText size={25} /><h2>{emptyTitle}</h2><p>{emptyHelp}</p></div>}
       </div>
-      <p className="logs-hint">{matching.length > MAX_VISIBLE && <>Showing up to {MAX_VISIBLE} matches, prioritizing errors and warnings, then recent output. Narrow the source or search to find other entries. </>}{site ? 'Recent requests for the selected address and shared PHP output.' : 'Recent output from all sites and services. PHP errors are shared.'}{site && unscopedRequests && ' Earlier requests without a recorded host remain under All sites.'}  Problems only includes warnings, failed requests, and unclassified output.{snapshot.limited ? ' Older entries are outside this recent view.' : ''}</p>
+
     </section>
   </div>;
 }

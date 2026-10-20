@@ -312,10 +312,10 @@ export default function App() {
         {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></Suspense></div>}
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
 
-        <div hidden={view !== 'logs'}><LogsPage active={view === 'logs'} services={data.services} projects={data.projects} request={logRequest} /></div>
+        <div hidden={view !== 'logs'}><LogsPage active={view === 'logs'} busy={!!busy} services={data.services} projects={data.projects} request={logRequest} openFolder={() => open('logs')} /></div>
 
         {view === 'environment' && <>
-          <div className="page-heading"><div><h1>Ready when you are.</h1><p>Everything you need to build with PHP, in one place.</p></div><button className="primary" disabled={anyRunning ? !canControl || !!busy : !usable} onClick={() => serviceAction(anyRunning ? 'stop_all' : 'start_all')}>{busy ? <LoaderCircle className="spin" size={16} /> : anyRunning ? <Square size={14} /> : <Play size={15} fill="currentColor" />}{anyRunning ? 'Stop all' : 'Start all'}</button></div>
+          <div className="page-heading"><div><h1>Environment</h1><p>Start and stop local services.</p></div><button className="primary" disabled={anyRunning ? !canControl || !!busy : !usable} onClick={() => serviceAction(anyRunning ? 'stop_all' : 'start_all')}>{busy ? <LoaderCircle className="spin" size={16} /> : anyRunning ? <Square size={14} /> : <Play size={15} fill="currentColor" />}{anyRunning ? 'Stop all' : 'Start all'}</button></div>
           <div className="section-heading"><h2>Services <span>5</span></h2><span className="stack-status"><span className={`status-dot ${allReady ? 'running' : ''}`} />{allReady ? 'All services ready' : anyRunning ? 'Environment partially running' : 'All services stopped'}</span></div>
           <div className="services-grid">{(['nginx', 'php', 'mysql', 'phpmyadmin', 'mail'] as ServiceId[]).map(id => {
             const service = data.services.find(s => s.id === id)!;
@@ -352,7 +352,7 @@ export default function App() {
           open={() => { void run('Opening…', () => invoke<void>('open_target', { target: 'mail' })); }} />}
 
         {view === 'settings' && <>
-          <div className="page-heading"><div><h1>Environment settings.</h1><p>Predictable defaults, with room to adjust.</p></div></div>
+          <div className="page-heading"><div><h1>Settings</h1><p>Service ports, PHP version, and command-line tools.</p></div></div>
           <section className="settings-card"><h2>Service Settings</h2><p>Stop all services before changing ports or PHP. Saved settings stay the same across restarts.</p>
             <form onSubmit={event => { event.preventDefault(); void run('Saving settings…', async () => {
               const mysqlPortChanged = ports.mysql !== data.ports.mysql;
@@ -387,7 +387,7 @@ export default function App() {
         </>}
 
         {view === 'updates' && <>
-          <div className="page-heading"><div><h1>A dependable environment.</h1><p>Find new versions of Fairway XMP and your bundled tools.</p></div></div>
+          <div className="page-heading"><div><h1>Updates</h1><p>Installed versions and available updates.</p></div></div>
           <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer', 'mailpit'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : name === 'mailpit' ? 'Mailpit' : 'Composer'}</span><code>{name === 'php' ? selectedPhp ?? 'Unavailable' : versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>{update?.configured === false ? 'Download a newer installer from View downloads. Back up your databases, stop all services, and quit Fairway XMP before installing. Your projects and database data are kept.' : 'Updates download and verify while your services keep running. Before installing, Fairway XMP backs up your databases, stops services and terminal sessions, then restarts. Your projects, saved sites, and settings are kept.'}</p><div className="button-row update-actions"><button className="primary" disabled={!canControl || !!busy} onClick={() => { void run('Checking for updates…', async () => {
             const result = await invoke<UpdateInfo>('check_update'); setUpdate(result);
             if (result.configured && !result.version) setNotice({ kind: 'success', text: 'You’re using the latest available release.' });

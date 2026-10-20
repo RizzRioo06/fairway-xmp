@@ -1,5 +1,21 @@
 import { test, expect, type Page } from '@playwright/test';
 
+
+async function logOptions(page: Page) {
+  const trigger = page.getByRole('button', { name: 'Log options', exact: true });
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+}
+async function logAction(page: Page, name: string) {
+  await logOptions(page);
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
+async function setProblemsOnly(page: Page, checked: boolean) {
+  await logOptions(page);
+  const toggle = page.getByRole('menuitemcheckbox', { name: 'Problems only', exact: true });
+  if (await toggle.getAttribute('aria-checked') !== String(checked)) await toggle.click();
+  else await page.keyboard.press('Escape');
+}
+
 async function expectStill(page: Page, position: number) {
   const samples = await page.evaluate(async () => {
     const positions: number[] = [];
@@ -16,7 +32,9 @@ test('global logs focus on problems with source/search filters and plain text', 
   await page.goto('/');
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
   const output = page.getByRole('region', { name: 'Log entries', exact: true });
-  await expect(page.getByRole('checkbox', { name: 'Problems only' })).toBeChecked();
+  await logOptions(page);
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Problems only' })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
   await expect(output).toContainText('PHP Fatal error');
   await expect(output).toContainText('→ 500');
   await expect(output).toContainText('custom diagnostic <script>safe text</script>');
@@ -28,7 +46,7 @@ test('global logs focus on problems with source/search filters and plain text', 
   await page.getByLabel('Log source').selectOption('all');
   await page.getByLabel('Search logs', { exact: true }).fill('shop.test');
   await expect(output).toContainText('No matching entries');
-  await page.getByRole('checkbox', { name: 'Problems only' }).uncheck();
+  await setProblemsOnly(page, false);
   await expect(output).toContainText('https://shop.test:8843');
   await expect(output).not.toContainText('PHP Fatal error');
   await page.getByLabel('Search logs', { exact: true }).fill('');
@@ -37,7 +55,9 @@ test('global logs focus on problems with source/search filters and plain text', 
   await page.getByRole('button', { name: 'Manage Sites', exact: true }).click();
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
   await expect(page.getByLabel('Log source')).toHaveValue('mysql');
-  await expect(page.getByRole('checkbox', { name: 'Problems only' })).not.toBeChecked();
+  await logOptions(page);
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Problems only' })).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
   await page.getByLabel('Log source').selectOption('all');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const screenshot = info.outputPath('global-logs.png');
@@ -61,17 +81,17 @@ test('logs polling pauses, stays off other screens, and copies only the shown en
   await page.goto('/');
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
   await expect.poll(() => reads).toBeGreaterThan(0);
-  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await logAction(page, 'Pause');
   const pausedReads = reads;
   await page.waitForTimeout(1800);
   expect(reads).toBe(pausedReads);
   await page.getByLabel('Log source').selectOption('php');
-  await page.getByRole('button', { name: 'Copy shown', exact: true }).click();
+  await logAction(page, 'Copy shown');
   await expect.poll(() => clipboard).toContain('PHP Fatal error');
   expect(clipboard).not.toContain('custom diagnostic');
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await logAction(page, 'Refresh');
   await expect.poll(() => reads).toBeGreaterThan(pausedReads);
-  await page.getByRole('button', { name: 'Resume', exact: true }).click();
+  await logAction(page, 'Resume');
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await page.waitForTimeout(200);
   const hiddenReads = reads;
@@ -109,9 +129,9 @@ test('a burst of logs has a bounded display and remains searchable and responsiv
   await page.getByLabel('Search logs', { exact: true }).fill('burst-log-0 ');
   await expect(output.locator('.log-entry')).toHaveCount(1);
   await expect(output).toContainText('日本 မြန်မာ');
-  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await logAction(page, 'Pause');
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Ready when you are.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Environment', exact: true })).toBeVisible();
 });
 
 test('site scope shows its requests alongside explicitly shared PHP and shortcuts restore global scope', async ({ page }, info) => {
@@ -120,7 +140,7 @@ test('site scope shows its requests alongside explicitly shared PHP and shortcut
   const output = page.getByRole('region', { name: 'Log entries', exact: true });
   await expect(output).toContainText('PHP Fatal error');
   await page.getByLabel('Log site').selectOption('shop.test');
-  await page.getByRole('checkbox', { name: 'Problems only' }).uncheck();
+  await setProblemsOnly(page, false);
   await expect(output).toContainText('https://shop.test:8843');
   // This PHP error mentions another project's path; it must remain shared.
   await expect(output).toContainText('lesson/index.php');
@@ -185,14 +205,15 @@ test('clipboard failures survive polling and retry separately from log reads', a
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy shown', exact: true }).click();
+  await logAction(page, 'Copy shown');
   const alert = page.getByRole('alert').filter({ hasText: 'Could not copy logs' });
   await expect(alert).toBeVisible();
   await page.waitForTimeout(2400);
   await expect(alert).toBeVisible();
   await page.getByRole('button', { name: 'Retry copy', exact: true }).click();
   await expect(alert).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Copied', exact: true })).toBeVisible();
+  await logOptions(page);
+  await expect(page.getByRole('menuitem', { name: 'Copied', exact: true })).toBeVisible();
 });
 
 test('empty history and unreadable logs have distinct explanations', async ({ page }) => {
@@ -217,7 +238,8 @@ test('copy failures stay on screen and do not return after navigation', async ({
   const output = page.getByRole('region', { name: 'Log entries', exact: true });
   await expect(output).toContainText('PHP Fatal error');
   await output.evaluate(element => { element.scrollTop = 80; });
-  const copy = page.getByRole('button', { name: 'Copy shown', exact: true });
+  await logOptions(page);
+  const copy = page.getByRole('menuitem', { name: 'Copy shown', exact: true });
   await page.evaluate(() => { document.querySelector('main')!.style.minHeight = '2400px'; window.scrollTo(0, 700); });
   await copy.evaluate(element => (element as HTMLElement).focus({ preventScroll: true }));
   const position = await page.evaluate(() => window.scrollY);
@@ -232,7 +254,7 @@ test('copy failures stay on screen and do not return after navigation', async ({
   const dimensions = await page.locator('.logs-notice-message').evaluate(element => ({ height: element.clientHeight, content: element.scrollHeight }));
   expect(dimensions.content).toBeGreaterThan(dimensions.height);
   await expectStill(page, position);
-  await expect(copy).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Log options', exact: true })).toBeFocused();
   expect(await output.evaluate(element => element.scrollTop)).toBe(listPosition);
   await page.getByRole('button', { name: 'Environment', exact: true }).click();
   await expect(alert).toHaveCount(0);

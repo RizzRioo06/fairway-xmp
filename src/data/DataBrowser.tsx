@@ -275,7 +275,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const pageNotice = notice && !edit ? notice : null;
 
   return <div className="db-browser" aria-busy={!!pending}>
-    <div className="page-heading"><div><h1>Data browser</h1><p>Browse your MySQL databases and SQLite files.</p></div><div className="db-actions" inert={browsing}><button className="secondary" disabled={blocked} onClick={() => void openSqlite()}><FolderOpen size={14} />Open SQLite file…</button>{!sqlite && <button className="secondary" disabled={blocked || !ready} onClick={() => open('phpmyadmin')}>phpMyAdmin<ArrowUpRight size={14} /></button>}</div></div>
+    <div className="page-heading"><div><h1>Data browser</h1><p>Query and edit MySQL databases or SQLite files.</p></div><div className="db-actions" inert={browsing}><button className="secondary" disabled={blocked} onClick={() => void openSqlite()}><FolderOpen size={14} />Open SQLite file…</button>{!sqlite && <button className="secondary" disabled={blocked || !ready} onClick={() => open('phpmyadmin')}>phpMyAdmin<ArrowUpRight size={14} /></button>}</div></div>
     <div className={`db-notice${pageNotice ? ` notice ${pageNotice.error ? 'error' : 'success'}` : ''}`}>
       <div className="db-notice-message">
         <div role={pageNotice && !pageNotice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{pageNotice && !pageNotice.error ? pageNotice.text : null}</div>

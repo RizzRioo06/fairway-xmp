@@ -149,7 +149,7 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
   const cannotAdd = busy || tabs.length >= 2 || tabs.some(tab => statuses[tab.slot] === 'starting');
   return <div className="terminal-workspace">
     <FixedNotice notice={workspaceNotice} />
-    <div className="page-heading"><div><h1>Terminal</h1><p>PHP and Composer, ready for your projects.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
+    <div className="page-heading"><div><h1>Terminal</h1><p>Local shell with bundled PHP and Composer.</p></div><span className={`status-label ${statuses[activeSlot] === 'running' ? 'ready' : ''}`} role="status"><span className={`status-dot ${statuses[activeSlot] === 'running' ? 'running' : ''}`} />{canControl ? { starting: 'Starting…', running: 'Connected', error: 'Disconnected' }[statuses[activeSlot] ?? 'starting'] : 'Desktop app required'}</span></div>
     <div className="terminal-panel">
       {canControl && <div className="terminal-header">
         <div role="tablist" aria-label="Terminals" className="terminal-tabs">{tabs.map(tab => <div className={`terminal-tab${activeSlot === tab.slot ? ' selected' : ''}`} key={tab.key}>
