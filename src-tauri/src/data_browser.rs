@@ -70,14 +70,27 @@ fn php(layout: &Layout, sqlite: bool) -> Result<Command> {
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
+        // PHP reads -c before initializing UTF-8 path handling. A Unicode data
+        // directory without NTFS short names silently leaves php.ini unloaded.
+        // Workers need only PDO: use an isolated startup configuration and load
+        // its driver relative to the selected runtime, even on such volumes.
+        command.current_dir(layout.php_root()?).args([
+            "-n",
+            "-d",
+            "extension_dir=ext",
+            "-d",
+            if sqlite {
+                "extension=pdo_sqlite"
+            } else {
+                "extension=pdo_mysql"
+            },
+        ]);
     }
+    #[cfg(not(windows))]
+    command.arg("-c").arg(layout.data.join("config/php.ini"));
     command
         .env("PHP_INI_SCAN_DIR", "")
         .env("MIBS", "")
-        .arg("-c")
-        .arg(crate::config::windows_ansi_path(
-            &layout.data.join("config/php.ini"),
-        ))
         .args([
             "-d",
             "display_errors=stderr",

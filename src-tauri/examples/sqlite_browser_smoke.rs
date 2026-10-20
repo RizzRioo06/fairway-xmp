@@ -22,12 +22,27 @@ fn main() -> Result<(), String> {
         return Err("Use a fresh test directory.".into());
     }
     let runtime = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime");
-    let manager = Manager::new(Layout::at(
-        root.join("home 日本"),
+    let base = Layout::at(
+        root.join("Student May's home 日本"),
         root.join("data 日本"),
         runtime,
-    ))?;
-    let layout = &manager.layout;
+    );
+    for version in base.php_versions()?.keys() {
+        let manager = Manager::new(Layout::at(
+            base.home.join(version),
+            base.data.join(version),
+            base.runtime.clone(),
+        ))?;
+        let layout = &manager.layout;
+        fs::write(layout.data.join("php-version"), version).map_err(|e| e.to_string())?;
+        layout.write_configs(&manager.ports)?;
+        exercise(layout)?;
+        println!("PASS: PHP {version} SQLite native worker in Unicode home/data paths.");
+    }
+    Ok(())
+}
+
+fn exercise(layout: &Layout) -> Result<(), String> {
     let path = layout.www.join("Student May's database.sqlite");
     let call = |mut r: Value| {
         r["driver"] = json!("sqlite");
