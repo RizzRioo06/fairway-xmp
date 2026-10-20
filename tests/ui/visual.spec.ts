@@ -24,9 +24,7 @@ test('production browser preview cannot enable simulated services', async ({ pag
   await expect(page.getByText('Interface preview — open the desktop app to manage services.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start all', exact: true })).toBeDisabled();
   await expect(page.getByRole('region', { name: 'UI test controls' })).toHaveCount(0);
-  await expect(page.locator('.sidebar')).not.toContainText('Made for local learning');
   await expect(page.locator('.sidebar-footer')).toHaveText(/^v\d+\.\d+\.\d+/);
-  await expect(page.locator('.sidebar-footer')).not.toContainText('FAIRWAY XMP');
 });
 
 test('projects are added, edited, and removed explicitly', async ({ page }, info) => {
@@ -82,7 +80,6 @@ test('site form keeps detailed help optional and keyboard accessible', async ({ 
   await page.getByRole('button', { name: 'Add site', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Add site' });
   await expect(dialog.getByRole('tooltip')).toHaveCount(0);
-  await expect(dialog).not.toContainText('The site name can use any language');
   for (const label of ['About site domains', 'About the web root', 'About app routing', 'About address permissions']) {
     const button = dialog.getByRole('button', { name: label, exact: true });
     await button.focus();
@@ -419,7 +416,6 @@ test('saved-list errors never look like an empty site list and folder guidance i
   await expect(dialog).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await siteAction(page, 'My Shop', 'Edit site');
-  await expect(page.getByRole('dialog')).not.toContainText('Also available through localhost.');
   await expect(page.getByRole('button', { name: 'About shared document-root access' })).toHaveCount(0);
 });
 

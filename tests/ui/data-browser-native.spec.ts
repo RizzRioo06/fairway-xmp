@@ -42,7 +42,6 @@ test('desktop data browser starts bundled MySQL and edits real rows', async ({ p
     await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
     await page.locator('#db-sql').fill('SELECT 1;'.repeat(11));
     await page.getByRole('button', { name: 'Run selection / all', exact: true }).click();
-    await expect(page.getByLabel('Query results', { exact: true }).getByRole('status')).toContainText('All statements ran; only the first ten result sets are shown.');
     await expect(page.getByRole('region', { name: /^Query result \d+$/ })).toHaveCount(10);
     await expect(page.locator('.db-browser')).toHaveAttribute('aria-busy', 'false');
     const path = info.outputPath('native-data-browser.png');

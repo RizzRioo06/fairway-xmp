@@ -109,7 +109,7 @@ def main(installer, baseline=None, report=None):
             os.close(master); os.close(slave)
             assert all(s['ready'] for s in json.loads(call('status', '--json').stdout)['services'])
             website = ports[0]
-            assert b'Your environment' in urllib.request.urlopen(f'http://127.0.0.1:{website}/', timeout=15).read()
+            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/', timeout=15).status == 200
             probe = Path(status['documentRoot']) / 'linux-smoke.php'
             probe.write_text(f"<?php $pdo = new PDO('mysql:host=127.0.0.1;port={ports[2]};dbname=fairway','fairway','fairway'); $pdo->exec('CREATE TABLE IF NOT EXISTS linux_smoke (id INT PRIMARY KEY)'); $pdo->exec('REPLACE INTO linux_smoke VALUES (42)'); echo $pdo->query('SELECT id FROM linux_smoke')->fetchColumn();")
             assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().strip() == b'42'

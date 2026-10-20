@@ -285,7 +285,7 @@ export default function App() {
       <nav className="sidebar-nav" aria-label="Main navigation">
         <div className="nav-group" role="group" aria-label="Core">
           <button className={view === 'environment' ? 'nav-item active' : 'nav-item'} title={foldTitle('Environment')} onClick={() => setView('environment')}><Globe size={18} /><span className="nav-label">Environment</span></button>
-          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} /><span className="nav-label">Terminal</span></button>
+          <button className={view === 'terminal' ? 'nav-item active' : 'nav-item'} aria-label="Terminal" title="Terminal (Ctrl+`)" disabled={!!busy && !terminalOpened} onClick={() => open('terminal')}><Terminal size={18} /><span className="nav-label">Terminal</span></button>
           <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} title={foldTitle('Logs')} onClick={() => setView('logs')}><ScrollText size={18} /><span className="nav-label">Logs</span></button>
         </div>
         <div className="nav-group" role="group" aria-label="Tools">
