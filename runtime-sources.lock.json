@@ -1780,5 +1780,23 @@
     "revision": "c4b64c7513cd7c94c19eb2745f721be4bff194de",
     "binaryPackage": "ICU",
     "binaryVersion": "72.1-1"
+  },
+  {
+    "name": "windows-winlibs-imap-4f5969e9dd67",
+    "url": "https://codeload.github.com/winlibs/imap/tar.gz/4f5969e9dd677122f30416de044576644f612c71",
+    "sha256": "b6b438a11dfc086c706a9e5576c16a36ad2a1ba3bcba34a4c3a2034cf3d80265",
+    "file": "windows-winlibs-imap-4f5969e9dd67.tar.gz",
+    "revision": "4f5969e9dd677122f30416de044576644f612c71",
+    "binaryPackage": "c-client",
+    "binaryVersion": "2007f-1"
+  },
+  {
+    "name": "windows-winlibs-libbzip2-f131eb168095",
+    "url": "https://codeload.github.com/winlibs/libbzip2/tar.gz/f131eb16809565cbeb0684ecad2bd20130e7d5a1",
+    "sha256": "4c8d004064ef1823f2b47d97ec895d83f99f7370e6e9bb7c52b8dd9db536e41f",
+    "file": "windows-winlibs-libbzip2-f131eb168095.tar.gz",
+    "revision": "f131eb16809565cbeb0684ecad2bd20130e7d5a1",
+    "binaryPackage": "libbzip2",
+    "binaryVersion": "1.0.8"
   }
 ]

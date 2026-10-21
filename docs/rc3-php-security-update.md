@@ -40,6 +40,7 @@ Local preparation checks completed on macOS arm64, 2026-10-21:
 - 113 Rust library tests with all features; 91 core/terminal tests with desktop features disabled; Clippy for all targets/features with warnings denied; rustfmt.
 - 40 focused Chromium/WebKit checks at normal and minimum sizes: PHP recovery, startup repair, mail previews/CSP/external-link routing, workspace/nested-modal focus, Table SQL/foreign-key dialogs and SQL-import/footer behavior. A StrictMode effect replay losing the original modal trigger was fixed; keyboard activation/return is verified on both engines.
 - Workflow actionlint, diff whitespace, all six RC 3 version locations, and current staged macOS runtime verification.
+- The current locked corresponding-source plan validates all 209 inputs. Removing PHP 8.0/8.1 had also removed two source pins still required by the remaining Windows PHP SBOMs (c-client and libbzip2). Their exact previously reviewed source revisions/checksums were restored with the current SBOM metadata; no binary version or unrelated source pin changed. Re-evaluate the plan against the patched binaries when they arrive.
 
 Socket/process-dependent Rust checks passed with the required local access after sandbox restrictions blocked their initial run. Browser checks use the test backend and do not claim native visual acceptance or actual external browser launches.
 
