@@ -14,6 +14,6 @@ runs:
       id: downloads
       with:
         path: .runtime-cache
-        key: runtime-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime-manifest.json', 'runtime*lock.json', 'tests/fixtures/runtime-alpha1-*.json', 'scripts/windows_legacy_sources.json') }}
+        key: runtime-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime-manifest.json', 'runtime*lock.json', 'tests/fixtures/runtime-alpha1-*.json') }}
         restore-keys: |
           runtime-downloads-v1-${{ runner.os }}-${{ runner.arch }}-

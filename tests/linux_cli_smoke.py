@@ -125,12 +125,12 @@ def main(installer, baseline=None, report=None):
             assert all(s['ready'] for s in json.loads(call('status', '--json').stdout)['services'])
             # Recover the selected older PHP-FPM, not the default PHP executable.
             call('shutdown')
-            call('php-version', '8.0')
-            assert call('php', '-r', 'echo PHP_VERSION;').stdout.strip().startswith('8.0.')
+            call('php-version', '8.2')
+            assert call('php', '-r', 'echo PHP_VERSION;').stdout.strip().startswith('8.2.')
             assert 'Composer version' in call('composer', '--version').stdout
             call('start')
             probe.write_text('<?php echo PHP_VERSION;')
-            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.0.')
+            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.2.')
             php_pid = int((data / 'php.pid').read_text())
             # Recover verified MySQL, Nginx and PHP-FPM after a supervisor crash.
             pid = int((data / 'supervisor.lock').read_text())
@@ -141,7 +141,7 @@ def main(installer, baseline=None, report=None):
                 time.sleep(.05)
             recovered = json.loads(call('status', '--json').stdout)
             assert all(s['ready'] for s in recovered['services']), recovered
-            assert recovered['phpVersion'] == '8.0', recovered
+            assert recovered['phpVersion'] == '8.2', recovered
             call('shutdown')
             for _ in range(100):
                 state = Path(f'/proc/{php_pid}/stat')
@@ -157,7 +157,7 @@ def main(installer, baseline=None, report=None):
                 freed.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 freed.bind(('127.0.0.1', ports[3]))
             call('start')
-            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.0.')
+            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.2.')
             call('stop', 'nginx')
             stopped = json.loads(call('status', '--json').stdout)
             assert all(not s['running'] for s in stopped['services'] if s['id'] in ('nginx', 'php', 'phpmyadmin'))
@@ -167,7 +167,7 @@ def main(installer, baseline=None, report=None):
             subprocess.run(['sh', str(installer), '--prefix', str(prefix)], env=env, check=True)
             assert probe.exists() and json.loads(call('ports').stdout)['website'] == ports[0]
             call('start')
-            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.0.')
+            assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.2.')
             # A custom prefix may also contain user files; uninstall owns only
             # its releases and current link. A retained marker permits reinstall.
             prefix_coursework = prefix / 'www/keep.php'

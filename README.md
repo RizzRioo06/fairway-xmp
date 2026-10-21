@@ -101,7 +101,7 @@ RC 2 lets you choose **Browse Data → Open SQLite file…** to browse and edit 
 
 The **Structure** tab supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
 
-Fairway includes PHP 8.0 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.0` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. PHP 8.0 and 8.1 are end of life; use newer versions for internet-facing projects.
+Fairway includes PHP 8.2 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.2` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. A saved PHP 8.0 or 8.1 selection is left in place and blocks startup until you choose PHP 8.2 or later.
 
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.
 

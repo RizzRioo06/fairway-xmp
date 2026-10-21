@@ -116,18 +116,6 @@ def linux(target, lock, refresh):
         safe_extract(archive, source, 'tar')
         source, = [path for path in source.iterdir() if path.is_dir()]
         if name.startswith('php'):
-            if version.startswith('8.0.'):
-                # PHP 8.0 predates OpenSSL 3 in Ubuntu 22.04. Apply the
-                # checksummed backports used by Homebrew's final 8.0 formula.
-                patches = (
-                    ('openssl3', '0002-Add-minimal-OpenSSL-3.0-patch-PHP8.0.patch'),
-                    ('openssl-eof', '0003-Fix-bug-79589-ssl3_read_n-unexpected-eof-while-reading-PHP8.0.patch'),
-                )
-                for key, filename in patches:
-                    url = f'https://raw.githubusercontent.com/shivammathur/php-src-backports/2bcb0b/patches/{filename}'
-                    patch = lock_download(f'php-8.0-linux-{key}-patch', url, refresh=refresh, lock=lock)
-                    copy(patch, source_output / filename)
-                    run(['patch', '-p1', '-i', str(patch)], cwd=source)
             prefix = work / f'{name}-install'
             run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
             run(['make', '-j' + jobs], cwd=source)

@@ -43,22 +43,20 @@ class ArchiveTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, 'Runtime version mismatch'):
                         runtime.verify(Path(folder))
 
-    def test_older_windows_php_dependency_sources_are_pinned(self):
-        manifest = Path(__file__).resolve().parents[1] / 'scripts/windows_legacy_sources.json'
-        sources = json.loads(manifest.read_text())
-        for version in ('8.0', '8.1'):
-            packages = [item['package'] for item in sources if version in item['php']]
-            self.assertGreaterEqual(len(packages), 35)
-            self.assertEqual(len(packages), len(set(packages)))
-            for library in ('glib', 'libenchant2', 'libpq', 'libsasl', 'libsodium', 'libssh2', 'nghttp2', 'openssl', 'sqlite3'):
-                self.assertTrue(any(package.startswith(library + '-') for package in packages),
-                                f'{library} source missing for PHP {version}')
-            if version == '8.0':
-                self.assertIn('glib-2.53.3-vs16-x64.zip', packages)
-                self.assertIn('libiconv-1.16-5-vs16-x64.zip', packages)
+    def test_php_8_0_and_8_1_are_not_bundled(self):
+        root = Path(__file__).resolve().parents[1]
+        manifest = json.loads((root / 'runtime-manifest.json').read_text())
+        self.assertEqual(list(manifest['phpVersions']), ['8.2', '8.3', '8.4', '8.5'])
+        self.assertFalse((root / 'scripts/windows_legacy_sources.json').exists())
+        downloads = json.loads((root / 'runtime-downloads.lock.json').read_text())
+        linux = json.loads((root / 'runtime-linux-downloads.lock.json').read_text())
+        sources = json.loads((root / 'runtime-sources.lock.json').read_text())
+        for name in (*downloads, *linux, *(item['name'] for item in sources)):
+            self.assertNotRegex(name, r'8\.0|8\.1')
+        self.assertIn('brew-icu4c@78-arm64-sequoia', downloads)
         for item in sources:
-            self.assertRegex(item['revision'], r'^[0-9a-f]{40}$')
-            self.assertIn('/', item['repo'])
+            versions = set(item.get('phpVersions') or [])
+            self.assertFalse(versions & {'8.0', '8.1'})
 
     def test_windows_archive_cannot_escape_runtime_folder(self):
         for malicious in ('../outside.txt', '/outside.txt', 'C:/outside.txt', '..\\outside.txt'):

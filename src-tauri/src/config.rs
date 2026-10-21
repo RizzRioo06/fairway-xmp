@@ -281,9 +281,7 @@ impl Layout {
             Err(e) => return Err(e.to_string()),
         };
         if !self.php_versions()?.contains_key(&version) {
-            return Err(format!(
-                "PHP {version} is not bundled with this installation."
-            ));
+            return Err(unavailable_php_message(&version));
         }
         Ok(version)
     }
@@ -710,9 +708,19 @@ fn php_mail(layout: &Layout, ports: &Ports) -> String {
     )
 }
 
+pub(crate) fn unavailable_php_message(version: &str) -> String {
+    if version == "8.0" || version == "8.1" {
+        format!(
+            "PHP {version} is no longer included. Your selection was kept. Choose PHP 8.2 or later."
+        )
+    } else {
+        format!("PHP {version} is not bundled with this installation.")
+    }
+}
+
 fn windows_php_extensions(php_root: &Path) -> String {
     let mut extensions = String::from("extension=curl\nextension=fileinfo\nextension=gd\nextension=intl\nextension=mbstring\nextension=mysqli\nextension=openssl\nextension=pdo_mysql\nextension=pdo_sqlite\nextension=sodium\nextension=sqlite3\n");
-    // PHP 8.0/8.1 ship ZIP in the binary; later Windows releases ship php_zip.dll.
+    // Load ZIP only when this PHP build ships php_zip.dll.
     if php_root.join("ext/php_zip.dll").is_file() {
         extensions.push_str("extension=zip\n");
     }
@@ -967,8 +975,13 @@ mod tests {
         assert_eq!(layout.php_root().unwrap(), layout.runtime.join("php"));
         fs::write(layout.data.join("php-version"), "8.4").unwrap();
         assert_eq!(layout.php_root().unwrap(), layout.runtime.join("php-8.4"));
+        fs::write(layout.data.join("php-version"), "8.0").unwrap();
+        let removed = layout.php_version().unwrap_err();
+        assert!(removed.contains("no longer included"), "{removed}");
+        assert_eq!(fs::read_to_string(layout.data.join("php-version")).unwrap(), "8.0");
         fs::write(layout.data.join("php-version"), "8.3").unwrap();
-        assert!(layout.php_version().is_err());
+        let unknown = layout.php_version().unwrap_err();
+        assert!(unknown.contains("not bundled"), "{unknown}");
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -435,9 +435,7 @@ impl Manager {
         }
         ports.validate()?;
         if !self.layout.php_versions()?.contains_key(&version) {
-            return Err(format!(
-                "PHP {version} is not bundled with this installation."
-            ));
+            return Err(crate::config::unavailable_php_message(&version));
         }
         let previous = self.layout.php_version()?;
         let version_changed = version != previous;
@@ -468,9 +466,7 @@ impl Manager {
             return Err("Stop all services before changing PHP versions.".into());
         }
         if !self.layout.php_versions()?.contains_key(&version) {
-            return Err(format!(
-                "PHP {version} is not bundled with this installation."
-            ));
+            return Err(crate::config::unavailable_php_message(&version));
         }
         let previous = self.layout.php_version()?;
         if version == previous {

@@ -1,6 +1,6 @@
 # Candidate build and acceptance
 
-Beta 3 candidates require Mac signing/notarization and signed Mac/Windows updater artifacts; Windows Authenticode remains deferred. See [signed beta releases](signed-beta-releases.md). PHP 8.5 is the default; PHP 8.0/8.1 remain unsupported legacy options for older coursework. Their Windows dependency build/patch provenance remains an open, explicitly recorded limitation in [release follow-ups](release-follow-ups.md). For the RC cycle, the release owner accepts those Windows limitations as-is; this process does not mark that work verified. See [RC preparation](rc-preparation.md) for scope and release channels.
+Beta 3 candidates require Mac signing/notarization and signed Mac/Windows updater artifacts; Windows Authenticode remains deferred. See [signed beta releases](signed-beta-releases.md). PHP 8.5 is the default. PHP 8.2, 8.3, and 8.4 are the other bundled versions. PHP 8.0 and 8.1 are not included; a saved selection of either version is preserved and blocks startup until the user chooses 8.2 or later. See [RC preparation](rc-preparation.md) for scope and release channels.
 
 ## Build a candidate
 

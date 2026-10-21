@@ -43,7 +43,7 @@ The last command starts isolated services and checks PHP and Composer, a PHP →
    ```
 
    The web response and PHP launcher should report `8.5.11`.
-4. Click **Stop all**, select each PHP version from **8.0** through **8.4** under **Settings → Service Settings → Advanced settings**, click **Save**, then **Start all**. Repeat the `curl`, PHP, and Composer commands for each one. The web response and PHP launcher should report the selected version from `runtime-manifest.json`; Composer should still start. Stop all services before each switch.
+4. Click **Stop all**, select each PHP version from **8.2** through **8.4** under **Settings → Service Settings → Advanced settings**, click **Save**, then **Start all**. Repeat the `curl`, PHP, and Composer commands for each one. The web response and PHP launcher should report the selected version from `runtime-manifest.json`; Composer should still start. Stop all services before each switch. PHP 8.0 and 8.1 are not in the list. A saved selection of either version is kept and blocks startup until you choose 8.2 or later.
 5. Quit through the menu bar icon. Start the app again with the same environment variables and confirm the last selected version is still selected. Switch back to 8.5 if desired.
 
 ## Windows
@@ -66,7 +66,7 @@ Start-Process 'http://127.0.0.1:8800/version.php'
 & (Join-Path $env:FAIRWAY_DEV_DATA 'bin/php.cmd') --version
 ```
 
-Beta 1 includes PHP 8.0 through 8.5. PHP 8.5 is the default, and PHP 8.0 and 8.1 are legacy compatibility options.
+Current builds include PHP 8.2 through 8.5. PHP 8.5 is the default.
 
 ## Linux terminal edition
 
@@ -74,10 +74,10 @@ On an Ubuntu 22.04 x86_64 builder, stage the locked runtime with `python3 script
 
 ```sh
 fairway stop all
-fairway php-version 8.0
+fairway php-version 8.2
 fairway php --version
 fairway composer --version
 fairway start all
 ```
 
-Check that a page in the document root reports PHP 8.0.30. Repeat for PHP 8.1 through 8.5, stopping services before each switch. The Linux installer workflow builds and smoke-tests this runtime when dispatched manually.
+Check that a page in the document root reports PHP 8.2.34. Repeat for PHP 8.3 through 8.5, stopping services before each switch. `fairway php-version 8.0` and `fairway php-version 8.1` are rejected and leave the saved selection unchanged. The Linux installer workflow builds and smoke-tests this runtime when dispatched manually.

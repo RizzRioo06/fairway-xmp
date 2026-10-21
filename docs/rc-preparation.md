@@ -22,7 +22,7 @@ The sections below retain the historical RC 1 preparation and publication record
 
 The release owner confirmed this scope on 2026-10-17:
 
-- Keep the current PHP 8.0/8.1 Windows inputs and collected sources as-is. Their exact dependency build/patch provenance remains **unverified**, disclosed, and open for follow-up; it is not an RC blocker.
+- On 2026-10-17, keep the then-current PHP 8.0/8.1 Windows inputs and collected sources as-is. That decision was superseded on 2026-10-21: PHP 8.0 and 8.1 are removed from Windows, macOS, and Linux. A saved selection of either version is left in place and blocks startup until the user chooses PHP 8.2 or later. Already published installers are unchanged.
 - Keep the Windows installer **without Authenticode signing**. Unknown-publisher/SmartScreen prompts remain possible. Cryptographic updater signatures remain mandatory.
 - Keep Developer ID signing, notarization and stapling for the Mac app and installer, plus signed Mac/Windows updates and existing verification checks.
 - **Defer per-site PHP.** [Issue #5](https://github.com/eimg/fairway-xmp/issues/5) closed as not planned on 2026-10-18. Global PHP selection remains the behavior for all sites, terminals and CLI tools in this RC.
@@ -61,7 +61,7 @@ Explicit RC checks:
 - Logs: real PHP errors/traces, failed and successful HTTP/HTTPS requests, source/search filters, pause/resume/copy, service failures, restart/replacement handling and responsive large-log reading.
 - Grouped navigation, terminal continuity and data-browser workspace continuity at normal/minimum native window sizes.
 - After publication and feed promotion: actual subsequent-version update and restart into this candidate, including protected Mac installation prompts and cancellation. Ordinary local builds have no updater and cannot establish this acceptance.
-- Global PHP selection, site terminal paths, existing command-line integration and switching all six bundled versions remain covered; per-site PHP is excluded.
+- Global PHP selection, site terminal paths, existing command-line integration and switching every bundled version (8.2–8.5) remain covered; per-site PHP is excluded. A saved PHP 8.0 or 8.1 selection must stay on disk and block startup until the user chooses 8.2 or later.
 
 Run `python3 scripts/release_candidate.py check-acceptance --phase pre-publication --manifest /path/to/candidate-manifest.json --evidence /path/to/pre-publication-acceptance.json` before publication. After the human update tests, validate the completed evidence with `--phase post-publication`; omitting the phase also requires all checks. Record the dated results without replacing the published pre-publication evidence. Any failed update stops further rollout.
 

@@ -199,7 +199,7 @@ def windows(target, lock, refresh):
     }
     for minor, version in MANIFEST.get('phpVersions', {}).items():
         if version != php:
-            toolset = 'vs16' if minor in ('8.0', '8.1', '8.2', '8.3') else 'vs17'
+            toolset = 'vs16' if minor in ('8.2', '8.3') else 'vs17'
             sources[f'php-{minor}-windows'] = (f'https://downloads.php.net/~windows/releases/php-{version}-nts-Win32-{toolset}-x64.zip', f'php-{minor}')
     for name, (url, service) in sources.items():
         archive = lock_download(name, url, refresh=refresh, lock=lock)
@@ -245,9 +245,7 @@ class Bottles:
         if name in self.kegs: return self.kegs[name]
         key = f'brew-{name}-arm64-sequoia'
         stored = self.lock.get(key)
-        # PHP 8.0 and its ICU 73 dependency were removed from Homebrew core.
-        # Keep their archived Sonoma ARM bottles checksum-pinned on refresh.
-        if stored and (not self.refresh or RESUME_LOCK or name in ('php@8.0', 'icu4c')):
+        if stored and (not self.refresh or RESUME_LOCK):
             version, url, checksum = stored['version'], stored['url'], stored['sha256']
         else:
             data = read_json(f'https://formulae.brew.sh/api/formula/{urllib.parse.quote(name, safe="")}.json')
@@ -296,7 +294,7 @@ class Bottles:
             return (origin.parent / suffix).resolve()
         name = Path(dependency).name
         # Index each bottle once. Repeating rglob for every load command is
-        # prohibitively slow with six PHP builds and MySQL's large share tree.
+        # prohibitively slow with the bundled PHP builds and MySQL's large share tree.
         for formula, keg in self.kegs.items():
             if formula not in self._indexed_kegs:
                 for file in keg.rglob('*'):

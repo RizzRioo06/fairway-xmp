@@ -179,7 +179,7 @@ class SQLiteBrowserTests(unittest.TestCase):
 
     def test_all_bundled_php_versions_open_sqlite(self):
         current = self.php
-        for name in ['php', 'php-8.0', 'php-8.1', 'php-8.2', 'php-8.3', 'php-8.4']:
+        for name in ['php', 'php-8.2', 'php-8.3', 'php-8.4']:
             candidate = RUNTIME / name / 'bin' / ('php.exe' if os.name == 'nt' else 'php')
             if candidate.is_file():
                 with self.subTest(runtime=name):

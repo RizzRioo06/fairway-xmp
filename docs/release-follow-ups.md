@@ -10,7 +10,7 @@ All published asset digests/sizes, installer hashes, checksums, acceptance evide
 
 ## RC preparation policy — 2026-10-17
 
-The release owner accepts the existing Windows PHP 8.0/8.1 dependency-provenance gap and unsigned Windows installer as disclosed limitations for this RC cycle. They do not block publication after the other acceptance gates pass. Runtime inputs stay as-is, the provenance checklist stays open, and Authenticode remains absent. Mac signing/notarization and cryptographic Mac/Windows updater signatures remain mandatory. On 2026-10-18 the owner locked RC feature scope after per-site PHP issue #5 closed as not planned; global PHP selection is retained. See [RC preparation](rc-preparation.md).
+On 2026-10-17 the release owner accepted the existing Windows PHP 8.0/8.1 dependency-provenance gap and unsigned Windows installer as disclosed limitations for this RC cycle. They do not block publication after the other acceptance gates pass. That PHP decision was superseded on 2026-10-21 by removing 8.0 and 8.1; see the closed provenance item below. Authenticode remains absent. Mac signing/notarization and cryptographic Mac/Windows updater signatures remain mandatory. On 2026-10-18 the owner locked RC feature scope after per-site PHP issue #5 closed as not planned; global PHP selection is retained. See [RC preparation](rc-preparation.md).
 
 ## Beta 3 publication
 
@@ -30,34 +30,21 @@ All automated platform, native feature, service/backup, installed lifecycle, and
 
 PR #1 was merged as `2114689`. The simpler Advanced settings dropdown, selected-runtime Linux recovery, Windows ZIP configuration, settings rollback, and regression tests are implemented. Repository Mac/Windows checks passed; native Windows/Linux validation exercised all six PHP versions, including Linux recovery and shutdown.
 
-Beta 1 is published. The Windows PHP 8.0/8.1 provenance work below remains open and is disclosed with that release. It does not require changing the published beta 1 files.
+Beta 1 is published. The Windows PHP 8.0/8.1 provenance work was disclosed with that release. It does not require changing the published beta 1 files. Current builds close that follow-up by removal.
 
 ## Legacy PHP scope for beta
 
-Beta 3 adds Mac signing/notarization and signed desktop updates; see [signed beta releases](signed-beta-releases.md). Windows Authenticode remains deferred. PHP 8.0/8.1 remain legacy compatibility options, labeled in Advanced settings and CLI help; PHP 8.5 stays the default. No additional legacy runtime expansion or source-mapping research is scheduled in this pass. The provenance work below remains open and is disclosed in candidate metadata; labeling a runtime legacy does not verify its dependency sources.
+Beta 3 adds Mac signing/notarization and signed desktop updates; see [signed beta releases](signed-beta-releases.md). Windows Authenticode remains deferred. PHP 8.0/8.1 were legacy compatibility options in that beta, labeled in Advanced settings and CLI help; PHP 8.5 stayed the default. No additional legacy runtime expansion or source-mapping research was scheduled in that pass. The provenance work was disclosed in candidate metadata; labeling a runtime legacy did not verify its dependency sources.
 
 The new [beta acceptance process](beta-acceptance.md) covers candidate identity, native lifecycle checks, restore verification, diagnostic reports, and final human review. A green browser run does not complete the remaining native checklist.
 
+On 2026-10-21 PHP 8.0 and 8.1 were removed from current builds. The beta policy above still describes the published beta installers.
+
 ## Verify older Windows dependency sources
 
-**Open follow-up; accepted as a disclosed limitation for this RC cycle.** Those official PHP ZIPs have no embedded SBOM identifying exact dependency build commits. `scripts/windows_legacy_sources.json` supplies 49 pinned source entries, and `runtime-sources.lock.json` records archive hashes. This verifies which source files are collected; it does not prove that their build recipes and patches match the distributed binaries.
+Closed on 2026-10-21 by removing PHP 8.0 and 8.1 from the Windows, macOS, and Linux bundles. Those versions are end of life and will not receive the critical PHP security updates. Their Windows ZIPs had no SBOM, so the dependency build/patch mapping could not be finished. `scripts/windows_legacy_sources.json` and the 8.0/8.1 lock entries are removed. PHP 8.2 through 8.5 remain, with PHP 8.5 as the default. A saved selection of 8.0 or 8.1 is left on disk and blocks startup until the user chooses PHP 8.2 or later. Already published installers are unchanged.
 
-Some mappings require particular attention:
-
-| Binary dependency package | Recorded source tag |
-| --- | --- |
-| `libcurl-7.76.1-3-vs16-x64.zip` | `libcurl-7.76.1-2` |
-| `libffi-3.3-4-vs16-x64.zip` | `libffi-3.3` |
-| `libiconv-1.16-5-vs16-x64.zip` | `libiconv-1.16-1` |
-
-Different build suffixes do not by themselves establish a source mismatch, but the mapping needs evidence. Passing runtime tests does not resolve that question.
-
-- [ ] Match the dependency list against the notices in the exact checksum-pinned PHP 8.0/8.1 Windows ZIPs.
-- [ ] Record upstream build evidence for the source revisions and package-specific recipes/patches, including the mappings above.
-- [ ] Correct or extend the legacy source manifest and source lock where that evidence identifies missing inputs.
-- [ ] Collect the corresponding-source archive and verify it includes those exact sources, recipes, patches, and notices.
-
-For future provenance remediation, establish the exact mapping, choose a verifiable input, or defer those versions. The current RC cycle retains the existing inputs under the owner decision above. Keep this item open until evidence is recorded; version-matched tags alone are not completion.
+- [x] Remove PHP 8.0 and 8.1 instead of reconstructing unverifiable Windows dependency provenance.
 
 ## Finish the release owner's Mac visual test
 
@@ -71,7 +58,7 @@ The release owner tested the Mac beta 1 installer on 2026-10-15 and authorized p
 
 - [x] Publish `v0.1.0-beta.1` from candidate run 38699450419, commit `f3cf84da6270038274590860db00c58eda2f1df6`. The installers include PHP version selection and report `0.1.0-beta.1`.
 - [x] Upload those candidate files unchanged. `BUILD-INFO.json` records the commit, run, and hashes.
-- [ ] Keep the Windows PHP 8.0/8.1 provenance item above open. Beta 1 discloses it and ships the matching Mac/Windows and Linux source archives beside the binaries.
+- [x] The Windows PHP 8.0/8.1 provenance item is closed by removal on 2026-10-21. Published beta 1 still discloses the limitation for those already-shipped files.
 - [x] Update README downloads and the Linux PHP-version instructions for beta 1.
 
 See [Contributing](../CONTRIBUTING.md#publishing-a-release) for packaging and publication. Signing/notarization requirements for stable releases remain described there.

@@ -14,7 +14,6 @@ on:
       - 'THIRD_PARTY_NOTICES.md'
       - 'scripts/prepare*runtime.py'
       - 'scripts/package_sources.py'
-      - 'scripts/windows_legacy_sources.json'
       - 'tests/fixtures/runtime-alpha1-*.json'
       - '.github/actions/**'
       - '.github/workflows/warm-build-cache.yml'

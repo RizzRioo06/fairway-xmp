@@ -238,7 +238,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       schema: 1, product: 'Fairway XMP', version: data.version, simulated: true,
       build: { commit: 'ui-test', modifiedSources: false, debug: true },
       system: { os: platform === 'Windows' ? 'windows' : 'macos', version: platform === 'Windows' ? 'Windows 11 (simulated)' : 'macOS 15 (simulated)', architecture: platform === 'Windows' ? 'x86_64' : 'aarch64' },
-      runtimeReady: data.runtimeReady, runtimeVersions: data.runtimeVersions, selectedPhp: data.phpVersion, selectedPhpVersion: data.phpVersions[data.phpVersion], selectedPhpLegacy: ['8.0', '8.1'].includes(data.phpVersion),
+      runtimeReady: data.runtimeReady, runtimeVersions: data.runtimeVersions, selectedPhp: data.phpVersion, selectedPhpVersion: data.phpVersions[data.phpVersion], selectedPhpLegacy: false,
       services: data.services.map(({ id, port, running, ready }) => ({ id, port, running, ready })),
       commandLine: { installed: data.pathInstalled, phpDetectedByApp: data.pathPhp === null ? 'not-detected' : data.pathPhp === data.cliPhp ? 'fairway' : 'other-installation', composerDetectedByApp: data.pathComposer === null ? 'not-detected' : data.pathComposer === data.cliComposer ? 'fairway' : 'other-installation' },
       excluded: ['credentials', 'database contents', 'project files', 'logs', 'filesystem paths'],

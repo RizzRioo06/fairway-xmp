@@ -71,14 +71,15 @@ pub fn report(snapshot: &Snapshot) -> Value {
         });
         versions.insert(name.into(), json!(value));
     }
-    let selected_legacy = ["8.0", "8.1"].contains(&snapshot.php_version.as_str());
+    // PHP 8.0 and 8.1 are not bundled. A saved selection blocks startup, so a
+    // running session cannot report them. The field stays for existing reports.
     json!({
         "schema": 1, "product": "Fairway XMP", "version": snapshot.version,
         "build": { "commit": env!("FAIRWAY_BUILD_COMMIT"), "modifiedSources": env!("FAIRWAY_BUILD_DIRTY") == "true", "debug": cfg!(debug_assertions) },
         "system": { "os": std::env::consts::OS, "version": os_version(), "architecture": std::env::consts::ARCH },
         "runtimeReady": snapshot.runtime_ready, "runtimeVersions": versions,
         "selectedPhp": snapshot.php_version, "selectedPhpVersion": snapshot.php_versions.get(&snapshot.php_version),
-        "selectedPhpLegacy": selected_legacy, "services": services,
+        "selectedPhpLegacy": false, "services": services,
         "commandLine": { "installed": snapshot.path_installed,
             "phpDetectedByApp": detected(&snapshot.path_php, &snapshot.cli_php),
             "composerDetectedByApp": detected(&snapshot.path_composer, &snapshot.cli_composer) },

@@ -10,6 +10,7 @@
 - MySQL adds confirmed SQL-file import with a mandatory target backup, visible phases, cancellation and partial-failure recovery. Open backups stays available outside CLI help. SQLite remains file/backup-only.
 - SQL results name inserts, deletes and updates. MySQL updates count changed rows; SQLite explicitly reports matched rows. MySQL remembers the selected database/table in the current app session, and nullable row fields accept typing directly.
 - Fast TypeScript unit tests now run in verification and candidate builds. Native regressions cover unchanged updates, import cancellation/phases and external-terminal path resolution.
+- PHP 8.0 and 8.1 are no longer bundled on Windows, macOS, or Linux. PHP 8.2–8.5 remain, with 8.5 as the default. A saved 8.0 or 8.1 selection is preserved and blocks startup until the user chooses 8.2 or later.
 
 RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
 

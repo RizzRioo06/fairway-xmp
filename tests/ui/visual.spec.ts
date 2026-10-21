@@ -216,14 +216,15 @@ test('pending hosts updates and missing folders are shown with a recovery action
   await expect(page.getByText('The web root folder is missing.', { exact: false })).toBeHidden();
 });
 
-test('support report is reviewable and excludes private paths; old PHP versions are legacy', async ({ page }, info) => {
+test('support report is reviewable and excludes private paths', async ({ page }, info) => {
   await page.goto('/');
   await page.getByLabel('Example paths').selectOption('macOS');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Other PHP on PATH');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByText('Advanced settings', { exact: true }).click();
-  await expect(page.getByRole('option', { name: 'PHP 8.0 · Legacy', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('option', { name: 'PHP 8.1 · Legacy', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('option', { name: 'PHP 8.2', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('option', { name: 'PHP 8.0', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: 'PHP 8.1', exact: true })).toHaveCount(0);
   await page.getByLabel('PHP version').selectOption('8.4');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
