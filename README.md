@@ -46,7 +46,7 @@ Re-running the installer backs up an existing student database and stops service
 
 ## What’s included
 
-- **PHP 8.5.11** with common extensions for PHP projects and Laravel.
+- **PHP 8.5.12** with common extensions for PHP projects and Laravel.
 - **Composer 2.10.3** for installing PHP packages.
 - **Nginx 1.30.5** for serving your projects.
 - **MySQL 9.7.2 LTS** for local databases.

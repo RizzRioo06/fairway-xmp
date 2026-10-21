@@ -72,4 +72,4 @@ jobs:
       - name: Explain the remaining human review
         run: |
           echo "All platform builds, runtime/restore checks, installer lifecycles and browser checks passed for $GITHUB_SHA." >> "$GITHUB_STEP_SUMMARY"
-          echo "Download the exact installers and UI report from this run. Complete acceptance-template.json using docs/beta-acceptance.md. Mac builds are signed and notarized; Mac and Windows updater files are signed. Windows Authenticode and legacy PHP provenance remain disclosed limitations accepted for the RC cycle. This workflow does not publish a release or mark human checks complete." >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the exact installers and UI report from this run. Complete acceptance-template.json using docs/beta-acceptance.md. Mac builds are signed and notarized; Mac and Windows updater files are signed. Windows Authenticode remains a disclosed limitation accepted for the RC cycle. This workflow does not publish a release or mark human checks complete." >> "$GITHUB_STEP_SUMMARY"

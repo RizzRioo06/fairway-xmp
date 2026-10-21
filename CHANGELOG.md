@@ -16,7 +16,9 @@
 - Mail previews resolve inline attachment images and open HTTP/HTTPS links in the external browser. Email scripts and forms remain blocked; preview keyboard focus works inside maximized Mail.
 - Removed PHP selections can be replaced through desktop Settings or the Linux PHP-version command. Failed saves preserve the previous selection and configuration. Runtime verification rejects stale manifests and leftover PHP directories.
 
-RC 3 is waiting for verified patched PHP inputs for the October 21 security release; current pins are not the completed security update. See the [PHP update checklist](docs/rc3-php-security-update.md). RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
+- Update bundled PHP to 8.2.35, 8.3.36, 8.4.27 and 8.5.12, fixing CVE-2026-109618 and CVE-2026-109619 across Windows, macOS and Linux. PHP 8.5 remains the default.
+
+The patched runtime inputs are pinned for the fresh RC 3 candidate. See the [PHP update checklist](docs/rc3-php-security-update.md). RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
 
 ## 0.1.0-rc.2 — 2026-10-20
 

@@ -1176,62 +1176,62 @@
   },
   {
     "name": "php",
-    "url": "https://www.php.net/distributions/php-8.5.11.tar.xz",
-    "sha256": "d9be75c08e8c316f4c8f4194d8fbe1750a15f6a6d9d4e3fe72082abeeb800360",
+    "url": "https://www.php.net/distributions/php-8.5.12.tar.xz",
+    "sha256": "08bc2eba2a588654ade1357174aa646b761556c862dda0678345ee29ed481209",
     "file": "php.tar.xz",
     "binary": {
       "key": "brew-php-arm64-sequoia",
-      "sha256": "6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
-      "url": "https://ghcr.io/v2/homebrew/core/php/blobs/sha256:6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
-      "version": "8.5.11"
+      "sha256": "5cff6d1815187b2c18a381de0f6dc24fa7d3039ca7761bbc3f482e8b1ed5c8cb",
+      "url": "https://ghcr.io/v2/homebrew/core/php/blobs/sha256:5cff6d1815187b2c18a381de0f6dc24fa7d3039ca7761bbc3f482e8b1ed5c8cb",
+      "version": "8.5.12"
     },
     "mirrors": [
-      "https://fossies.org/linux/www/php-8.5.11.tar.xz"
+      "https://fossies.org/linux/www/php-8.5.12.tar.xz"
     ]
   },
   {
     "name": "php@8.2",
-    "url": "https://www.php.net/distributions/php-8.2.34.tar.xz",
-    "sha256": "5351330c54de240f54f7527c26ef292e239749e6fe11db0330acb5317e02bb39",
+    "url": "https://www.php.net/distributions/php-8.2.35.tar.xz",
+    "sha256": "5737b98601fe5ab1b8c5db0c82ed3158acb9283ed3081ffe2faffb9ac81455e6",
     "file": "php-8.2.tar.xz",
     "binary": {
       "key": "brew-php@8.2-arm64-sequoia",
-      "sha256": "b3cba5a3406b828c9c657b40e5345ab695ecbc2f9150a4a33014f6492c75f274",
-      "url": "https://ghcr.io/v2/homebrew/core/php/8.2/blobs/sha256:b3cba5a3406b828c9c657b40e5345ab695ecbc2f9150a4a33014f6492c75f274",
-      "version": "8.2.34"
+      "sha256": "c78f5792ac9bcc08081b672cf1e6ff9430cd65c3b95f58224452ed79147f1ba1",
+      "url": "https://ghcr.io/v2/homebrew/core/php/8.2/blobs/sha256:c78f5792ac9bcc08081b672cf1e6ff9430cd65c3b95f58224452ed79147f1ba1",
+      "version": "8.2.35"
     },
     "mirrors": [
-      "https://ftp.osuosl.org/pub/php/php-8.2.34.tar.xz"
+      "https://ftp.osuosl.org/pub/php/php-8.2.35.tar.xz"
     ]
   },
   {
     "name": "php@8.3",
-    "url": "https://www.php.net/distributions/php-8.3.35.tar.xz",
-    "sha256": "ff4630fbbbd94359134b7d3c223db59329905bdc4f5a9ef93d257b48e358619a",
+    "url": "https://www.php.net/distributions/php-8.3.36.tar.xz",
+    "sha256": "dd54693aa334c5c4d72e9aee96b082c2473750a18a6c1d105789c93a3b1692fd",
     "file": "php-8.3.tar.xz",
     "binary": {
       "key": "brew-php@8.3-arm64-sequoia",
-      "sha256": "8cf917b82d501c01b15473216b4797fe1ea54437456e8c8dbed8a87fbef5d924",
-      "url": "https://ghcr.io/v2/homebrew/core/php/8.3/blobs/sha256:8cf917b82d501c01b15473216b4797fe1ea54437456e8c8dbed8a87fbef5d924",
-      "version": "8.3.35"
+      "sha256": "8051a4db1336756a10891b7c168affdef89aa5cf89ca6401de25e554a0a55e30",
+      "url": "https://ghcr.io/v2/homebrew/core/php/8.3/blobs/sha256:8051a4db1336756a10891b7c168affdef89aa5cf89ca6401de25e554a0a55e30",
+      "version": "8.3.36"
     },
     "mirrors": [
-      "https://fossies.org/linux/www/php-8.3.35.tar.xz"
+      "https://fossies.org/linux/www/php-8.3.36.tar.xz"
     ]
   },
   {
     "name": "php@8.4",
-    "url": "https://www.php.net/distributions/php-8.4.26.tar.xz",
-    "sha256": "32a2de53862ad44ed4a5005244ce4f1b50c271e74dced215449a4443b40569f1",
+    "url": "https://www.php.net/distributions/php-8.4.27.tar.xz",
+    "sha256": "dcf93923b0e38e0d5252b25b796520b5a47761a08b3488b6d0b5d1115764d3f0",
     "file": "php-8.4.tar.xz",
     "binary": {
       "key": "brew-php@8.4-arm64-sequoia",
-      "sha256": "7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-      "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-      "version": "8.4.26"
+      "sha256": "ed1125334d00485dfe207a8e906c0c07aec124f2f1d9af31a0182357727683d4",
+      "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:ed1125334d00485dfe207a8e906c0c07aec124f2f1d9af31a0182357727683d4",
+      "version": "8.4.27"
     },
     "mirrors": [
-      "https://fossies.org/linux/www/php-8.4.26.tar.xz"
+      "https://fossies.org/linux/www/php-8.4.27.tar.xz"
     ]
   },
   {
@@ -1395,13 +1395,13 @@
     "binaryVersion": "77.1-1"
   },
   {
-    "name": "windows-apache-httpd-736bb657405e",
-    "url": "https://codeload.github.com/apache/httpd/tar.gz/736bb657405eb73fd68a64772c3a908807bdb887",
-    "sha256": "f49a0320c1172b42f69917b5fae0bfc4efb2ee51e53adc01bcfcf7aa2cc4842c",
-    "file": "windows-apache-httpd-736bb657405e.tar.gz",
-    "revision": "736bb657405eb73fd68a64772c3a908807bdb887",
+    "name": "windows-apache-httpd-1e06e9860794",
+    "url": "https://codeload.github.com/apache/httpd/tar.gz/1e06e9860794ce39605b79a0a787abfe084e5677",
+    "sha256": "02eb96f054216529771fd096502e7db60747ff2c6387ed6169285c315d00e11f",
+    "file": "windows-apache-httpd-1e06e9860794.tar.gz",
+    "revision": "1e06e9860794ce39605b79a0a787abfe084e5677",
     "binaryPackage": "apache",
-    "binaryVersion": "2.4.68"
+    "binaryVersion": "2.4.69"
   },
   {
     "name": "windows-google-brotli-028fb5a23661",
@@ -1413,31 +1413,31 @@
     "binaryVersion": "1.2.0"
   },
   {
-    "name": "windows-winlibs-freetype-3d8e776a1f18",
-    "url": "https://codeload.github.com/winlibs/freetype/tar.gz/3d8e776a1f1800dea07d433e20c91e8a9a161c4f",
-    "sha256": "6981f4d05b9e5be0f4812f4088fc472c0925f697dbdc834ae2bc33c2323e8740",
-    "file": "windows-winlibs-freetype-3d8e776a1f18.tar.gz",
-    "revision": "3d8e776a1f1800dea07d433e20c91e8a9a161c4f",
+    "name": "windows-winlibs-freetype-64edb7bb5916",
+    "url": "https://codeload.github.com/winlibs/freetype/tar.gz/64edb7bb59160252ff9c9ae7a89d80e5aa96e012",
+    "sha256": "5ebbbe3dec1c377d63c7879b773dd5790097fc98aa4b454ebbe28925118708b5",
+    "file": "windows-winlibs-freetype-64edb7bb5916.tar.gz",
+    "revision": "64edb7bb59160252ff9c9ae7a89d80e5aa96e012",
     "binaryPackage": "freetype",
-    "binaryVersion": "2.14.3"
+    "binaryVersion": "2.15.0"
   },
   {
-    "name": "windows-winlibs-glib-ca9d6adf53e1",
-    "url": "https://codeload.github.com/winlibs/glib/tar.gz/ca9d6adf53e11099045a6d51116dd0b678faa1f3",
-    "sha256": "ac4bd87da87070e3ea7470d7c16678b6e77a9073b845290cc8305ec8bda63ef3",
-    "file": "windows-winlibs-glib-ca9d6adf53e1.tar.gz",
-    "revision": "ca9d6adf53e11099045a6d51116dd0b678faa1f3",
+    "name": "windows-winlibs-glib-8d511117a236",
+    "url": "https://codeload.github.com/winlibs/glib/tar.gz/8d511117a236bd1acfa8c5af0986dde92eca03a1",
+    "sha256": "968aeeadec6beb4908c2a0eb492711265bdd1871f697c8f631475707eebc525a",
+    "file": "windows-winlibs-glib-8d511117a236.tar.gz",
+    "revision": "8d511117a236bd1acfa8c5af0986dde92eca03a1",
     "binaryPackage": "glib",
-    "binaryVersion": "2.88.3"
+    "binaryVersion": "2.90.0-1"
   },
   {
-    "name": "windows-winlibs-libffi-30ae078e9dbf",
-    "url": "https://codeload.github.com/winlibs/libffi/tar.gz/30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
-    "sha256": "a88b10bf2471158cd863705956d1c2b3c182f32d04d21f3e7cc45a1b47b65cb6",
-    "file": "windows-winlibs-libffi-30ae078e9dbf.tar.gz",
-    "revision": "30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
+    "name": "windows-winlibs-libffi-7361cc377275",
+    "url": "https://codeload.github.com/winlibs/libffi/tar.gz/7361cc377275eb1c2d2e7ae0112d05fdb5ce6918",
+    "sha256": "399f9585234b0f78b1c9c3467b0aa1363e7ae4ce4464fa4df1e2423533e9986e",
+    "file": "windows-winlibs-libffi-7361cc377275.tar.gz",
+    "revision": "7361cc377275eb1c2d2e7ae0112d05fdb5ce6918",
     "binaryPackage": "libffi",
-    "binaryVersion": "3.8.0"
+    "binaryVersion": "3.8.0-1"
   },
   {
     "name": "windows-winlibs-gettext-cd6fcaeffc49",
@@ -1485,13 +1485,13 @@
     "binaryVersion": "1.0.8-1"
   },
   {
-    "name": "windows-winlibs-curl-e4dd89bce509",
-    "url": "https://codeload.github.com/winlibs/curl/tar.gz/e4dd89bce50940c78fd32c70ffe31c102a6ce69f",
-    "sha256": "1f9d860f987ba3369177305125c5c0b337c498b126ac177238db37d53d24a4da",
-    "file": "windows-winlibs-curl-e4dd89bce509.tar.gz",
-    "revision": "e4dd89bce50940c78fd32c70ffe31c102a6ce69f",
+    "name": "windows-winlibs-curl-435982725792",
+    "url": "https://codeload.github.com/winlibs/curl/tar.gz/43598272579250d20c3587d018bda5a2d5222f92",
+    "sha256": "3714babe98e1c2297740e6eecdd317eae6076f9e92c0b9268103f875116d0cd0",
+    "file": "windows-winlibs-curl-435982725792.tar.gz",
+    "revision": "43598272579250d20c3587d018bda5a2d5222f92",
     "binaryPackage": "libcurl",
-    "binaryVersion": "8.22.0-1"
+    "binaryVersion": "8.23.0-2"
   },
   {
     "name": "windows-winlibs-libssh2-7817741ff29d",
@@ -1500,16 +1500,16 @@
     "file": "windows-winlibs-libssh2-7817741ff29d.tar.gz",
     "revision": "7817741ff29d52165b0e8c157acbe4c0ec582117",
     "binaryPackage": "libssh2",
-    "binaryVersion": "1.11.1-7"
+    "binaryVersion": "1.11.1-10"
   },
   {
-    "name": "windows-winlibs-openssl-5cc37af43ae0",
-    "url": "https://codeload.github.com/winlibs/openssl/tar.gz/5cc37af43ae0abd60363013536b678be5b54fb70",
-    "sha256": "28657481d983dafd34571b2ad252e4dae8f7c660adc7301eaf6ae526e780a963",
-    "file": "windows-winlibs-openssl-5cc37af43ae0.tar.gz",
-    "revision": "5cc37af43ae0abd60363013536b678be5b54fb70",
+    "name": "windows-winlibs-openssl-9629a2a59916",
+    "url": "https://codeload.github.com/winlibs/openssl/tar.gz/9629a2a59916ddf7101c5f1f026007586dd11e27",
+    "sha256": "3402069b536f22e6eccc0759fa975d4046844fbad0c1510f2e77d8274b216d0e",
+    "file": "windows-winlibs-openssl-9629a2a59916.tar.gz",
+    "revision": "9629a2a59916ddf7101c5f1f026007586dd11e27",
     "binaryPackage": "openssl",
-    "binaryVersion": "3.5.8"
+    "binaryVersion": "3.5.9"
   },
   {
     "name": "windows-facebook-zstd-f8745da6ff1a",
@@ -1530,13 +1530,31 @@
     "binaryVersion": "1.70.0"
   },
   {
-    "name": "windows-winlibs-enchant-37e09ab3d76d",
-    "url": "https://codeload.github.com/winlibs/enchant/tar.gz/37e09ab3d76d61784d8a9d4cca2badbd56d080f4",
-    "sha256": "f4bf965c93a396e2fffa164d9b53635799734313ae657af225a330b39a4bff5a",
-    "file": "windows-winlibs-enchant-37e09ab3d76d.tar.gz",
-    "revision": "37e09ab3d76d61784d8a9d4cca2badbd56d080f4",
+    "name": "windows-winlibs-enchant-247f2c2ce53c",
+    "url": "https://codeload.github.com/winlibs/enchant/tar.gz/247f2c2ce53cdd5f7f6bf9b31552f3890229ac4b",
+    "sha256": "d974110b3628aa9bb5660c4f7b8bcaff39933555f82e647d76f5c49099d40d93",
+    "file": "windows-winlibs-enchant-247f2c2ce53c.tar.gz",
+    "revision": "247f2c2ce53cdd5f7f6bf9b31552f3890229ac4b",
     "binaryPackage": "libenchant2",
-    "binaryVersion": "2.8.19"
+    "binaryVersion": "2.8.21-1"
+  },
+  {
+    "name": "windows-winlibs-glib-04a09c18e33c",
+    "url": "https://codeload.github.com/winlibs/glib/tar.gz/04a09c18e33c8009b0caf18b1bffa8deaaea9461",
+    "sha256": "3cbb2e4b0c289afb47df0985b3bd205b82e8a0eca75e4e5eec01a0bf2e3d7083",
+    "file": "windows-winlibs-glib-04a09c18e33c.tar.gz",
+    "revision": "04a09c18e33c8009b0caf18b1bffa8deaaea9461",
+    "binaryPackage": "glib",
+    "binaryVersion": "2.90.0"
+  },
+  {
+    "name": "windows-winlibs-libffi-30ae078e9dbf",
+    "url": "https://codeload.github.com/winlibs/libffi/tar.gz/30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
+    "sha256": "a88b10bf2471158cd863705956d1c2b3c182f32d04d21f3e7cc45a1b47b65cb6",
+    "file": "windows-winlibs-libffi-30ae078e9dbf.tar.gz",
+    "revision": "30ae078e9dbf2cb36de5db54b9740e89d8ff52e1",
+    "binaryPackage": "libffi",
+    "binaryVersion": "3.8.0"
   },
   {
     "name": "windows-winlibs-libiconv-8f55a0aa6532",
@@ -1584,31 +1602,22 @@
     "binaryVersion": "6.9.10"
   },
   {
-    "name": "windows-winlibs-libpng-5d1b8aa0f6a0",
-    "url": "https://codeload.github.com/winlibs/libpng/tar.gz/5d1b8aa0f6a0f20d7962270ac5ebb64b5795a896",
-    "sha256": "272cad81b72d51dd6d8eec495697b701fba59f916e2fc73335ff2579a2dc75df",
-    "file": "windows-winlibs-libpng-5d1b8aa0f6a0.tar.gz",
-    "revision": "5d1b8aa0f6a0f20d7962270ac5ebb64b5795a896",
+    "name": "windows-winlibs-libpng-7cda9e2cb293",
+    "url": "https://codeload.github.com/winlibs/libpng/tar.gz/7cda9e2cb293ca6320211891ae32a4c6f84f1365",
+    "sha256": "473944eb95820217f693f57e8737db75c5f833c0ff303ce07dd2d9f03094b845",
+    "file": "windows-winlibs-libpng-7cda9e2cb293.tar.gz",
+    "revision": "7cda9e2cb293ca6320211891ae32a4c6f84f1365",
     "binaryPackage": "libpng",
-    "binaryVersion": "1.6.58"
+    "binaryVersion": "1.6.59"
   },
   {
-    "name": "windows-winlibs-postgresql-5cb6f940a63d",
-    "url": "https://codeload.github.com/winlibs/postgresql/tar.gz/5cb6f940a63def19804e2f8c954bf985e4e30724",
-    "sha256": "48759f47c5e0101e5eeec7c3187bb832971527578650485fbc90a9efac8e3c66",
-    "file": "windows-winlibs-postgresql-5cb6f940a63d.tar.gz",
-    "revision": "5cb6f940a63def19804e2f8c954bf985e4e30724",
+    "name": "windows-winlibs-postgresql-391bd98ac39a",
+    "url": "https://codeload.github.com/winlibs/postgresql/tar.gz/391bd98ac39a3f4dbd7d8a3621ebaf82cd94280a",
+    "sha256": "466d1ddcd1bc878f7d1177fa37f6f0315ef35e952c6b42d7b869450e3e5ce6d3",
+    "file": "windows-winlibs-postgresql-391bd98ac39a.tar.gz",
+    "revision": "391bd98ac39a3f4dbd7d8a3621ebaf82cd94280a",
     "binaryPackage": "libpq",
-    "binaryVersion": "16.15"
-  },
-  {
-    "name": "windows-winlibs-openssl-8b89dd78b483",
-    "url": "https://codeload.github.com/winlibs/openssl/tar.gz/8b89dd78b48339632e3f655b030290a0f9484bb4",
-    "sha256": "b7d673e62177c73e2120e366b0a36960bb6a5ee1b1c56c1ffbcd107f2afa2912",
-    "file": "windows-winlibs-openssl-8b89dd78b483.tar.gz",
-    "revision": "8b89dd78b48339632e3f655b030290a0f9484bb4",
-    "binaryPackage": "openssl",
-    "binaryVersion": "3.0.22.pl1"
+    "binaryVersion": "16.15-4"
   },
   {
     "name": "windows-winlibs-qdbm-586aa477ff42",
@@ -1620,13 +1629,13 @@
     "binaryVersion": "1.8.78"
   },
   {
-    "name": "windows-winlibs-cyrus-sasl-63a75ce92932",
-    "url": "https://codeload.github.com/winlibs/cyrus-sasl/tar.gz/63a75ce9293206aea981e9f3edcd96645bafd677",
-    "sha256": "e88238589bd303ac9ba50e9af404d4691bc8879f01d555cc40ca563415f52e78",
-    "file": "windows-winlibs-cyrus-sasl-63a75ce92932.tar.gz",
-    "revision": "63a75ce9293206aea981e9f3edcd96645bafd677",
+    "name": "windows-winlibs-cyrus-sasl-ac2695a6049f",
+    "url": "https://codeload.github.com/winlibs/cyrus-sasl/tar.gz/ac2695a6049f7079983a92ec7e21a81c35997d14",
+    "sha256": "971210b78daf58ab4cb8938139f380dfb7b29356f6f6a0b0050c2aa02f8c12cf",
+    "file": "windows-winlibs-cyrus-sasl-ac2695a6049f.tar.gz",
+    "revision": "ac2695a6049f7079983a92ec7e21a81c35997d14",
     "binaryPackage": "libsasl",
-    "binaryVersion": "2.1.28"
+    "binaryVersion": "2.1.28-5"
   },
   {
     "name": "windows-winlibs-sqlite3-90771f2f145b",
@@ -1674,13 +1683,13 @@
     "binaryVersion": "2.11.9-8"
   },
   {
-    "name": "windows-winlibs-libxpm-90f573b4ae2a",
-    "url": "https://codeload.github.com/winlibs/libxpm/tar.gz/90f573b4ae2aed9bda5dbb6df3b9d86f1bec9099",
-    "sha256": "76b54539f4aa7a289685ef918d2ddffbbae795cf98b15eb003c7ecbb049c1895",
-    "file": "windows-winlibs-libxpm-90f573b4ae2a.tar.gz",
-    "revision": "90f573b4ae2aed9bda5dbb6df3b9d86f1bec9099",
+    "name": "windows-winlibs-libxpm-51d6d2b642bf",
+    "url": "https://codeload.github.com/winlibs/libxpm/tar.gz/51d6d2b642bfa4ff6e6e169eb488e4da542790b7",
+    "sha256": "087deab13284520805e043b65e8e5672cffee72b03c6e185de2f23c5a5b17787",
+    "file": "windows-winlibs-libxpm-51d6d2b642bf.tar.gz",
+    "revision": "51d6d2b642bfa4ff6e6e169eb488e4da542790b7",
     "binaryPackage": "libxpm",
-    "binaryVersion": "3.5.19"
+    "binaryVersion": "3.5.19-1"
   },
   {
     "name": "windows-winlibs-libxslt-9f399f8d223d",
@@ -1692,22 +1701,22 @@
     "binaryVersion": "1.1.43-2"
   },
   {
-    "name": "windows-winlibs-libzip-94b3e6583c6d",
-    "url": "https://codeload.github.com/winlibs/libzip/tar.gz/94b3e6583c6ddf77d3fef95699310818a91bc23a",
-    "sha256": "1b382da2ecf71758410cebce27c1742f8b162b931050e8331e92e33282f507c2",
-    "file": "windows-winlibs-libzip-94b3e6583c6d.tar.gz",
-    "revision": "94b3e6583c6ddf77d3fef95699310818a91bc23a",
+    "name": "windows-winlibs-libzip-2ec9c473bd70",
+    "url": "https://codeload.github.com/winlibs/libzip/tar.gz/2ec9c473bd7029fd4cd65945501b768e18c554ab",
+    "sha256": "d18572f5fb8b356cb5c9f522eccad10b0a0fb98bacf2194a369a2953cd1bbc73",
+    "file": "windows-winlibs-libzip-2ec9c473bd70.tar.gz",
+    "revision": "2ec9c473bd7029fd4cd65945501b768e18c554ab",
     "binaryPackage": "libzip",
-    "binaryVersion": "1.11.4"
+    "binaryVersion": "1.12-1"
   },
   {
-    "name": "windows-winlibs-mpir-796ed2cee089",
-    "url": "https://codeload.github.com/winlibs/mpir/tar.gz/796ed2cee089c96dc254caec624fe9084c3a68c3",
-    "sha256": "10bd14ff7363a3c7bd524d039e3993a3349aad3452bc14eac4b61c635df27cce",
-    "file": "windows-winlibs-mpir-796ed2cee089.tar.gz",
-    "revision": "796ed2cee089c96dc254caec624fe9084c3a68c3",
+    "name": "windows-winlibs-mpir-428e153fb137",
+    "url": "https://codeload.github.com/winlibs/mpir/tar.gz/428e153fb13739dbb6f301408d3c23910ec10333",
+    "sha256": "831d3e18be8285964d15402188b1aaa27d0ec9f66b2a4f6a19adbc165806fa3f",
+    "file": "windows-winlibs-mpir-428e153fb137.tar.gz",
+    "revision": "428e153fb13739dbb6f301408d3c23910ec10333",
     "binaryPackage": "mpir",
-    "binaryVersion": "3.0.0-2"
+    "binaryVersion": "3.0.0-3"
   },
   {
     "name": "windows-winlibs-net-snmp-7662537b29b1",
@@ -1716,7 +1725,7 @@
     "file": "windows-winlibs-net-snmp-7662537b29b1.tar.gz",
     "revision": "7662537b29b1e278c65ab786ac4641cd6fb5b9d4",
     "binaryPackage": "net-snmp",
-    "binaryVersion": "5.9.4-2"
+    "binaryVersion": "5.9.4-4"
   },
   {
     "name": "windows-winlibs-openldap-4b2449a2e39d",
@@ -1725,7 +1734,16 @@
     "file": "windows-winlibs-openldap-4b2449a2e39d.tar.gz",
     "revision": "4b2449a2e39d92b3b789ff71350b4bf70ed0713e",
     "binaryPackage": "openldap",
-    "binaryVersion": "2.7.0-2"
+    "binaryVersion": "2.7.0-4"
+  },
+  {
+    "name": "windows-winlibs-cyrus-sasl-63a75ce92932",
+    "url": "https://codeload.github.com/winlibs/cyrus-sasl/tar.gz/63a75ce9293206aea981e9f3edcd96645bafd677",
+    "sha256": "e88238589bd303ac9ba50e9af404d4691bc8879f01d555cc40ca563415f52e78",
+    "file": "windows-winlibs-cyrus-sasl-63a75ce92932.tar.gz",
+    "revision": "63a75ce9293206aea981e9f3edcd96645bafd677",
+    "binaryPackage": "libsasl",
+    "binaryVersion": "2.1.28-3"
   },
   {
     "name": "windows-winlibs-wineditline-39ae4ff02a06",
@@ -1746,13 +1764,40 @@
     "binaryVersion": "71.1-2"
   },
   {
-    "name": "windows-winlibs-postgresql-d6d085e93776",
-    "url": "https://codeload.github.com/winlibs/postgresql/tar.gz/d6d085e9377626a66c10144123ad67f0ca42f62d",
-    "sha256": "ab36b3033831822376f27ce7314e3c3b3c065795cfad53589bb0bdd1c6023d90",
-    "file": "windows-winlibs-postgresql-d6d085e93776.tar.gz",
-    "revision": "d6d085e9377626a66c10144123ad67f0ca42f62d",
+    "name": "windows-winlibs-imap-4f5969e9dd67",
+    "url": "https://codeload.github.com/winlibs/imap/tar.gz/4f5969e9dd677122f30416de044576644f612c71",
+    "sha256": "b6b438a11dfc086c706a9e5576c16a36ad2a1ba3bcba34a4c3a2034cf3d80265",
+    "file": "windows-winlibs-imap-4f5969e9dd67.tar.gz",
+    "revision": "4f5969e9dd677122f30416de044576644f612c71",
+    "binaryPackage": "c-client",
+    "binaryVersion": "2007f-1"
+  },
+  {
+    "name": "windows-winlibs-libbzip2-f131eb168095",
+    "url": "https://codeload.github.com/winlibs/libbzip2/tar.gz/f131eb16809565cbeb0684ecad2bd20130e7d5a1",
+    "sha256": "4c8d004064ef1823f2b47d97ec895d83f99f7370e6e9bb7c52b8dd9db536e41f",
+    "file": "windows-winlibs-libbzip2-f131eb168095.tar.gz",
+    "revision": "f131eb16809565cbeb0684ecad2bd20130e7d5a1",
+    "binaryPackage": "libbzip2",
+    "binaryVersion": "1.0.8"
+  },
+  {
+    "name": "windows-winlibs-openssl-94c584bf1803",
+    "url": "https://codeload.github.com/winlibs/openssl/tar.gz/94c584bf1803667efc14e9d968547447b70b8592",
+    "sha256": "da9a4551fedc6e5c57aa6645422a945f967dc6a7157e9f31062d913c91fe7cec",
+    "file": "windows-winlibs-openssl-94c584bf1803.tar.gz",
+    "revision": "94c584bf1803667efc14e9d968547447b70b8592",
+    "binaryPackage": "openssl",
+    "binaryVersion": "3.0.22.pl2"
+  },
+  {
+    "name": "windows-winlibs-postgresql-d5ad10511c5f",
+    "url": "https://codeload.github.com/winlibs/postgresql/tar.gz/d5ad10511c5f83fe22a8060f902416c74a5ed409",
+    "sha256": "d1eddfb83c22f4f890a631355c8599a2ed52a373e4a956f18498fb49726a3367",
+    "file": "windows-winlibs-postgresql-d5ad10511c5f.tar.gz",
+    "revision": "d5ad10511c5f83fe22a8060f902416c74a5ed409",
     "binaryPackage": "libpq",
-    "binaryVersion": "14.24"
+    "binaryVersion": "14.24-2"
   },
   {
     "name": "windows-winlibs-libxml2-b9ca51098499",
@@ -1770,7 +1815,7 @@
     "file": "windows-winlibs-net-snmp-106c51bea5ae.tar.gz",
     "revision": "106c51bea5ae2efeb6e6659a5ebc610ffe0e3e89",
     "binaryPackage": "net-snmp",
-    "binaryVersion": "5.7.3-5"
+    "binaryVersion": "5.7.3-6"
   },
   {
     "name": "windows-winlibs-icu4c-c4b64c7513cd",
@@ -1780,23 +1825,5 @@
     "revision": "c4b64c7513cd7c94c19eb2745f721be4bff194de",
     "binaryPackage": "ICU",
     "binaryVersion": "72.1-1"
-  },
-  {
-    "name": "windows-winlibs-imap-4f5969e9dd67",
-    "url": "https://codeload.github.com/winlibs/imap/tar.gz/4f5969e9dd677122f30416de044576644f612c71",
-    "sha256": "b6b438a11dfc086c706a9e5576c16a36ad2a1ba3bcba34a4c3a2034cf3d80265",
-    "file": "windows-winlibs-imap-4f5969e9dd67.tar.gz",
-    "revision": "4f5969e9dd677122f30416de044576644f612c71",
-    "binaryPackage": "c-client",
-    "binaryVersion": "2007f-1"
-  },
-  {
-    "name": "windows-winlibs-libbzip2-f131eb168095",
-    "url": "https://codeload.github.com/winlibs/libbzip2/tar.gz/f131eb16809565cbeb0684ecad2bd20130e7d5a1",
-    "sha256": "4c8d004064ef1823f2b47d97ec895d83f99f7370e6e9bb7c52b8dd9db536e41f",
-    "file": "windows-winlibs-libbzip2-f131eb168095.tar.gz",
-    "revision": "f131eb16809565cbeb0684ecad2bd20130e7d5a1",
-    "binaryPackage": "libbzip2",
-    "binaryVersion": "1.0.8"
   }
 ]

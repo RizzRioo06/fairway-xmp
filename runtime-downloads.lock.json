@@ -185,24 +185,24 @@
     "version": "10.49"
   },
   "brew-php-arm64-sequoia": {
-    "sha256": "6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
-    "url": "https://ghcr.io/v2/homebrew/core/php/blobs/sha256:6fabbcdfc1894863c11ed08a77cfa2f8cb459c1956080d0592f36fb61cf91b42",
-    "version": "8.5.11"
+    "sha256": "5cff6d1815187b2c18a381de0f6dc24fa7d3039ca7761bbc3f482e8b1ed5c8cb",
+    "url": "https://ghcr.io/v2/homebrew/core/php/blobs/sha256:5cff6d1815187b2c18a381de0f6dc24fa7d3039ca7761bbc3f482e8b1ed5c8cb",
+    "version": "8.5.12"
   },
   "brew-php@8.2-arm64-sequoia": {
-    "sha256": "b3cba5a3406b828c9c657b40e5345ab695ecbc2f9150a4a33014f6492c75f274",
-    "url": "https://ghcr.io/v2/homebrew/core/php/8.2/blobs/sha256:b3cba5a3406b828c9c657b40e5345ab695ecbc2f9150a4a33014f6492c75f274",
-    "version": "8.2.34"
+    "sha256": "c78f5792ac9bcc08081b672cf1e6ff9430cd65c3b95f58224452ed79147f1ba1",
+    "url": "https://ghcr.io/v2/homebrew/core/php/8.2/blobs/sha256:c78f5792ac9bcc08081b672cf1e6ff9430cd65c3b95f58224452ed79147f1ba1",
+    "version": "8.2.35"
   },
   "brew-php@8.3-arm64-sequoia": {
-    "sha256": "8cf917b82d501c01b15473216b4797fe1ea54437456e8c8dbed8a87fbef5d924",
-    "url": "https://ghcr.io/v2/homebrew/core/php/8.3/blobs/sha256:8cf917b82d501c01b15473216b4797fe1ea54437456e8c8dbed8a87fbef5d924",
-    "version": "8.3.35"
+    "sha256": "8051a4db1336756a10891b7c168affdef89aa5cf89ca6401de25e554a0a55e30",
+    "url": "https://ghcr.io/v2/homebrew/core/php/8.3/blobs/sha256:8051a4db1336756a10891b7c168affdef89aa5cf89ca6401de25e554a0a55e30",
+    "version": "8.3.36"
   },
   "brew-php@8.4-arm64-sequoia": {
-    "sha256": "7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-    "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:7514a9ce27876c2ad3bfe8edaabd163f1aba92ed1d759c35d7543f2e55052dff",
-    "version": "8.4.26"
+    "sha256": "ed1125334d00485dfe207a8e906c0c07aec124f2f1d9af31a0182357727683d4",
+    "url": "https://ghcr.io/v2/homebrew/core/php/8.4/blobs/sha256:ed1125334d00485dfe207a8e906c0c07aec124f2f1d9af31a0182357727683d4",
+    "version": "8.4.27"
   },
   "brew-protobuf-arm64-sequoia": {
     "sha256": "153d9b9b322fc8c54fe66dbaf2c8fe382294ee6a8fba35fd4c090dd61de3d77a",
@@ -273,20 +273,20 @@
     "url": "https://nginx.org/download/nginx-1.30.5.zip"
   },
   "php-8.2-windows": {
-    "sha256": "03249b5c9414c6dbe30276f4a7598bd9d2a7417ee81f709b06b99e9c4a2aff4f",
-    "url": "https://downloads.php.net/~windows/releases/php-8.2.34-nts-Win32-vs16-x64.zip"
+    "sha256": "798ffa4b9ce22a820d57048e9695df7245bf917ed067917f256942a10918a8cc",
+    "url": "https://downloads.php.net/~windows/releases/php-8.2.35-nts-Win32-vs16-x64.zip"
   },
   "php-8.3-windows": {
-    "sha256": "25a8e2ac9ff30f1d768d1447c09a600617fa6e6082729f6e95f008b59c91fe45",
-    "url": "https://downloads.php.net/~windows/releases/php-8.3.35-nts-Win32-vs16-x64.zip"
+    "sha256": "3c9242622c7402b47c38d2ec2ed779cef3a290fd6f2bde6c35f9c482699e7900",
+    "url": "https://downloads.php.net/~windows/releases/php-8.3.36-nts-Win32-vs16-x64.zip"
   },
   "php-8.4-windows": {
-    "sha256": "da68394f9193b7f6b89d0c76861a4034ae10efee7fd55a7255d8118c2acf70d7",
-    "url": "https://downloads.php.net/~windows/releases/php-8.4.26-nts-Win32-vs17-x64.zip"
+    "sha256": "93bd8a815a52156606fb906d0573437908c61f96e2cc52c03a51e36a41bf5236",
+    "url": "https://downloads.php.net/~windows/releases/php-8.4.27-nts-Win32-vs17-x64.zip"
   },
   "php-windows": {
-    "sha256": "0ea96e0d2b9b737a6036f05cf4e95c49313faa6d0f27bd97edb2742503f0c043",
-    "url": "https://downloads.php.net/~windows/releases/php-8.5.11-nts-Win32-vs17-x64.zip"
+    "sha256": "2ab242af38d76bdf417cde5ec048b1bcd76a5a40f39a3d15d5f046f38571c477",
+    "url": "https://downloads.php.net/~windows/releases/php-8.5.12-nts-Win32-vs17-x64.zip"
   },
   "phpmyadmin": {
     "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",

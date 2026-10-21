@@ -2,7 +2,7 @@
 
 Reviewed `ef1deb6` on `codex/rc-polishing`, compared with released application tag `v0.1.0-rc.2` (`3ace851`). The comparison contains 46 changed files. Dependency locks and runtime inputs are unchanged.
 
-**Current recommendation: the original source findings below are resolved. Complete the October 21 PHP security-input update before building the distribution candidate. Publication still requires cross-platform signed artifacts and exact-installer acceptance.** The original review found no P0/P1 issue. Its checkpoint findings and reproductions are retained below as historical evidence; the subsequent owner-authorized remediation changes application code and stages `0.1.0-rc.3`.
+**Current recommendation: the original source findings below are resolved. The October 21 PHP security releases are now pinned for a fresh distribution candidate. Publication still requires cross-platform signed artifacts and exact-installer acceptance.** The original review found no P0/P1 issue. Its checkpoint findings and reproductions are retained below as historical evidence; the subsequent owner-authorized remediation changes application code and stages `0.1.0-rc.3`.
 
 ## Additional preparation — 2026-10-21
 
@@ -10,7 +10,7 @@ The owner authorized foreign-key SQL-example dialogs, a Table SQL modal, clearer
 
 The PHP removal exposed a recovery defect: both manager construction and version saving validated the unavailable previous selection before users could replace it. The desktop now opens with the selection preserved and Settings available; the Linux supervisor accepts its existing PHP-version command. Service startup remains blocked. Switching requires stopped services, including live old PID markers, and failed recovery restores the previous selection, configurations and launchers. Unknown selections outside the removed branches and invalid settings still retain the original blocking behavior.
 
-Runtime verification now rejects a stale staged manifest and unexpected PHP directories. Release notes identify current runtime pins as the pre-update baseline. See the [PHP security update checklist](rc3-php-security-update.md) for required platform packages, lock/source updates and final build gates. The original checkpoint's unchanged-pin statements below are historical, not current security-update evidence.
+Runtime verification now rejects a stale staged manifest and unexpected PHP directories. Release notes now identify the patched PHP 8.2.35/8.3.36/8.4.27/8.5.12 pins. See the [PHP security update checklist](rc3-php-security-update.md) for required platform packages, lock/source updates and final build gates. The original checkpoint's unchanged-pin statements below are historical, not current security-update evidence.
 
 Local preparation checks and remaining distribution gates are recorded in that checklist. Browser regression checks complement the owner's visual testing; neither establishes exact-installer acceptance.
 
