@@ -569,15 +569,15 @@ impl Terminals {
         }
         #[cfg(windows)]
         {
-            session
+            let directory = session
                 .output
                 .state
                 .lock()
                 .map_err(|_| "Terminal output is unavailable.")?
                 .directory
                 .current
-                .clone()
-                .ok_or_else(|| "The terminal's current folder is unavailable.".into())
+                .clone();
+            directory.ok_or_else(|| "The terminal's current folder is unavailable.".into())
         }
     }
 
