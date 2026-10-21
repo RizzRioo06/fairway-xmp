@@ -265,7 +265,7 @@ impl Layout {
         )]))
     }
 
-    pub fn php_version(&self) -> Result<String> {
+    pub(crate) fn php_selection(&self) -> Result<String> {
         let version = match fs::read_to_string(self.data.join("php-version")) {
             Ok(version) => version.trim().to_string(),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -280,6 +280,17 @@ impl Layout {
             }
             Err(e) => return Err(e.to_string()),
         };
+        Ok(version)
+    }
+
+    pub(crate) fn removed_php_selected(&self) -> Result<bool> {
+        let version = self.php_selection()?;
+        Ok(matches!(version.as_str(), "8.0" | "8.1")
+            && !self.php_versions()?.contains_key(&version))
+    }
+
+    pub fn php_version(&self) -> Result<String> {
+        let version = self.php_selection()?;
         if !self.php_versions()?.contains_key(&version) {
             return Err(unavailable_php_message(&version));
         }
@@ -978,7 +989,10 @@ mod tests {
         fs::write(layout.data.join("php-version"), "8.0").unwrap();
         let removed = layout.php_version().unwrap_err();
         assert!(removed.contains("no longer included"), "{removed}");
-        assert_eq!(fs::read_to_string(layout.data.join("php-version")).unwrap(), "8.0");
+        assert_eq!(
+            fs::read_to_string(layout.data.join("php-version")).unwrap(),
+            "8.0"
+        );
         fs::write(layout.data.join("php-version"), "8.3").unwrap();
         let unknown = layout.php_version().unwrap_err();
         assert!(unknown.contains("not bundled"), "{unknown}");

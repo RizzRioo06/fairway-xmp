@@ -57,6 +57,25 @@ pub struct Snapshot {
     pub version: String,
 }
 
+struct SavedFile {
+    path: std::path::PathBuf,
+    contents: Option<(Vec<u8>, fs::Permissions)>,
+}
+
+fn restore_files(files: &[SavedFile]) -> Result<()> {
+    for file in files {
+        if let Some((bytes, permissions)) = &file.contents {
+            atomic_write(&file.path, bytes)?;
+            fs::set_permissions(&file.path, permissions.clone()).map_err(|e| e.to_string())?;
+        } else if let Err(error) = fs::remove_file(&file.path) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                return Err(error.to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
 pub struct Manager {
     pub layout: Layout,
     pub ports: Ports,
@@ -71,7 +90,11 @@ impl Manager {
     pub fn new(layout: Layout) -> Result<Self> {
         layout.initialize()?;
         let ports = layout.ports()?;
-        layout.write_configs(&ports)?;
+        // Keep Settings and the Linux version command available after removal
+        // of a saved PHP branch. No configuration or selection is rewritten.
+        if !layout.removed_php_selected()? {
+            layout.write_configs(&ports)?;
+        }
         let domains_approval_pending =
             cfg!(all(target_os = "macos", feature = "native-macos-hosts"))
                 && layout.data.join("address-approval-pending").is_file();
@@ -270,7 +293,7 @@ impl Manager {
                 .ok()
                 .and_then(|s| serde_json::from_slice(&s).ok())
                 .unwrap_or(serde_json::Value::Null),
-            php_version: self.layout.php_version().unwrap_or_default(),
+            php_version: self.layout.php_selection().unwrap_or_default(),
             php_versions: self
                 .layout
                 .php_versions()
@@ -437,7 +460,8 @@ impl Manager {
         if !self.layout.php_versions()?.contains_key(&version) {
             return Err(crate::config::unavailable_php_message(&version));
         }
-        let previous = self.layout.php_version()?;
+        let recovery = self.php_recovery_files()?;
+        let previous = self.layout.php_selection()?;
         let version_changed = version != previous;
         self.save_php_version(version)?;
         if let Err(error) = self.save_ports(ports) {
@@ -445,8 +469,15 @@ impl Manager {
                 if version_changed {
                     atomic_write(&self.layout.data.join("php-version"), previous.as_bytes())?;
                 }
-                self.layout.write_configs(&self.ports)?;
-                if version_changed && crate::integration::installed(&self.layout) {
+                if let Some(files) = &recovery {
+                    restore_files(files)?;
+                } else {
+                    self.layout.write_configs(&self.ports)?;
+                }
+                if recovery.is_none()
+                    && version_changed
+                    && crate::integration::installed(&self.layout)
+                {
                     crate::integration::install(&self.layout)?;
                 }
                 Ok(())
@@ -468,7 +499,8 @@ impl Manager {
         if !self.layout.php_versions()?.contains_key(&version) {
             return Err(crate::config::unavailable_php_message(&version));
         }
-        let previous = self.layout.php_version()?;
+        let recovery = self.php_recovery_files()?;
+        let previous = self.layout.php_selection()?;
         if version == previous {
             return Ok(());
         }
@@ -489,14 +521,80 @@ impl Manager {
             }
             Ok(())
         })();
-        if result.is_err() {
-            let _ = atomic_write(&marker, previous.as_bytes());
-            let _ = self.layout.write_configs(&self.ports);
-            if crate::integration::installed(&self.layout) {
-                let _ = crate::integration::install(&self.layout);
+        if let Err(error) = result {
+            let restore: Result<()> = (|| {
+                atomic_write(&marker, previous.as_bytes())?;
+                if let Some(files) = &recovery {
+                    restore_files(files)?;
+                } else {
+                    self.layout.write_configs(&self.ports)?;
+                    if crate::integration::installed(&self.layout) {
+                        crate::integration::install(&self.layout)?;
+                    }
+                }
+                Ok(())
+            })();
+            return match restore {
+                Ok(()) => Err(error),
+                Err(restore_error) => Err(format!(
+                    "{error} Previous PHP settings could not be fully restored: {restore_error}"
+                )),
+            };
+        }
+        Ok(())
+    }
+
+    fn php_recovery_files(&self) -> Result<Option<Vec<SavedFile>>> {
+        if !self.layout.removed_php_selected()? {
+            return Ok(None);
+        }
+        // An old worker may not be adoptable after its runtime was removed.
+        // Do not change its configuration while it is still alive.
+        for id in ["php", "nginx", "mysql", "mail"] {
+            if fs::read_to_string(self.layout.data.join(format!("{id}.pid")))
+                .ok()
+                .and_then(|text| text.trim().parse::<u32>().ok())
+                .is_some_and(process::pid_alive)
+            {
+                return Err("Stop all services from the previous installation before changing PHP versions.".into());
             }
         }
-        result
+        let mut paths = [
+            "php.ini",
+            "php-fpm.conf",
+            "nginx.conf",
+            "mysql.cnf",
+            "admin.cnf",
+            "config.inc.php",
+        ]
+        .map(|name| self.layout.data.join("config").join(name))
+        .to_vec();
+        for directory in [&self.layout.bin, &self.layout.data.join("terminal-bin")] {
+            for name in ["php", "composer", "fairway"] {
+                paths.push(directory.join(if cfg!(windows) {
+                    format!("{name}.cmd")
+                } else {
+                    name.into()
+                }));
+            }
+        }
+        paths
+            .into_iter()
+            .map(|path| {
+                let contents = match fs::read(&path) {
+                    Ok(bytes) => Some((
+                        bytes,
+                        fs::metadata(&path)
+                            .map_err(|e| e.to_string())?
+                            .permissions(),
+                    )),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(error) => return Err(error.to_string()),
+                };
+                Ok(SavedFile { path, contents })
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Some)
     }
 
     pub fn start_all(&mut self) -> Result<()> {
@@ -531,6 +629,7 @@ impl Manager {
     }
 
     pub fn preflight(&self, ids: &[&str]) -> Result<()> {
+        self.layout.php_version()?;
         if !self.runtime_ready() {
             return Err("Fairway XMP’s PHP or database files are missing or incomplete. Reinstall Fairway XMP to restore them; your projects and database data will be kept.".into());
         }
@@ -1281,6 +1380,102 @@ mod tests {
         fs::write(manager.layout.data.join("sites.json"), b"invalid json").unwrap();
         assert!(manager.unused_trust().is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn removed_php_selection_can_be_replaced_without_losing_saved_work() {
+        for removed in ["8.0", "8.1"] {
+            let root =
+                std::env::temp_dir().join(format!("fairway-removed-php-{}", rand::random::<u64>()));
+            let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+            layout.initialize().unwrap();
+            fs::create_dir_all(&layout.runtime).unwrap();
+            fs::write(
+                layout.runtime.join("manifest.json"),
+                br#"{"php":"8.5.11","phpVersions":{"8.4":"8.4.26","8.5":"8.5.11"}}"#,
+            )
+            .unwrap();
+            fs::write(layout.data.join("php-version"), removed).unwrap();
+            fs::write(layout.data.join("credentials"), "a".repeat(48)).unwrap();
+            fs::write(layout.data.join("mysql/student-data"), b"retained rows").unwrap();
+            fs::write(
+                layout.data.join("config/php.ini"),
+                b"previous configuration",
+            )
+            .unwrap();
+            let mut manager = Manager::new(layout.clone()).unwrap();
+            assert_eq!(manager.snapshot().php_version, removed);
+            assert!(!manager.runtime_ready());
+            assert!(manager
+                .start_all()
+                .unwrap_err()
+                .contains("no longer included"));
+            assert!(manager.save_php_version("8.1".into()).is_err());
+            assert!(manager.save_php_version("8.4".into()).is_err());
+            assert_eq!(
+                fs::read_to_string(layout.data.join("php-version")).unwrap(),
+                removed
+            );
+            let bin = layout.runtime.join("php-8.4/bin");
+            fs::create_dir_all(&bin).unwrap();
+            for executable in ["php", if cfg!(windows) { "php-cgi" } else { "php-fpm" }] {
+                fs::write(
+                    bin.join(if cfg!(windows) {
+                        format!("{executable}.exe")
+                    } else {
+                        executable.into()
+                    }),
+                    b"",
+                )
+                .unwrap();
+            }
+            // An unadoptable old worker must also block switching.
+            fs::write(layout.data.join("php.pid"), std::process::id().to_string()).unwrap();
+            assert!(manager
+                .save_php_version("8.4".into())
+                .unwrap_err()
+                .contains("Stop all services"));
+            fs::remove_file(layout.data.join("php.pid")).unwrap();
+            let ports = Ports {
+                website: 8899,
+                ..Ports::default()
+            };
+            let settings = layout.data.join("settings.json");
+            fs::create_dir(&settings).unwrap();
+            assert!(manager.save_settings(ports.clone(), "8.4".into()).is_err());
+            assert_eq!(
+                fs::read_to_string(layout.data.join("php-version")).unwrap(),
+                removed
+            );
+            assert_eq!(
+                fs::read(layout.data.join("config/php.ini")).unwrap(),
+                b"previous configuration"
+            );
+            assert!(!layout.data.join("config/nginx.conf").exists());
+            assert_eq!(manager.ports, Ports::default());
+            fs::remove_dir(settings).unwrap();
+            if removed == "8.0" {
+                manager.save_settings(ports.clone(), "8.4".into()).unwrap();
+                assert_eq!(layout.ports().unwrap(), ports);
+            } else {
+                // Linux uses this same manager method through the supervisor.
+                manager.save_php_version("8.4".into()).unwrap();
+                assert_eq!(layout.ports().unwrap(), Ports::default());
+            }
+            assert_eq!(layout.php_version().unwrap(), "8.4");
+            assert!(fs::read_to_string(layout.data.join("config/php.ini"))
+                .unwrap()
+                .contains("php-8.4"));
+            assert_eq!(
+                fs::read_to_string(layout.data.join("credentials")).unwrap(),
+                "a".repeat(48)
+            );
+            assert_eq!(
+                fs::read(layout.data.join("mysql/student-data")).unwrap(),
+                b"retained rows"
+            );
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

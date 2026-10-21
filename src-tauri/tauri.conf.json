@@ -12,7 +12,7 @@
   "app": {
     "windows": [{ "title": "Fairway XMP", "width": 1080, "height": 760, "minWidth": 820, "minHeight": 650 }],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'self'"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-u6vELvbsWWvZ6H4jiN7Ty3WG+n3VWsN2wgOdQnjO3LE='; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'self'"
     }
   },
   "bundle": {

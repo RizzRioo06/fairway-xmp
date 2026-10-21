@@ -737,6 +737,13 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
 }
 
 #[tauri::command]
+async fn open_mail_link(url: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || integration::open_http_url(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn open_target(state: State<'_, Shared>, target: String) -> Result<()> {
     if target == "data" {
         let state = state.inner().clone();
@@ -1163,6 +1170,7 @@ pub fn run() {
             pick_sql_file,
             pick_sqlite_file,
             open_target,
+            open_mail_link,
             read_logs,
             cli_integration,
             backup_database,

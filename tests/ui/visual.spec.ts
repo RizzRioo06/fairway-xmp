@@ -481,7 +481,7 @@ test('mail inbox lists, previews, searches, and deletes caught emails', async ({
   const body = page.frameLocator('iframe[title="Email content"]');
   await expect(body.getByRole('heading', { name: 'Welcome!' })).toBeVisible();
   await expect(body.locator('body')).not.toContainText('scripts must not run');
-  await expect(page.locator('iframe[title="Email content"]')).toHaveAttribute('sandbox', 'allow-same-origin');
+  await expect(page.locator('iframe[title="Email content"]')).toHaveAttribute('sandbox', 'allow-scripts');
   await expect(page.getByText('3 emails', { exact: true })).toBeVisible();
   await capture(page, info, 'mail');
   await page.getByRole('tab', { name: 'Text' }).click();

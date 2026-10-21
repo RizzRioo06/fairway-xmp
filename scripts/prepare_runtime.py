@@ -423,6 +423,16 @@ def build_nginx(target, bottles, lock, refresh):
 
 
 def verify(target):
+    try:
+        staged_manifest = json.loads((target / 'manifest.json').read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError('The staged runtime manifest is missing or invalid. Run full runtime preparation before building.') from error
+    if staged_manifest != MANIFEST:
+        raise RuntimeError('The staged runtime manifest is out of date. Run full runtime preparation before building.')
+    expected_php = {'php', *(f'php-{minor}' for minor, version in MANIFEST.get('phpVersions', {}).items() if version != MANIFEST['php'])}
+    extra_php = sorted(path.name for path in target.glob('php-[0-9]*') if path.is_dir() and path.name not in expected_php)
+    if extra_php:
+        raise RuntimeError(f'The staged runtime contains unexpected PHP folders: {", ".join(extra_php)}. Run full runtime preparation before building.')
     suffix = '.exe' if platform.system() == 'Windows' else ''
     env = {**os.environ, 'PHP_INI_SCAN_DIR': '', 'MIBS': ''}
     code = 'echo json_encode(["version"=>PHP_VERSION,"extensions"=>get_loaded_extensions()]);'

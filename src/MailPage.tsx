@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, Inbox, Mail, Paperclip, Play, ScrollText, Search, Settings2, Square, Trash2 } from 'lucide-react';
 import { canControl, invoke } from './bridge';
 import Workspace, { MaximizeWorkspace } from './Workspace';
-import { handleLayerKey } from './modal-focus';
+import { handleLayerKey, moveFocusFromFrame } from './modal-focus';
+import { mailPreview } from './mail-preview';
 import type { MailAddress, MailAttachment, MailList, MailMessage, Snapshot } from './types';
 
 type Props = {
@@ -29,9 +30,6 @@ function when(value: string) {
     ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
-
-// A readable default for unstyled emails; an email's own CSS still wins.
-const emailBase = '<style>body{margin:16px 20px;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#22342a;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>';
 
 function size(bytes: number) {
   return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
@@ -113,9 +111,17 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
       const opened = await invoke<MailMessage>('mail_inbox', { request: { action: 'message', id } });
       if (request !== detailRequest.current) return;
       setSelected(opened); setTab(opened.HTML ? 'html' : 'text'); setSaved(null);
+      if (opened.InlineImagesIncomplete) setError('Some embedded images could not be loaded. Open in browser to view the complete email.');
       setList(current => current && { ...current, messages: current.messages.map(item => item.ID === id ? { ...item, Read: true } : item) });
     } catch (reason) { if (request === detailRequest.current) { setSaved(null); setError(message(reason)); } }
     finally { finishOperation(generation); }
+  }
+
+  async function openLink(url: string) {
+    const request = detailRequest.current;
+    setError(null);
+    try { await invoke('open_mail_link', { url }); }
+    catch (reason) { if (request === detailRequest.current) setError(message(reason)); }
   }
 
   async function remove(request: Record<string, unknown>) {
@@ -182,8 +188,8 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
             {selected.Attachments?.length ? <ul className="mail-attachments" aria-label="Attachments">{selected.Attachments.map(item => <li key={item.PartID}><button title="Save attachment" disabled={!canControl} onClick={() => { void save(selected.ID, item); }}><Download size={12} />{item.FileName || 'Attachment'}<span>{size(item.Size)}</span></button></li>)}</ul> : null}
             <div className="mail-tabs" role="tablist">{selected.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
           </div>
-          {/* No scripts or forms. Same-origin access lets the parent handle modal keyboard focus. */}
-          {tab === 'html' && selected.HTML ? <MailBody html={selected.HTML} /> : <pre className="mail-body mail-text">{selected.Text || 'This email has no text version.'}</pre>}
+          {/* Opaque sandbox; CSP permits only our trusted link/keyboard bridge. */}
+          {tab === 'html' && selected.HTML ? <MailBody key={selected.ID} html={selected.HTML} inlineImages={selected.InlineImages} onOpenLink={url => { void openLink(url); }} /> : <pre className="mail-body mail-text">{selected.Text || 'This email has no text version.'}</pre>}
         </> : <div className="mail-list-empty"><Mail size={22} /><p>Select an email to read it.</p></div>}</div>
       </section>}
     <div className="mail-footer">
@@ -192,25 +198,27 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   </Workspace>;
 }
 
-function MailBody({ html }: { html: string }) {
-  const detach = useRef<(() => void) | null>(null);
-  useEffect(() => () => detach.current?.(), []);
-  return <iframe className="mail-body" title="Email content" sandbox="allow-same-origin" srcDoc={emailBase + html} onLoad={event => {
-    detach.current?.(); detach.current = null;
-    const document = event.currentTarget.contentDocument;
-    if (!document) return;
-    // The frame cannot execute email scripts. These parent-owned listeners keep
-    // Escape and focus containment working without granting script permission.
-    const preventNavigation = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest('a[href], area[href]')) event.preventDefault();
+function MailBody({ html, inlineImages, onOpenLink }: { html: string; inlineImages?: Record<string, string>; onOpenLink: (url: string) => void }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const source = useMemo(() => mailPreview(html, inlineImages), [html, inlineImages]);
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return;
+      const message = event.data;
+      if (!message || message.type !== 'fairway-mail-preview') return;
+      if (message.action === 'open' && typeof message.url === 'string') {
+        try {
+          const url = new URL(message.url);
+          if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) onOpenLink(url.href);
+        } catch { /* Reject malformed destinations. */ }
+      } else if (message.action === 'escape' && document.activeElement === frame.current) {
+        handleLayerKey(new KeyboardEvent('keydown', { key: 'Escape' }));
+      } else if (message.action === 'tab' && typeof message.backward === 'boolean' && frame.current && document.activeElement === frame.current) {
+        moveFocusFromFrame(frame.current, message.backward);
+      }
     };
-    document.addEventListener('keydown', handleLayerKey);
-    document.addEventListener('click', preventNavigation);
-    document.addEventListener('auxclick', preventNavigation);
-    detach.current = () => {
-      document.removeEventListener('keydown', handleLayerKey);
-      document.removeEventListener('click', preventNavigation);
-      document.removeEventListener('auxclick', preventNavigation);
-    };
-  }} />;
+    window.addEventListener('message', receive);
+    return () => window.removeEventListener('message', receive);
+  }, [onOpenLink]);
+  return <iframe ref={frame} className="mail-body" title="Email content" sandbox="allow-scripts" srcDoc={source} />;
 }

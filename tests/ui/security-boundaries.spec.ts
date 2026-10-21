@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     const callbacks = new Map<number, (event: { payload: unknown }) => void>(); let next = 0;
     let cancelled = true;
     window.addEventListener('test-approve-trust', () => { cancelled = false; });
-    const email = { ID: 'boundary', Read: false, From: { Name: 'Local test', Address: 'local@shop.test' }, To: [], Cc: [], Subject: 'Boundary email', Date: new Date().toISOString(), Created: new Date().toISOString(), Snippet: 'Readable email', Attachments: [], Text: 'Readable text version', HTML: '<p id="readable" style="color:rgb(20,80,30)">Readable email</p><img alt="Embedded image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><script>parent.document.documentElement.dataset.emailScript="ran"</script><base href="https://blocked.invalid/"><object data="/?blocked-object"></object><iframe src="https://blocked.invalid/frame"></iframe><img src="https://blocked.invalid/tracker"><form action="https://blocked.invalid/submit" target="_top"><button>Submit email form</button></form><a href="https://blocked.invalid/navigate" target="_top">Email link</a>' };
+    const email = { ID: 'boundary', Read: false, From: { Name: 'Local test', Address: 'local@shop.test' }, To: [], Cc: [], Subject: 'Boundary email', Date: new Date().toISOString(), Created: new Date().toISOString(), Snippet: 'Readable email', Attachments: [], InlineImages: { 'sample@fairway.test': 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }, Text: 'Readable text version', HTML: '<html><head><meta http-equiv="refresh" content="0;url=https://blocked.invalid/refresh"></head><body style="background-color:rgb(240,245,241)"><p id="readable" style="color:rgb(20,80,30)">Readable email</p><img alt="Embedded image" onload="parent.postMessage({type:&quot;fairway-mail-preview&quot;,action:&quot;open&quot;,url:&quot;https://blocked.invalid/automatic&quot;},&quot;*&quot;)" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><img alt="CID image" src="cid:sample%40fairway.test"><script>parent.document.documentElement.dataset.emailScript="ran"</script><base href="https://blocked.invalid/"><object data="/?blocked-object"></object><iframe src="https://blocked.invalid/frame"></iframe><img src="https://blocked.invalid/tracker"><form action="https://blocked.invalid/submit" target="_top"><button>Submit email form</button></form><a href="https://blocked.invalid/navigate" target="_top"><span>Email link</span></a><a href="http://project.test:8800/reset?token=sample" target="_blank">Reset password</a><a href="javascript:void(0)">Script link</a><a href="file:///tmp/demo">File link</a><a href="data:text/plain,test">Data link</a><a href="/relative">Relative link</a></body></html>' };
     document.addEventListener('securitypolicyviolation', event => {
       const old: string[] = JSON.parse(document.documentElement.dataset.violations ?? '[]');
       document.documentElement.dataset.violations = JSON.stringify([...old, event.effectiveDirective]);
@@ -35,6 +35,11 @@ test.beforeEach(async ({ page }) => {
         }
         if (command === 'save_project') { document.documentElement.dataset.saved = 'yes'; return structuredClone(data) as T; }
         if (command === 'open_target') { document.documentElement.dataset.opened = String(args.target); return undefined as T; }
+        if (command === 'open_mail_link') {
+          const opened: string[] = JSON.parse(document.documentElement.dataset.mailLinks ?? '[]');
+          document.documentElement.dataset.mailLinks = JSON.stringify([...opened, args.url]);
+          return undefined as T;
+        }
         if (command === 'mail_inbox') {
           const request = args.request as { action: string };
           if (request.action === 'list') return { messages: [{ ...email, Attachments: 0 }], messages_count: 1, messages_unread: 1 } as T;
@@ -76,12 +81,33 @@ test('production CSP allows mail rendering, native external opens and React dial
   await page.getByRole('list', { name: 'Emails', exact: true }).getByRole('button', { name: /Boundary email/ }).click();
   const frame = page.frameLocator('iframe[title="Email content"]');
   await expect(frame.locator('#readable')).toHaveText('Readable email');
+  await expect(frame.locator('body')).toHaveCSS('background-color', 'rgb(240, 245, 241)');
+  await expect(frame.locator('meta[http-equiv=refresh]')).toHaveCount(0);
   await expect(frame.locator('#readable')).toHaveCSS('color', 'rgb(20, 80, 30)');
-  await expect(page.locator('iframe[title="Email content"]')).toHaveAttribute('sandbox', 'allow-same-origin');
+  await expect(page.locator('iframe[title="Email content"]')).toHaveAttribute('sandbox', 'allow-scripts');
   expect(await page.locator('html').getAttribute('data-email-script')).toBeNull();
   await expect.poll(() => frame.getByAltText('Embedded image').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(1);
+  await expect.poll(() => frame.getByAltText('CID image').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(1);
+  await expect(frame.getByAltText('CID image')).toHaveAttribute('src', /^data:image\/gif;base64,/);
   expect(externalRequests.get(page)).toEqual([]);
-  await frame.getByRole('link', { name: 'Email link', exact: true }).click();
+  await expect(frame.locator('script')).toHaveCount(1);
+  expect(await page.locator('html').getAttribute('data-mail-links')).toBeNull();
+  await page.evaluate(() => new Promise<void>(resolve => { window.postMessage({ type: 'fairway-mail-preview', action: 'open', url: 'https://blocked.invalid/forged' }, '*'); setTimeout(resolve, 0); }));
+  expect(await page.locator('html').getAttribute('data-mail-links')).toBeNull();
+  const emailLink = frame.getByRole('link', { name: 'Email link', exact: true });
+  await emailLink.locator('span').click();
+  await frame.getByRole('link', { name: 'Reset password', exact: true }).click();
+  await emailLink.click({ button: 'middle' });
+  await emailLink.focus();
+  await page.keyboard.press('Enter');
+  const expectedLinks = ['https://blocked.invalid/navigate', 'http://project.test:8800/reset?token=sample', 'https://blocked.invalid/navigate', 'https://blocked.invalid/navigate'];
+  await expect(page.locator('html')).toHaveAttribute('data-mail-links', JSON.stringify(expectedLinks));
+  for (const name of ['Script link', 'File link', 'Data link', 'Relative link']) {
+    await frame.getByRole('link', { name, exact: true }).click();
+  }
+  await frame.getByRole('button', { name: 'Submit email form', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-mail-links', JSON.stringify(expectedLinks));
+  expect(externalRequests.get(page)).toEqual([]);
   await expect(page).toHaveURL('http://127.0.0.1:1422/');
   await page.getByRole('tab', { name: 'Text', exact: true }).click();
   await expect(page.locator('.mail-text')).toHaveText('Readable text version');

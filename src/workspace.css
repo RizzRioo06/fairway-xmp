@@ -25,7 +25,7 @@
 .workspace-maximized .db-grid-scroll[aria-label="Table rows"]{flex:1;min-height:80px;max-height:none}
 .workspace-maximized .db-grid-scroll[aria-label="Table rows"] .db-grid tbody tr:last-child td{border-bottom:1px solid #edf0ee}
 .workspace-maximized .db-sidebar-pane{min-height:0;overflow:auto}
-.workspace-maximized.db-browser>.db-source,.workspace-maximized .db-catalog,.workspace-maximized .db-content>.db-row-tools,.workspace-maximized .db-cli{flex-shrink:0}
+.workspace-maximized.db-browser>.db-source,.workspace-maximized .db-catalog,.workspace-maximized .db-content>.db-row-tools{flex-shrink:0}
 .workspace-maximized :is(.mail-notice.notice,.terminal-notice.notice,.logs-notice.notice,.db-notice.notice,.operation-notice){top:68px;max-width:calc(100vw - 32px)}
 .workspace-maximized .operation-status,.app-shell.sidebar-folded .workspace-maximized .operation-status{left:50%}
 .app-shell .modal-backdrop{z-index:50}

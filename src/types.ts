@@ -20,6 +20,6 @@ export type MailAddress = { Name: string; Address: string };
 export type MailSummary = { ID: string; Read: boolean; From: MailAddress | null; To: MailAddress[] | null; Subject: string; Created: string; Snippet: string; Attachments: number };
 export type MailList = { messages: MailSummary[]; messages_count: number; messages_unread: number };
 export type MailAttachment = { PartID: string; FileName: string; ContentType: string; Size: number };
-export type MailMessage = { ID: string; From: MailAddress | null; To: MailAddress[] | null; Cc: MailAddress[] | null; Subject: string; Date: string; HTML: string; Text: string; Attachments: MailAttachment[] | null };
+export type MailMessage = { ID: string; From: MailAddress | null; To: MailAddress[] | null; Cc: MailAddress[] | null; Subject: string; Date: string; HTML: string; Text: string; Attachments: MailAttachment[] | null; InlineImages?: Record<string, string>; InlineImagesIncomplete?: boolean };
 export type LogEntry = { host?: string | null; id: string; source: string; file: string; severity: string; time: string | null; text: string };
 export type LogSnapshot = { revision?: string; entries: LogEntry[]; unavailable: string[]; limited: boolean };

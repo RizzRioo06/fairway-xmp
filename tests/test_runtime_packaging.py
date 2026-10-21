@@ -37,11 +37,33 @@ class ArchiveTests(unittest.TestCase):
                     patch.object(runtime.platform, 'system', return_value='Darwin'), \
                     patch.object(runtime.subprocess, 'check_output', side_effect=offline_output), \
                     patch('sys.stdout', new=io.StringIO()):
+                (Path(folder) / 'manifest.json').write_text(json.dumps(manifest))
                 if mailpit_version == manifest['mailpit']:
                     runtime.verify(Path(folder))
                 else:
                     with self.assertRaisesRegex(RuntimeError, 'Runtime version mismatch'):
                         runtime.verify(Path(folder))
+
+    def test_verification_rejects_missing_or_stale_staged_manifest_before_running_binaries(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(runtime.subprocess, 'check_output') as execute:
+            target = Path(folder)
+            with self.assertRaisesRegex(RuntimeError, 'manifest is missing'):
+                runtime.verify(target)
+            stale = {**runtime.MANIFEST, 'phpVersions': {**runtime.MANIFEST['phpVersions'], '8.0': '8.0.30'}}
+            (target / 'manifest.json').write_text(json.dumps(stale))
+            with self.assertRaisesRegex(RuntimeError, 'manifest is out of date'):
+                runtime.verify(target)
+            execute.assert_not_called()
+
+    def test_verification_rejects_removed_php_binaries_even_with_a_current_manifest(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(runtime.subprocess, 'check_output') as execute:
+            target = Path(folder)
+            (target / 'manifest.json').write_text(json.dumps(runtime.MANIFEST))
+            (target / 'php-8.0').mkdir()
+            (target / 'php-8.1').mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'unexpected PHP folders: php-8.0, php-8.1'):
+                runtime.verify(target)
+            execute.assert_not_called()
 
     def test_php_8_0_and_8_1_are_not_bundled(self):
         root = Path(__file__).resolve().parents[1]

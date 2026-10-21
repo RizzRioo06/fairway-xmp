@@ -71,8 +71,8 @@ pub fn report(snapshot: &Snapshot) -> Value {
         });
         versions.insert(name.into(), json!(value));
     }
-    // PHP 8.0 and 8.1 are not bundled. A saved selection blocks startup, so a
-    // running session cannot report them. The field stays for existing reports.
+    // PHP 8.0 and 8.1 are not bundled. Recovery may still report the saved
+    // branch without a bundled version. The legacy field stays for old reports.
     json!({
         "schema": 1, "product": "Fairway XMP", "version": snapshot.version,
         "build": { "commit": env!("FAIRWAY_BUILD_COMMIT"), "modifiedSources": env!("FAIRWAY_BUILD_DIRTY") == "true", "debug": cfg!(debug_assertions) },

@@ -11,6 +11,12 @@ function focusable(root: HTMLElement) {
     .filter(element => element.tabIndex >= 0 && !element.closest('[inert]') && element.getClientRects().length > 0);
 }
 
+export function moveFocusFromFrame(frame: HTMLElement, backward: boolean) {
+  const items = focusable(layers.at(-1)?.root ?? document.body);
+  const index = items.indexOf(frame);
+  if (index !== -1) items[(index + (backward ? -1 : 1) + items.length) % items.length]?.focus({ preventScroll: true });
+}
+
 function isolate() {
   for (const [element, previous] of isolated) element.inert = previous;
   isolated.clear();
@@ -35,7 +41,7 @@ function terminalFocused() {
   return document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.xterm');
 }
 
-// Also used by the script-disabled mail iframe: its keyboard events do not bubble.
+// Also used by the mail iframe bridge: its keyboard events do not bubble.
 export function handleLayerKey(event: KeyboardEvent) {
   const top = layers.at(-1);
   if (!top || event.defaultPrevented) return;
@@ -70,11 +76,16 @@ function containFocus(event: FocusEvent) {
 
 export function useModalFocus(root: RefObject<HTMLElement | null>, enabled: boolean, onClose: () => void, options: { workspace?: boolean; canClose?: boolean; returnFocus?: HTMLElement | null } = {}) {
   const latest = useRef({ onClose, canClose: options.canClose !== false });
+  const trigger = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => { latest.current = { onClose, canClose: options.canClose !== false }; });
   const workspace = !!options.workspace;
   useLayoutEffect(() => {
     if (!enabled || !root.current) return;
-    const previous = options.returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // StrictMode replays this effect after focus has entered the dialog. Keep
+    // the original outside trigger instead of capturing a disposable child.
+    const previous = options.returnFocus ?? (active && root.current.contains(active) ? trigger.current : active);
+    trigger.current = previous;
     const layer: Layer = { root: root.current, close: () => latest.current.onClose(), canClose: () => latest.current.canClose, workspace };
     if (!layers.length) {
       savedOverflow = document.body.style.overflow;

@@ -52,7 +52,11 @@ impl Startup {
                 }
             }
             if self.manager.is_some() {
-                if let Err(error) = integration::refresh(layout) {
+                if let Err(error) = layout.php_version() {
+                    self.errors.push(format!(
+                        "{error} Open Settings to choose a bundled PHP version."
+                    ));
+                } else if let Err(error) = integration::refresh(layout) {
                     self.errors.push(format!(
                         "Command-line tools could not be refreshed: {error}"
                     ));
@@ -152,6 +156,31 @@ mod tests {
                 .services
                 .iter()
                 .all(|service| !service.running));
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn removed_php_keeps_settings_available_without_rewriting_selection_or_launchers() {
+        for removed in ["8.0", "8.1"] {
+            let (mut startup, root) = fixture();
+            let layout = startup.layout.clone().unwrap();
+            fs::write(layout.data.join("php-version"), removed).unwrap();
+            fs::write(layout.data.join("cli-installed"), "enabled").unwrap();
+            let launcher = layout
+                .bin
+                .join(if cfg!(windows) { "php.cmd" } else { "php" });
+            fs::write(&launcher, "previous launcher").unwrap();
+            let status = startup.retry();
+            assert!(!status.blocking);
+            assert!(status.errors[0].contains("Open Settings"));
+            assert_eq!(startup.manager().unwrap().snapshot().php_version, removed);
+            assert_eq!(
+                fs::read_to_string(layout.data.join("php-version")).unwrap(),
+                removed
+            );
+            assert_eq!(fs::read_to_string(launcher).unwrap(), "previous launcher");
+            assert!(!layout.data.join("config/php.ini").exists());
             fs::remove_dir_all(root).unwrap();
         }
     }

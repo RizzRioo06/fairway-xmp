@@ -43,6 +43,50 @@ test('startup errors stay visible and retry uses the repaired saved configuratio
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test('removed PHP selection can be replaced in Settings while service startup stays disabled', async ({ page }) => {
+  await page.goto('/');
+  const initial = await page.evaluate(async () => {
+    const path = '/src/ui-test/backend.ts';
+    return (await import(path)).invoke('snapshot') as Promise<Snapshot>;
+  });
+  await page.addInitScript((snapshot: Snapshot) => {
+    snapshot.phpVersion = '8.1';
+    snapshot.runtimeReady = false;
+    const status = () => ({ blocking: false, errors: snapshot.phpVersion === '8.1' ? ['PHP 8.1 is no longer included. Open Settings to choose a bundled PHP version.'] : [], dataDir: snapshot.dataDir });
+    window.__TAURI_INTERNALS__ = {
+      transformCallback() { return 1; }, unregisterCallback() {},
+      async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+        if (command.startsWith('plugin:event|')) return 1 as T;
+        if (command === 'startup_status' || command === 'retry_startup') return status() as T;
+        if (command === 'snapshot') return structuredClone(snapshot) as T;
+        if (command === 'save_settings') {
+          if (!snapshot.phpVersions[String(args.version)]) throw new Error('Unavailable PHP');
+          snapshot.phpVersion = String(args.version);
+          snapshot.runtimeReady = true;
+          return structuredClone(snapshot) as T;
+        }
+        throw new Error(`Unexpected command: ${command}`);
+      },
+    };
+  }, initial);
+  await page.goto('http://127.0.0.1:1422/');
+  await expect(page.getByRole('button', { name: 'Start all', exact: true })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Startup recovery' })).toContainText('PHP 8.1 is no longer included');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByText('Advanced settings', { exact: true }).click();
+  const version = page.getByLabel('PHP version');
+  await expect(version).toBeEnabled();
+  await expect(version).toHaveValue('8.1');
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await version.selectOption('8.4');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Startup recovery' })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+  await expect(version).toHaveValue('8.4');
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start all', exact: true })).toBeEnabled();
+});
+
 test('service controls, terminals, and database navigation remain usable during download', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Scenario', { exact: true }).selectOption('Update available');

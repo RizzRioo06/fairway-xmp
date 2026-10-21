@@ -1,5 +1,6 @@
 //! Read the bundled Mailpit inbox through its local REST API.
 use crate::config::Result;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::Deserialize;
 use std::{
     io::{Read, Write},
@@ -19,6 +20,9 @@ pub enum Request {
 const LIMIT: u32 = 200;
 const PREVIEW_LIMIT: u64 = 8 * 1024 * 1024;
 const ATTACHMENT_LIMIT: u64 = 64 * 1024 * 1024;
+const INLINE_IMAGE_LIMIT: u64 = 2 * 1024 * 1024;
+const INLINE_TOTAL_LIMIT: u64 = 4 * 1024 * 1024;
+const INLINE_IMAGE_COUNT: usize = 16;
 
 pub fn execute(port: u16, request: Request) -> Result<serde_json::Value> {
     match request {
@@ -35,12 +39,16 @@ pub fn execute(port: u16, request: Request) -> Result<serde_json::Value> {
             "",
         ),
         // Mailpit marks a message read when it is opened.
-        Request::Message { id } => call(
-            port,
-            "GET",
-            &format!("/api/v1/message/{}", checked(&id)?),
-            "",
-        ),
+        Request::Message { id } => {
+            let mut message = call(
+                port,
+                "GET",
+                &format!("/api/v1/message/{}", checked(&id)?),
+                "",
+            )?;
+            load_inline_images(port, &id, &mut message);
+            Ok(message)
+        }
         Request::Delete { ids } => {
             if ids.is_empty() {
                 return Err("Choose an email to delete.".into());
@@ -53,6 +61,79 @@ pub fn execute(port: u16, request: Request) -> Result<serde_json::Value> {
         }
         // An empty DELETE removes every message.
         Request::Clear => call(port, "DELETE", "/api/v1/messages", ""),
+    }
+}
+
+fn load_inline_images(port: u16, id: &str, message: &mut serde_json::Value) {
+    let mut images = serde_json::Map::new();
+    let mut remaining = INLINE_TOTAL_LIMIT;
+    let mut count = 0;
+    let mut incomplete = false;
+    if let Some(parts) = message["Inline"].as_array() {
+        for part in parts {
+            let mime = part["ContentType"]
+                .as_str()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            // Only passive raster images become data URLs. The frame retains
+            // its existing CSP and never fetches remote image URLs.
+            if !matches!(
+                mime.as_str(),
+                "image/png"
+                    | "image/jpeg"
+                    | "image/gif"
+                    | "image/webp"
+                    | "image/avif"
+                    | "image/bmp"
+                    | "image/x-icon"
+                    | "image/vnd.microsoft.icon"
+            ) {
+                continue;
+            }
+            let cid = part["ContentID"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .trim_start_matches('<')
+                .trim_end_matches('>');
+            let part_id = part["PartID"].as_str().unwrap_or_default();
+            let limit = remaining.min(INLINE_IMAGE_LIMIT);
+            if cid.is_empty() || images.contains_key(cid) {
+                continue;
+            }
+            count += 1;
+            if count > INLINE_IMAGE_COUNT
+                || limit == 0
+                || part["Size"].as_u64().is_some_and(|size| size > limit)
+                || checked_part(part_id).is_err()
+            {
+                incomplete = true;
+                continue;
+            }
+            // Include bounded HTTP headers in the read budget; also check the
+            // actual body rather than trusting the attachment's size metadata.
+            let bytes = fetch(
+                port,
+                "GET",
+                &format!("/api/v1/message/{id}/part/{part_id}"),
+                "",
+                limit + 64 * 1024,
+            );
+            match bytes {
+                Ok(bytes) if bytes.len() as u64 <= limit => {
+                    remaining -= bytes.len() as u64;
+                    images.insert(
+                        cid.to_owned(),
+                        format!("data:{mime};base64,{}", STANDARD.encode(bytes)).into(),
+                    );
+                }
+                _ => incomplete = true,
+            }
+        }
+    }
+    if let Some(object) = message.as_object_mut() {
+        object.insert("InlineImages".into(), images.into());
+        object.insert("InlineImagesIncomplete".into(), incomplete.into());
     }
 }
 
@@ -83,10 +164,7 @@ fn encode(text: &str) -> String {
 
 /// Raw bytes of one attachment, for saving to disk.
 pub fn attachment(port: u16, id: &str, part: &str) -> Result<Vec<u8>> {
-    // Part IDs are dotted numbers such as "2" or "1.2".
-    if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
-        return Err("This attachment is no longer available.".into());
-    }
+    checked_part(part)?;
     fetch(
         port,
         "GET",
@@ -94,6 +172,14 @@ pub fn attachment(port: u16, id: &str, part: &str) -> Result<Vec<u8>> {
         "",
         ATTACHMENT_LIMIT,
     )
+}
+
+fn checked_part(part: &str) -> Result<()> {
+    // Part IDs are dotted numbers such as "2" or "1.2".
+    if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+        return Err("This attachment is no longer available.".into());
+    }
+    Ok(())
 }
 
 fn call(port: u16, method: &str, path: &str, body: &str) -> Result<serde_json::Value> {
@@ -180,6 +266,71 @@ fn parse_response(mut bytes: Vec<u8>, limit: u64) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn messages_resolve_inline_images_and_keep_readable_content_when_parts_fail() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let png = STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1cAAAAASUVORK5CYII=").unwrap();
+        let metadata = serde_json::json!({
+            "HTML":"<p>Readable message</p><img src=\"cid:banner@test\">",
+            "Inline":[
+                {"PartID":"2.2","ContentID":"<banner@test>","ContentType":"image/png","Size":png.len()},
+                {"PartID":"2.2","ContentID":"banner@test","ContentType":"image/png"},
+                {"PartID":"3","ContentID":"vector@test","ContentType":"image/svg+xml"},
+                {"PartID":"../4","ContentID":"path@test","ContentType":"image/png"},
+                {"PartID":"5","ContentID":"big@test","ContentType":"image/png","Size":INLINE_IMAGE_LIMIT+1},
+                {"PartID":"6","ContentID":"gone@test","ContentType":"image/png"},
+                {"PartID":"7","ContentID":"understated@test","ContentType":"image/png","Size":1}
+            ]
+        });
+        let expected = format!("data:image/png;base64,{}", STANDARD.encode(&png));
+        let server = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            for (status, body) in [
+                ("200 OK", serde_json::to_vec(&metadata).unwrap()),
+                ("200 OK", png),
+                ("404 Not Found", Vec::new()),
+                ("200 OK", vec![0; INLINE_IMAGE_LIMIT as usize + 1]),
+            ] {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut received = Vec::new();
+                while !received.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    socket.read_exact(&mut byte).unwrap();
+                    received.extend_from_slice(&byte);
+                }
+                requests.push(String::from_utf8(received).unwrap());
+                write!(
+                    socket,
+                    "HTTP/1.0 {status}\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .unwrap();
+                socket.write_all(&body).unwrap();
+            }
+            requests
+        });
+        let message = execute(
+            port,
+            Request::Message {
+                id: "sample".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(message["InlineImages"]["banner@test"], expected);
+        assert_eq!(message["InlineImages"].as_object().unwrap().len(), 1);
+        assert_eq!(message["InlineImagesIncomplete"], true);
+        assert!(message["HTML"]
+            .as_str()
+            .unwrap()
+            .contains("Readable message"));
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+        assert!(requests[1].starts_with("GET /api/v1/message/sample/part/2.2 HTTP/1.0"));
+        assert!(requests[2].starts_with("GET /api/v1/message/sample/part/6 HTTP/1.0"));
+        assert!(requests[3].starts_with("GET /api/v1/message/sample/part/7 HTTP/1.0"));
+    }
 
     #[test]
     fn responses_reject_truncation_oversize_and_unsupported_framing() {

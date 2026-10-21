@@ -17,11 +17,10 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
-test('SQL import confirms the database and backups are available outside the CLI disclosure', async ({ page }) => {
+test('SQL import confirms the database and backups remain available', async ({ page }) => {
   await open(page);
   const backups = page.locator('.db-footer').getByRole('button', { name: 'Open backups', exact: true });
   await expect(backups).toBeVisible();
-  expect(await page.locator('.db-cli').evaluate(element => (element as HTMLDetailsElement).open)).toBe(false);
   await action(page, 'Database', 'Import SQL file…');
   const dialog = page.getByRole('dialog', { name: 'Import SQL', exact: true });
   await expect(dialog).toContainText('school.sql');
@@ -375,6 +374,20 @@ test('insert offers defaults only where available and saves untouched value and 
 test('schema editing, SQL inspection and populated database rename limitation', async ({ page }, info) => {
   await open(page);
   await page.getByRole('tab', { name: 'Structure', exact: true }).click();
+  const tableSql = page.getByRole('button', { name: 'Table SQL', exact: true });
+  await tableSql.focus();
+  await tableSql.press('Enter');
+  let inspection = page.getByRole('dialog', { name: 'Table SQL', exact: true });
+  await expect(inspection.locator('pre')).toContainText('CREATE TABLE');
+  await expect(inspection.getByRole('button', { name: 'Copy table SQL', exact: true })).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(inspection).toHaveCount(0);
+  await expect(tableSql).toBeFocused();
+  await page.getByRole('button', { name: 'Foreign keys', exact: true }).click();
+  inspection = page.getByRole('dialog', { name: 'Foreign keys', exact: true });
+  await expect(inspection).toContainText('SQL examples');
+  await expect(inspection.locator('pre').first()).toContainText('ADD CONSTRAINT');
+  await inspection.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Column', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Column', exact: true }).click();
   let dialog = page.getByRole('dialog', { name: 'Add column', exact: true });

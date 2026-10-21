@@ -263,6 +263,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       } finally { if (preparing) emit('fairway-operation-finished', null); }
     }
     case 'open_target': throw new Error(`UI test only: would open ${String(args.target)}. No external application was opened.`);
+    case 'open_mail_link': throw new Error(`UI test only: would open ${String(args.url)}. No external application was opened.`);
     default: throw new Error(`Unsupported UI test command: ${command}`);
   }
   emit('fairway-status', structuredClone(data));

@@ -129,6 +129,7 @@ function AppContent() {
   const allReady = data.services.filter(service => service.id !== 'mail' || data.mailAvailable || service.running).every(service => service.ready);
   const anyRunning = data.services.some(service => service.running);
   const usable = canControl && data.runtimeReady && !busy;
+  const canSelectPhp = data.runtimeReady || ['8.0', '8.1'].includes(data.phpVersion);
   const databaseCliAvailable = isDesktop || isUiTest;
   const cliTools = databaseCliAvailable ? 'PHP, Composer, and database commands' : 'PHP and Composer commands';
 
@@ -401,15 +402,17 @@ function AppContent() {
           <section className="settings-card"><h2>Service Settings</h2><p>Stop all services before changing ports or PHP. Saved settings stay the same across restarts.</p>
             <form onSubmit={event => { event.preventDefault(); void run('Saving settings…', async () => {
               const mysqlPortChanged = ports.mysql !== data.ports.mysql;
-              setData(await invoke<Snapshot>('save_settings', { ports, version: phpVersion })); setNotice({ kind: 'success', text: mysqlPortChanged ? 'Settings saved. Update existing project connection settings for the new MySQL port.' : 'Settings saved.' });
+              setData(await invoke<Snapshot>('save_settings', { ports, version: phpVersion }));
+              if (['8.0', '8.1'].includes(data.phpVersion)) setStartup(await invoke<StartupStatus>('retry_startup'));
+              setNotice({ kind: 'success', text: mysqlPortChanged ? 'Settings saved. Update existing project connection settings for the new MySQL port.' : 'Settings saved.' });
             }); }}>
               <div className="port-fields">{([['website', 'Website', 'Nginx'], ['phpmyadmin', 'phpMyAdmin', 'Database browser'], ['mysql', 'MySQL', 'Database connection'], ['mail', 'Mail inbox', 'Caught emails'], ['smtp', 'Mail SMTP', 'Where apps send email']] as const).map(([key, label, hint]) => <label key={key}><span>{label}<small>{hint}</small></span><input type="number" min="1024" max="65535" required value={ports[key]} disabled={anyRunning || !!busy} onChange={event => setPorts({ ...ports, [key]: Number(event.target.value) })} /></label>)}</div>
               <details className="advanced"><summary>Advanced settings</summary>
-                <label><span>PHP version<small>For websites, CLI PHP, and Composer. PHP 8.5 is the default.</small></span><select value={phpVersion} disabled={!canControl || !!busy || anyRunning || !data.runtimeReady} onChange={event => setPhpVersion(event.target.value)}>{Object.keys(data.phpVersions).sort().map(version => <option key={version} value={version}>PHP {version}</option>)}</select></label>
+                <label><span>PHP version<small>For websites, CLI PHP, and Composer. PHP 8.5 is the default.</small></span><select value={phpVersion} disabled={!canControl || !!busy || anyRunning || !canSelectPhp} onChange={event => setPhpVersion(event.target.value)}>{!data.phpVersions[phpVersion] && <option value={phpVersion} disabled>PHP {phpVersion} (unavailable)</option>}{Object.keys(data.phpVersions).sort().map(version => <option key={version} value={version}>PHP {version}</option>)}</select></label>
                 <label><span>PHP FastCGI port<small>Internal connection between Nginx and PHP</small></span><input type="number" min="1024" max="65535" required value={ports.php} disabled={anyRunning || !!busy} onChange={event => setPorts({ ...ports, php: Number(event.target.value) })} /></label>
               </details>
               {anyRunning && <p className="settings-hint">Services are running. Stop all from Environment to edit settings.</p>}
-              <button className="primary" disabled={!canControl || anyRunning || !!busy || !data.runtimeReady} type="submit">Save</button>
+              <button className="primary" disabled={!canControl || anyRunning || !!busy || !canSelectPhp || !data.phpVersions[phpVersion]} type="submit">Save</button>
             </form>
           </section>
           <section className="settings-card cli-tools" aria-label="Command-line tools">

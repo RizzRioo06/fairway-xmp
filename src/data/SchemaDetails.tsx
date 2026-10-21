@@ -1,9 +1,9 @@
-import { Plus } from 'lucide-react';
+import { Link2, Plus } from 'lucide-react';
 import type { ForeignKey, Structure, TableIndex } from './types';
 
-export default function SchemaDetails({ structure, database, sqlite, writable, blocked, canCreate, onCreate, onRemove }: {
+export default function SchemaDetails({ structure, database, sqlite, writable, blocked, canCreate, onCreate, onRemove, onForeignKeys }: {
   structure: Structure; database: string; sqlite: boolean; writable: boolean; blocked: boolean;
-  canCreate: boolean; onCreate: () => void; onRemove: (index: TableIndex) => void;
+  canCreate: boolean; onCreate: () => void; onRemove: (index: TableIndex) => void; onForeignKeys: () => void;
 }) {
   const indexes = structure.indexes ?? [];
   const outgoing = structure.foreignKeys ?? [];
@@ -28,9 +28,9 @@ export default function SchemaDetails({ structure, database, sqlite, writable, b
       </li>)}</ul> : <p className="db-hint">No indexes on this {structure.kind === 'VIEW' ? 'view' : 'table'}.</p>}
     </section>
     <section className="db-schema-section" aria-label="Foreign keys">
-      <h3>Foreign keys</h3><p className="db-hint">Relationships are shown for inspection. Create or change foreign keys in SQL.</p>
+      <div className="db-row-tools"><h3>Foreign keys</h3><button type="button" className="secondary" disabled={blocked} onClick={onForeignKeys}><Link2 size={14} />Foreign keys</button></div>
       {sqlite && <p className="db-hint">Foreign keys are enforced by this browser. Your application configures its own connection.</p>}
-      <h4>References <span>{outgoing.length}</span></h4>{outgoing.length ? <ul className="db-foreign-keys">{outgoing.map(relationship)}</ul> : <p className="db-hint">No foreign keys defined on this table.</p>}
+      <h4>References <span>{outgoing.length}</span></h4>{outgoing.length ? <ul className="db-foreign-keys">{outgoing.map(relationship)}</ul> : <p className="db-hint">This table does not reference other tables.</p>}
       <h4>Referenced by <span>{incoming.length}</span></h4>{incoming.length ? <ul className="db-foreign-keys">{incoming.map(relationship)}</ul> : <p className="db-hint">No tables reference this table through a foreign key.</p>}
     </section>
   </>;

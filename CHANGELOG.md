@@ -7,12 +7,16 @@
 - Terminal tabs and actions share one compact toolbar. Exiting the first terminal opens a fresh shell; exiting the extra terminal closes its tab. The prompt shows a green arrow and current folder (full path on Windows). External terminal opens the current folder without injecting scripts, commands or environment overrides; CLI availability follows Settings.
 - Terminal, Logs, Mail and Data browser share an in-window maximize mode with isolated input, nested dialogs and focus restoration. Terminal fitting keeps the final input line visible.
 - Logs adds Clear view and Open log folder, consolidates controls, and keeps recurring service failures visible after recovery. Page descriptions are shorter and functional.
-- MySQL adds confirmed SQL-file import with a mandatory target backup, visible phases, cancellation and partial-failure recovery. Open backups stays available outside CLI help. SQLite remains file/backup-only.
+- MySQL adds confirmed SQL-file import with a mandatory target backup, visible phases, cancellation and partial-failure recovery. Open backups stays available in the footer. SQLite remains file/backup-only.
 - SQL results name inserts, deletes and updates. MySQL updates count changed rows; SQLite explicitly reports matched rows. MySQL remembers the selected database/table in the current app session, and nullable row fields accept typing directly.
 - Fast TypeScript unit tests now run in verification and candidate builds. Native regressions cover unchanged updates, import cancellation/phases and external-terminal path resolution.
-- PHP 8.0 and 8.1 are no longer bundled on Windows, macOS, or Linux. PHP 8.2–8.5 remain, with 8.5 as the default. A saved 8.0 or 8.1 selection is preserved and blocks startup until the user chooses 8.2 or later.
+- PHP 8.0 and 8.1 are no longer bundled on Windows, macOS, or Linux. PHP 8.2–8.5 remain, with 8.5 as the default. A saved 8.0 or 8.1 selection is preserved and blocks service startup until the user chooses 8.2 or later.
 
-RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
+- Create table and Structure offer copyable foreign-key SQL examples. Structure opens Table SQL in a copyable modal and distinguishes outgoing references from tables referencing this one. Redundant MySQL CLI examples are removed.
+- Mail previews resolve inline attachment images and open HTTP/HTTPS links in the external browser. Email scripts and forms remain blocked; preview keyboard focus works inside maximized Mail.
+- Removed PHP selections can be replaced through desktop Settings or the Linux PHP-version command. Failed saves preserve the previous selection and configuration. Runtime verification rejects stale manifests and leftover PHP directories.
+
+RC 3 is waiting for verified patched PHP inputs for the October 21 security release; current pins are not the completed security update. See the [PHP update checklist](docs/rc3-php-security-update.md). RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
 
 ## 0.1.0-rc.2 — 2026-10-20
 

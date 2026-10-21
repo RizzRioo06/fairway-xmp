@@ -117,7 +117,7 @@ cargo tauri build --bundles app
 open 'src-tauri/target/release/bundle/macos/Fairway XMP.app'
 ```
 
-Run full runtime preparation again when its manifest, locks, notices, or preparation scripts change. A local `.app` build does not need installer packaging or Apple notarization; distribution candidates still run both.
+Run full runtime preparation again when its manifest, locks, notices, or preparation scripts change. Verification rejects a stale staged manifest or unexpected PHP version folders before running bundled tools. A local `.app` build does not need installer packaging or Apple notarization; distribution candidates still run both.
 
 ```sh
 # Windows, on a Windows builder:

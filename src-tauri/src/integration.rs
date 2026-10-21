@@ -410,6 +410,32 @@ pub fn open(layout: &Layout, target: &str, ports: &crate::config::Ports) -> Resu
         }
         _ => return Err("Unknown destination.".into()),
     };
+    open_path(&path)
+}
+
+#[cfg(feature = "desktop")]
+fn checked_http_url(value: &str) -> Result<tauri::Url> {
+    let invalid = "Only HTTP and HTTPS email links can be opened.";
+    if value.len() > 16 * 1024 || value.chars().any(char::is_control) {
+        return Err(invalid.into());
+    }
+    let url = tauri::Url::parse(value).map_err(|_| invalid.to_string())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(invalid.into());
+    }
+    Ok(url)
+}
+
+#[cfg(feature = "desktop")]
+pub fn open_http_url(value: &str) -> Result<()> {
+    open_path(checked_http_url(value)?.as_str())
+}
+
+fn open_path(path: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         let mut cmd = process::command("/usr/bin/open");
@@ -435,6 +461,33 @@ pub fn open(layout: &Layout, target: &str, ports: &crate::config::Ports) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn mail_links_accept_web_urls_and_reject_other_destinations() {
+        for value in [
+            "http://project.test:8800/reset?token=demo#next",
+            "https://example.test/hello%20world",
+        ] {
+            assert_eq!(checked_http_url(value).unwrap().as_str(), value);
+        }
+        assert_eq!(
+            checked_http_url("HTTPS://EXAMPLE.TEST").unwrap().as_str(),
+            "https://example.test/"
+        );
+        for value in [
+            "javascript:alert(1)",
+            "file:///tmp/test",
+            "data:text/html,hello",
+            "mailto:hello@example.test",
+            "/relative",
+            "//example.test",
+            "https://",
+            "https://user:password@example.test",
+            "https://example.test/\n--args",
+        ] {
+            assert!(checked_http_url(value).is_err(), "{value}");
+        }
+    }
     #[test]
     fn refresh_repairs_enabled_launchers_without_enabling_tools_or_editing_profiles() {
         let root = env::temp_dir().join(format!("fairway-refresh-{}", rand::random::<u64>()));
