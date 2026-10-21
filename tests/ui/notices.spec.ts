@@ -22,6 +22,10 @@ test.beforeEach(async ({ page }) => {
       const id = listeners.get('fairway-status');
       if (id) callbacks.get(id)?.({ payload: structuredClone(data) });
     });
+    window.addEventListener('test-action-error', event => {
+      const id = listeners.get('fairway-action-error');
+      if (id) callbacks.get(id)?.({ payload: (event as CustomEvent).detail });
+    });
     window.addEventListener('test-backend-error', event => {
       const id = listeners.get('fairway-error');
       if (id) callbacks.get(id)?.({ payload: (event as CustomEvent).detail });
@@ -133,7 +137,7 @@ test('navigation clears results and suppresses late operation messages', async (
   await expect(page.getByRole('button', { name: 'Enable command-line tools' })).toBeEnabled();
 });
 
-test('backend errors are persistent, bounded, and do not repeat after dismissal', async ({ page }) => {
+test('background errors stay deduplicated while explicit action failures can recur', async ({ page }) => {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const control = page.getByRole('button', { name: 'Open backups', exact: true });
   const position = await positionAt(page, control);
@@ -150,6 +154,14 @@ test('backend errors are persistent, bounded, and do not repeat after dismissal'
   await expect(alert).toHaveCount(0);
   await emit('A different backend error.');
   await expect(alert).toHaveText('A different backend error.');
+  await page.getByRole('button', { name: 'Dismiss message' }).click();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await control.focus();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-action-error', { detail: 'The service could not start. Retry.' })));
+    await expect(alert).toHaveText('The service could not start. Retry.');
+    await expectPosition(page, control, position);
+    await page.getByRole('button', { name: 'Dismiss message' }).click();
+  }
 });
 
 

@@ -320,6 +320,10 @@ fn external_command(directory: &std::path::Path) -> std::process::Command {
 
 /// Open the system terminal at a folder, using its normal shell and environment.
 pub fn open_external(directory: &std::path::Path) -> Result<()> {
+    #[cfg(windows)]
+    if !local_windows_directory(&directory.to_string_lossy()) {
+        return Err("Choose a local drive folder for the external terminal.".into());
+    }
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("The terminal's current folder is no longer available.".into());
     }
@@ -812,6 +816,21 @@ struct DirectoryTracker {
     escape: bool,
 }
 
+// Validate untrusted CMD metadata lexically, before any filesystem operation.
+// Only ordinary drive-absolute paths are allowed; UNC, device and drive-relative
+// paths must never reach is_dir/canonicalize (which can contact a remote host).
+fn local_windows_directory(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+        && !path
+            .chars()
+            .any(|c| c.is_control() || matches!(c, '"' | '<' | '>' | '|' | '?' | '*'))
+        && !path[2..].contains(':')
+}
+
 impl DirectoryTracker {
     fn feed(&mut self, bytes: &[u8]) {
         for &byte in bytes {
@@ -835,7 +854,7 @@ impl DirectoryTracker {
                     .and_then(|path| std::str::from_utf8(path).ok())
                 {
                     let path = path.trim_matches('"');
-                    if !path.is_empty() && !path.contains('\0') {
+                    if local_windows_directory(path) {
                         self.current = Some(path.into());
                     }
                 }
@@ -1048,6 +1067,30 @@ mod tests {
             tracker.current,
             Some(std::path::PathBuf::from(r"C:\new folder"))
         );
+        for invalid in [
+            r"\\server\share",
+            "//server/share",
+            r"\\?\C:\student",
+            r"\\?\UNC\server\share",
+            r"\\.\pipe\test",
+            r"\??\C:\student",
+            r"C:relative",
+            r"\rooted",
+            "file://server/share",
+            "C:\\bad\0path",
+            "C:\\bad\npath",
+            "C:\\name:stream",
+        ] {
+            assert!(!local_windows_directory(invalid), "Accepted {invalid:?}");
+            tracker.feed(format!("\x1b]9;9;{invalid}\x07").as_bytes());
+            assert_eq!(
+                tracker.current,
+                Some(std::path::PathBuf::from(r"C:\new folder"))
+            );
+        }
+        let unicode = "D:\\Student's project 日本 မြန်မာ";
+        tracker.feed(format!("\x1b]9;9;\"{unicode}\"\x07").as_bytes());
+        assert_eq!(tracker.current, Some(unicode.into()));
     }
 
     #[cfg(target_os = "macos")]

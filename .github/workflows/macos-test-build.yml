@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
       test_source_ref:
-        description: Optional exact source ref for the standalone comparison build
+        description: Optional source ref already merged into main for the standalone comparison build
         type: string
         default: ''
       signed_release:
@@ -20,6 +20,21 @@ on:
       signed_release:
         type: boolean
         default: false
+    secrets:
+      APPLE_CERTIFICATES_P12:
+        required: false
+      APPLE_CERTIFICATES_PASSWORD:
+        required: false
+      APPLE_API_PRIVATE_KEY:
+        required: false
+      APPLE_API_KEY:
+        required: false
+      APPLE_API_ISSUER:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
 
 permissions:
   contents: read
@@ -29,8 +44,17 @@ jobs:
     if: inputs.standalone_only != true
     runs-on: macos-15
     timeout-minutes: 150
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify signing source is merged into main
+        if: inputs.signed_release
+        run: python scripts/verify_signing_source.py
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -55,6 +79,7 @@ jobs:
           test "$(uname -m)" = arm64
           xcodebuild -version
           version=$(python scripts/release_candidate.py version)
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: npm ci --no-audit --no-fund
       - run: npm run build
@@ -116,6 +141,70 @@ jobs:
         run: |
           cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
           python scripts/build_macos_hosts_helper.py --team-id 4Q27NQ2UAF --output artifacts/hosts-helper
+      - name: Build release app with updater
+        if: inputs.signed_release
+        run: |
+          python scripts/configure_release.py --public-key packaging/updater.pub
+          npm run tauri -- build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/tauri.release.json --no-sign
+          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
+      - name: Build unsigned development app
+        if: ${{ !inputs.signed_release }}
+        run: |
+          npm run tauri -- build --bundles app --features native-macos-trust,native-macos-hosts
+          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
+      - name: Transfer unsigned app and lifecycle inputs
+        shell: bash
+        run: |
+          extra=()
+          if [ '${{ inputs.signed_release }}' = true ]; then
+            extra=(src-tauri/target/release/examples/updater_probe)
+          fi
+          tar -czf artifacts/macos-build-inputs.tar.gz 'src-tauri/target/release/bundle/macos/Fairway XMP.app' src-tauri/target/release/examples/installer_probe .runtime-work/baseline-macos.pkg artifacts/alpha-*/fairway-xmp-*-bundled-tool-sources.tar.gz "${extra[@]}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos-build-inputs
+          path: artifacts/macos-build-inputs.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Save build failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-build-diagnostics
+          path: .runtime-work/macos-smoke/student data/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  package:
+    needs: build
+    if: inputs.standalone_only != true
+    runs-on: macos-15
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.build.outputs.commit }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked signing tools without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify signing source is merged into main
+        if: inputs.signed_release
+        run: python scripts/verify_signing_source.py --expected ${{ needs.build.outputs.commit }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: macos-build-inputs
+          path: artifacts
+      - name: Restore unsigned app and lifecycle inputs
+        run: tar -xzf artifacts/macos-build-inputs.tar.gz
       - name: Import release signing credentials
         if: inputs.signed_release
         env:
@@ -125,38 +214,41 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: bash scripts/import_apple_credentials.sh
-      - name: Build release app with updater
-        if: inputs.signed_release
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          test -n "$TAURI_SIGNING_PRIVATE_KEY"
-          python scripts/configure_release.py --public-key packaging/updater.pub
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/tauri.release.json --no-sign
-          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
-      - name: Sign and notarize app, installer and updater archive
+      - name: Sign and notarize app and installer
         if: inputs.signed_release
         env:
           FAIRWAY_SIGNED_RELEASE: '1'
+          FAIRWAY_DEFER_RUNTIME_CHECKS: '1'
+          FAIRWAY_DEFER_UPDATER_SIGNATURE: '1'
           APPLE_SIGNING_IDENTITY: 'Developer ID Application: Ei Maung (4Q27NQ2UAF)'
           APPLE_INSTALLER_IDENTITY: 'Developer ID Installer: Ei Maung (4Q27NQ2UAF)'
+        run: sh scripts/package_macos.sh
+      - name: Remove temporary signing credentials before executing bundled code
+        if: ${{ always() && inputs.signed_release }}
+        run: bash scripts/cleanup_apple_credentials.sh
+      - name: Sign exact updater archive with the locked CLI
+        if: inputs.signed_release
+        env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: sh scripts/package_macos.sh
-      - name: Build unsigned development installer
-        if: ${{ !inputs.signed_release }}
+        run: node node_modules/@tauri-apps/cli/tauri.js signer sign --app-version '${{ needs.build.outputs.version }}' 'artifacts/fairway-xmp-${{ needs.build.outputs.version }}-macos-arm64.app.tar.gz'
+      - name: Verify signed PHP and native permissions after credential cleanup
+        if: inputs.signed_release
         run: |
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts
-          ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
-          sh scripts/package_macos.sh
+          app='src-tauri/target/release/bundle/macos/Fairway XMP.app'
+          python scripts/check_signed_php.py "$app"
+          python scripts/verify_macos_permissions.py "$app" --team-id 4Q27NQ2UAF
+          "$app/Contents/MacOS/fairway" --test-native-hosts-registration
+      - name: Package unsigned development installer
+        if: ${{ !inputs.signed_release }}
+        run: sh scripts/package_macos.sh
       - name: Collect exact release artifacts
         id: installer
         env:
           SIGNED_RELEASE: ${{ inputs.signed_release }}
         run: |
           mkdir -p artifacts/macos-installer
-          version='${{ steps.metadata.outputs.version }}'
+          version='${{ needs.build.outputs.version }}'
           if [ "$SIGNED_RELEASE" = true ]; then
             name="fairway-xmp-$version-macos-arm64.pkg"
             mv "artifacts/$name" "artifacts/fairway-xmp-$version-macos-arm64.app.tar.gz" "artifacts/fairway-xmp-$version-macos-arm64.app.tar.gz.sig" artifacts/macos-installer/
@@ -172,18 +264,18 @@ jobs:
         run: |
           extra=()
           if [ '${{ inputs.signed_release }}' = true ]; then
-            extra=(--updater "artifacts/macos-installer/fairway-xmp-${{ steps.metadata.outputs.version }}-macos-arm64.app.tar.gz" --update-probe src-tauri/target/release/examples/updater_probe)
+            extra=(--updater "artifacts/macos-installer/fairway-xmp-${{ needs.build.outputs.version }}-macos-arm64.app.tar.gz" --update-probe src-tauri/target/release/examples/updater_probe)
           fi
           python tests/installer_lifecycle.py "${extra[@]}" --installer "artifacts/macos-installer/${{ steps.installer.outputs.name }}" --baseline .runtime-work/baseline-macos.pkg --probe src-tauri/target/release/examples/installer_probe --output .runtime-work/macos-lifecycle --allow-user-profile-changes
       - name: Collect exact application and bundled-tool sources
         run: |
-          cp "artifacts/alpha-${{ steps.metadata.outputs.version }}/fairway-xmp-${{ steps.metadata.outputs.version }}-bundled-tool-sources.tar.gz" artifacts/macos-installer/
-          git archive --format=tar.gz --output="artifacts/macos-installer/fairway-xmp-${{ steps.metadata.outputs.version }}-build-source.tar.gz" HEAD
+          cp "artifacts/alpha-${{ needs.build.outputs.version }}/fairway-xmp-${{ needs.build.outputs.version }}-bundled-tool-sources.tar.gz" artifacts/macos-installer/
+          git archive --format=tar.gz --output="artifacts/macos-installer/fairway-xmp-${{ needs.build.outputs.version }}-build-source.tar.gz" HEAD
           cp LICENSE THIRD_PARTY_NOTICES.md runtime-manifest.json runtime-downloads.lock.json artifacts/macos-installer/
-          python scripts/release_candidate.py record --target macos-arm64 --signing ${{ steps.installer.outputs.signing }} --directory artifacts/macos-installer --artifact fairway-xmp-macos-arm64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/macos-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-macos-arm64.json
+          python scripts/release_candidate.py record --target macos-arm64 --signing ${{ steps.installer.outputs.signing }} --directory artifacts/macos-installer --artifact fairway-xmp-macos-arm64-${{ needs.build.outputs.version }} --lifecycle .runtime-work/macos-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-macos-arm64.json
       - uses: actions/upload-artifact@v6
         with:
-          name: fairway-xmp-macos-arm64-${{ steps.metadata.outputs.version }}
+          name: fairway-xmp-macos-arm64-${{ needs.build.outputs.version }}
           path: artifacts/macos-installer/
           if-no-files-found: error
           retention-days: 90
@@ -193,9 +285,6 @@ jobs:
           path: artifacts/candidate-metadata/
           if-no-files-found: error
           retention-days: 90
-      - name: Remove temporary signing credentials
-        if: ${{ always() && inputs.signed_release }}
-        run: bash scripts/cleanup_apple_credentials.sh
       - name: Preserve signed files for investigating a failed lifecycle
         if: ${{ failure() && inputs.signed_release }}
         uses: actions/upload-artifact@v6
@@ -210,7 +299,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
-          name: macos-build-diagnostics
+          name: macos-packaging-diagnostics
           path: |
             .runtime-work/macos-smoke/student data/logs/*.log
             .runtime-work/macos-lifecycle/*.json
@@ -222,10 +311,25 @@ jobs:
     if: inputs.standalone_only == true
     runs-on: macos-15
     timeout-minutes: 90
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.test_source_ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve comparison source before checking it out
+        id: source
+        env:
+          SOURCE_REF: ${{ inputs.test_source_ref || github.sha }}
+        run: |
+          commit=$(python scripts/verify_signing_source.py --source "$SOURCE_REF")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.source.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -265,8 +369,46 @@ jobs:
           from pathlib import Path
           Path('artifacts/permissions-build.json').write_text(json.dumps({'app': {'windows': [{'title': 'Fairway XMP — Native Permissions Prototype', 'width': 1080, 'height': 760, 'minWidth': 820, 'minHeight': 650}]}}))
           PY
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/permissions-build.json --no-sign
+          npm run tauri -- build --bundles app --features native-macos-trust,native-macos-hosts --config artifacts/permissions-build.json --no-sign
           ditto artifacts/hosts-helper/Library 'src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/Library'
+      - name: Transfer unsigned standalone app
+        run: tar -czf artifacts/macos-standalone-inputs.tar.gz 'src-tauri/target/release/bundle/macos/Fairway XMP.app'
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos-standalone-inputs
+          path: artifacts/macos-standalone-inputs.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-standalone:
+    needs: standalone
+    if: inputs.standalone_only == true
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.standalone.outputs.commit }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked signing tools without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify signing source is merged into main
+        run: python scripts/verify_signing_source.py --expected ${{ needs.standalone.outputs.commit }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: macos-standalone-inputs
+          path: artifacts
+      - name: Restore unsigned standalone app
+        run: tar -xzf artifacts/macos-standalone-inputs.tar.gz
       - name: Import Apple signing and notarization credentials
         env:
           APPLE_CERTIFICATES_P12: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -279,7 +421,6 @@ jobs:
         run: |
           app='src-tauri/target/release/bundle/macos/Fairway XMP.app'
           python scripts/sign_macos.py "$app" 'Developer ID Application: Ei Maung (4Q27NQ2UAF)'
-          python scripts/check_signed_php.py "$app"
           codesign --verify --strict '-R=anchor apple generic and identifier "dev.fairway.environment.hosts-helper" and certificate leaf[subject.OU] = "4Q27NQ2UAF"' "$app/Contents/Library/HelperTools/dev.fairway.environment.hosts-helper"
           mkdir -p artifacts/macos-standalone
           ditto -c -k --keepParent "$app" artifacts/macos-notary-upload.zip
@@ -287,6 +428,11 @@ jobs:
           python scripts/staple_macos.py "$app"
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute --verbose=2 "$app"
+      - name: Remove temporary Apple credentials before executing bundled code
+        if: always()
+        run: bash scripts/cleanup_apple_credentials.sh
+      - name: Verify signed PHP after credential cleanup
+        run: python scripts/check_signed_php.py 'src-tauri/target/release/bundle/macos/Fairway XMP.app'
       - name: Verify fresh native helper registration without approval or hosts writes
         run: '"src-tauri/target/release/bundle/macos/Fairway XMP.app/Contents/MacOS/fairway" --test-native-hosts-registration'
       - name: Diagnose failed native registration
@@ -326,6 +472,3 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
-      - name: Remove temporary Apple credentials
-        if: always()
-        run: bash scripts/cleanup_apple_credentials.sh

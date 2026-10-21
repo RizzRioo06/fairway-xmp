@@ -2,7 +2,7 @@
 // Private stdin/stdout worker, executed only by Fairway's Rust backend.
 // Database values stay strings so BIGINT/DECIMAL values survive JavaScript intact.
 function ident($value) {
-    if (!is_string($value) || $value === '' || strlen($value) > 64 || preg_match('/[\x00-\x1f\x7f]/', $value)) throw new Exception('Use a name of 1–64 characters without control characters.');
+    if (!is_string($value) || $value === '' || preg_match_all('/./us', $value) > 64 || preg_match('/\p{Cc}/u', $value)) throw new Exception('Use a name of 1–64 characters without control characters.');
     return '`' . str_replace('`', '``', $value) . '`';
 }
 function user_db($name) {
@@ -24,7 +24,7 @@ function table_kind($db, $schema, $table) {
 }
 function stable_key($db, $schema, $table, $columns) {
     if (table_kind($db,$schema,$table) !== 'BASE TABLE') return [];
-    $indexes = rows($db, 'SELECT INDEX_NAME AS name, COLUMN_NAME AS col, SUB_PART AS prefix FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND NON_UNIQUE=0 ORDER BY (INDEX_NAME=\'PRIMARY\') DESC, INDEX_NAME, SEQ_IN_INDEX', [$schema,$table]);
+    $indexes = rows($db, 'SELECT INDEX_NAME AS name, COLUMN_NAME AS col, SUB_PART AS prefix FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND NON_UNIQUE=0 AND IS_VISIBLE=\'YES\' ORDER BY (INDEX_NAME=\'PRIMARY\') DESC, INDEX_NAME, SEQ_IN_INDEX', [$schema,$table]);
     $groups = []; foreach ($indexes as $index) $groups[$index['name']][] = $index;
     $map = array_column($columns, null, 'name');
     foreach ($groups as $parts) {
@@ -36,6 +36,34 @@ function stable_key($db, $schema, $table, $columns) {
         if ($key) return $key;
     }
     return [];
+}
+// Keep representation and concurrency separate: text is converted to UTF-8 for
+// display, while fingerprints are computed by MySQL over every complete value.
+function display_value($c) {
+    $q=ident($c['name']);
+    if (preg_match('/^bit\((\d+)\)/i',$c['type'],$bits)) return "CONCAT('0x',LPAD(HEX($q)," . (int)(ceil((int)$bits[1]/8)*2) . ",'0'))";
+    // MySQL formats FLOAT to only six significant digits. Widening its exact
+    // stored binary value first also makes FLOAT key values round-trip.
+    if (preg_match('/^float\b/i',$c['type'])) $q="CAST($q AS DOUBLE)";
+    return $c['binary'] ? "CONCAT('0x',HEX($q))" : "CAST($q AS CHAR CHARACTER SET utf8mb4)";
+}
+function row_version($schema,$table,$columns,$key) {
+    $parts=["'" . hash('sha256',json_encode([$schema,$table,$columns,$key],JSON_THROW_ON_ERROR)) . "'"];
+    foreach ($columns as $c) { $q=ident($c['name']); if (preg_match('/^float\b/i',$c['type'])) $q="CAST($q AS DOUBLE)"; $parts[]="IF($q IS NULL,'N',CONCAT('V',SHA2(CAST($q AS BINARY),256)))"; }
+    return 'SHA2(CONCAT(' . implode(',',$parts) . '),256)';
+}
+function row_locator($key,$r,$readOnly=false) {
+    $ref=$r['rowRef']??null;
+    if ($ref!==null && (!is_array($ref) || !preg_match('/^[a-f0-9]{64}$/D',$ref['version']??'') || !is_array($ref['key']??null))) throw new Exception('Refresh this row before changing it.');
+    if (!$key) { if ($readOnly && $ref!==null) return ['',[]]; throw new Exception('This table has no non-null primary or unique key. Use SQL for ambiguous edits.'); }
+    $identity=$ref===null?($r['original']??[]):$ref['key'];
+    if (!is_array($identity) || ($ref!==null && count($identity)!==count($key))) throw new Exception('Refresh this row before changing it.');
+    $where=[]; $args=[];
+    foreach ($key as $name) {
+        if (!isset($identity[$name]) || !is_string($identity[$name])) throw new Exception('Refresh this row before changing it.');
+        $where[]=ident($name).'=?'; $args[]=$identity[$name];
+    }
+    return [implode(' AND ',$where),$args];
 }
 function foreign_keys($db, $schema, $table) {
     $raw = rows($db, 'SELECT k.CONSTRAINT_NAME AS name, k.TABLE_SCHEMA AS db, k.TABLE_NAME AS tbl, k.COLUMN_NAME AS col, k.REFERENCED_TABLE_SCHEMA AS refDb, k.REFERENCED_TABLE_NAME AS refTable, k.REFERENCED_COLUMN_NAME AS refCol, r.UPDATE_RULE AS onUpdate, r.DELETE_RULE AS onDelete FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.TABLE_NAME=k.TABLE_NAME AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE (k.TABLE_SCHEMA=? AND k.TABLE_NAME=?) OR (k.REFERENCED_TABLE_SCHEMA=? AND k.REFERENCED_TABLE_NAME=?) ORDER BY k.TABLE_SCHEMA,k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION', [$schema,$table,$schema,$table]);
@@ -202,10 +230,36 @@ function run_request($db, $r) {
         $direction=($r['direction'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
         $offset=max(0,min(10000000,(int)($r['offset'] ?? 0))); $limit=max(1,min(100,(int)($r['limit'] ?? 50)));
         $total=rows($db,"SELECT COUNT(*) AS n FROM $qt$where",$args)[0]['n'];
-        $select=[]; foreach ($columns as $c) $select[]=($c['binary'] ? 'CONCAT(\'0x\',HEX(' . ident($c['name']) . '))' : ident($c['name'])) . ' AS ' . ident($c['name']);
+        // A page has at most 8K characters of previews per row, regardless of
+        // table width. SQL does the slicing; PDO never buffers full large cells.
+        $preview=max(1,min(1024,(int)floor(8192/count($columns))));
+        $nameBytes=0; foreach ($columns as $c) $nameBytes+=strlen(json_encode($c['name']));
+        $rowBudget=count($columns)*$preview*6+$nameBytes*2+count($columns)*64+32768;
+        $limit=max(1,min($limit,(int)floor(max(1,6*1024*1024-strlen(json_encode($columns))*2)/$rowBudget)));
+        $select=[]; foreach ($columns as $c) { $value=display_value($c); $select[]="SUBSTRING($value,1,$preview)"; $select[]="CHAR_LENGTH($value)"; }
+        $select[]=row_version($schema,$table,$columns,$key);
+        foreach ($key as $name) $select[]=display_value($map[$name]);
         $order=ident($sort) . " $direction"; foreach ($key as $part) if ($part!==$sort) $order.=',' . ident($part) . " $direction";
         $s=$db->prepare('SELECT ' . implode(',',$select) . " FROM $qt$where ORDER BY $order LIMIT $limit OFFSET $offset"); $s->execute($args);
-        return ['columns'=>$columns,'key'=>$key,'kind'=>$kind,'rows'=>$s->fetchAll(PDO::FETCH_ASSOC),'total'=>(string)$total,'offset'=>$offset,'limit'=>$limit];
+        $data=[]; $references=[]; $truncated=[];
+        while (($raw=$s->fetch(PDO::FETCH_NUM))!==false) {
+            $item=[]; $large=[];
+            foreach ($columns as $i=>$c) { $item[$c['name']]=$raw[$i*2]; if ((int)$raw[$i*2+1]>$preview) $large[$c['name']]=['length'=>(int)$raw[$i*2+1]]; }
+            $identity=[]; foreach ($key as $i=>$name) $identity[$name]=$raw[count($columns)*2+1+$i];
+            $data[]=$item; $references[]=['key'=>(object)$identity,'version'=>$raw[count($columns)*2]]; $truncated[]=(object)$large;
+        }
+        return ['columns'=>$columns,'key'=>$key,'kind'=>$kind,'rows'=>$data,'rowRefs'=>$references,'truncated'=>$truncated,'total'=>(string)$total,'offset'=>$offset,'limit'=>$limit];
+    }
+    if ($op==='cell') {
+        $column=$r['column']??''; if (!isset($map[$column]) || !isset($r['rowRef'])) throw new Exception('Refresh this row before reading its value.');
+        [$where,$args]=row_locator($key,$r,true); $version=row_version($schema,$table,$columns,$key);
+        $where=($where!==''?$where.' AND ':'')."$version=?"; $args[]=$r['rowRef']['version'];
+        $offset=max(0,min(4294967295,(int)($r['offset']??0))); $length=131072;
+        $value=display_value($map[$column]);
+        $found=rows($db,"SELECT SUBSTRING($value," . ($offset+1) . ",$length) AS value, CHAR_LENGTH($value) AS total FROM $qt WHERE $where LIMIT 1",$args);
+        if (!$found) throw new Exception('This row changed or was deleted. Refresh before reading its value.');
+        $total=(int)$found[0]['total'];
+        return ['value'=>$found[0]['value'],'offset'=>$offset,'nextOffset'=>min($total,$offset+$length),'total'=>$total,'complete'=>$offset+$length>=$total];
     }
     if ($kind !== 'BASE TABLE') throw new Exception('Views are read-only in the data browser. Use the query editor for advanced changes.');
     if ($op === 'create_index') return create_index($db,$schema,$table,$r,$map);
@@ -238,25 +292,40 @@ function run_request($db, $r) {
     if ($op === 'drop_column') { $db->exec("ALTER TABLE $qt DROP COLUMN " . ident($r['name'] ?? '')); return ['message'=>'Column deleted. A database backup was saved first.']; }
     if (!in_array($op,['insert','update','delete'],true)) throw new Exception('Unknown database operation.');
     $values=$r['values'] ?? []; if (!is_array($values)) throw new Exception('Invalid row values.');
+    // valueFiles is supplied only by the native backend, from private temporary
+    // files it created. It is never accepted as a renderer-supplied path.
+    foreach (($r['valueFiles']??[]) as $name=>$path) {
+        if (array_key_exists($name,$values)) throw new Exception('Duplicate row value.');
+        $value=file_get_contents($path); if ($value===false) throw new Exception('Could not read the changed value. Retry saving.');
+        $values[$name]=$value;
+    }
     foreach ($values as $name=>$value) { if (!isset($map[$name]) || $map[$name]['generated'] || $map[$name]['binary']) throw new Exception('This column is read-only.'); if ($value !== null && !is_string($value)) throw new Exception('Row values must be text or SQL NULL.'); }
     if ($op === 'insert') {
         $sql="INSERT INTO $qt (" . implode(',',array_map('ident',array_keys($values))) . ') VALUES (' . implode(',',array_fill(0,count($values),'?')) . ')';
         $s=$db->prepare($sql); $s->execute(array_values($values)); return ['message'=>'Row inserted.'];
     }
-    if (!$key) throw new Exception('This table has no non-null primary or unique key. Browse and insert are available; use SQL for ambiguous edits.');
-    $original=$r['original'] ?? []; $where=[]; $args=[];
-    foreach ($columns as $c) {
-        $name=$c['name']; if (!array_key_exists($name,$original)) throw new Exception('Refresh this row before changing it.');
-        $value=$original[$name]; if ($value!==null && !is_string($value)) throw new Exception('Invalid original row.');
-        if ($c['binary'] && $value!==null) { if (!preg_match('/^0x([0-9a-f]{2})*$/i',$value)) throw new Exception('Invalid binary value.'); $value=hex2bin(substr($value,2)); }
-        $where[]='CAST(' . ident($name) . ' AS BINARY) <=> CAST(? AS BINARY)'; $args[]=$value;
-    }
+    [$predicate,$args]=row_locator($key,$r);
+    $version=row_version($schema,$table,$columns,$key);
+    $select=[$version];
+    if (!isset($r['rowRef'])) foreach ($columns as $c) $select[]=display_value($c);
     $db->beginTransaction();
     try {
-        $found=rows($db,"SELECT 1 AS found FROM $qt WHERE " . implode(' AND ',$where) . ' LIMIT 2 FOR UPDATE',$args);
-        if (count($found)!==1) throw new Exception('This row changed or was deleted. Refresh before saving.');
-        if ($op==='delete') { $s=$db->prepare("DELETE FROM $qt WHERE " . implode(' AND ',$where) . ' LIMIT 1'); $s->execute($args); }
-        elseif ($values) { $s=$db->prepare("UPDATE $qt SET " . implode(',',array_map(fn($name)=>ident($name).'=?',array_keys($values))) . ' WHERE ' . implode(' AND ',$where) . ' LIMIT 1'); $s->execute([...array_values($values),...$args]); }
+        // The unwrapped unique-key predicate lets InnoDB lock only this row.
+        // A second metadata read, while the table metadata lock is held, rejects
+        // schema/index changes that raced the initial inspection.
+        $found=rows($db,'SELECT ' . implode(',',$select) . " FROM $qt WHERE $predicate LIMIT 2 FOR UPDATE",$args);
+        if (count($found)!==1 || table_columns($db,$schema,$table)!==$columns || stable_key($db,$schema,$table,$columns)!==$key) throw new Exception('This row or table changed. Refresh before saving.');
+        $live=array_values($found[0]); $expected=$r['rowRef']['version']??$live[0];
+        if (!hash_equals($live[0],$expected)) throw new Exception('This row changed or was deleted. Refresh before saving.');
+        if (!isset($r['rowRef'])) {
+            $original=$r['original']??[];
+            foreach ($columns as $i=>$c) if (!array_key_exists($c['name'],$original) || $original[$c['name']]!==$live[$i+1]) throw new Exception('This row changed or was deleted. Refresh before saving.');
+        }
+        // Keep the fingerprint in the write as well: nontransactional engines
+        // cannot retain a row lock between the read and the mutation.
+        $where="$predicate AND $version=?"; $writeArgs=[...$args,$expected];
+        if ($op==='delete') { $s=$db->prepare("DELETE FROM $qt WHERE $where LIMIT 1"); $s->execute($writeArgs); }
+        elseif ($values) { $s=$db->prepare("UPDATE $qt SET " . implode(',',array_map(fn($name)=>ident($name).'=?',array_keys($values))) . " WHERE $where LIMIT 1"); $s->execute([...array_values($values),...$writeArgs]); }
         if (($op==='delete' || $values) && $s->rowCount()!==1) throw new Exception('This row changed or was deleted. Refresh before saving.');
         $db->commit();
     } catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); throw $e; }

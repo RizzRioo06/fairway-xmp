@@ -135,6 +135,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
+  if (command === 'startup_status' || command === 'retry_startup') return { blocking: false, errors: [], dataDir: data.dataDir } as T;
   if (command === 'save_mail_attachment') {
     const forced = (window as Window & { __fairwayMailSave?: { delay?: number; error?: string; path?: string } }).__fairwayMailSave;
     if (forced?.delay) await new Promise(resolve => setTimeout(resolve, forced.delay));
@@ -248,17 +249,18 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       notes: 'Simulated release for visual review. Includes PHP selection, service controls, and database backups.',
     }; break;
     case 'install_update': {
-      emit('fairway-operation-started', 'Downloading update…');
+      let preparing = false;
       try {
         emit('fairway-update-progress', { phase: 'downloading', downloaded: 25, total: 100 });
-        await new Promise(resolve => setTimeout(resolve, 600));
+        await new Promise(resolve => setTimeout(resolve, (window as Window & { __fairwayUpdateDownloadDelay?: number }).__fairwayUpdateDownloadDelay ?? 600));
         if (scenario === 'Update failure') throw new Error('Could not download the update. Your services are still available. Your projects and database data have been kept. Try again later.');
         for (const phase of ['verifying', 'preparing', 'installing']) {
+          if (phase === 'preparing') { preparing = true; emit('fairway-operation-started', 'Preparing update…'); }
           emit('fairway-update-progress', { phase });
           await new Promise(resolve => setTimeout(resolve, 350));
         }
         throw new Error('UI test only: no update was downloaded or installed.');
-      } finally { emit('fairway-operation-finished', null); }
+      } finally { if (preparing) emit('fairway-operation-finished', null); }
     }
     case 'open_target': throw new Error(`UI test only: would open ${String(args.target)}. No external application was opened.`);
     default: throw new Error(`Unsupported UI test command: ${command}`);

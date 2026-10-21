@@ -9,6 +9,9 @@ set -euo pipefail
 : "${APPLE_API_KEY:?Missing notarization Key ID}"
 : "${APPLE_API_ISSUER:?Missing notarization Issuer ID}"
 umask 077
+# A failed import must clean up its partially created files/keychain immediately.
+# The workflow also runs cleanup unconditionally after the signing step.
+trap 'status=$?; if [ "$status" -ne 0 ]; then bash "$(dirname "$0")/cleanup_apple_credentials.sh" || true; fi; exit "$status"' EXIT
 KEYCHAIN="$RUNNER_TEMP/fairway-signing.keychain-db"
 CERTIFICATE="$RUNNER_TEMP/fairway-identities.p12"
 API_KEY="$RUNNER_TEMP/fairway-notary.p8"
@@ -18,7 +21,7 @@ security list-keychains -d user > "$RUNNER_TEMP/fairway-keychains.txt"
 printf '%s' "$APPLE_CERTIFICATES_P12" | base64 --decode > "$CERTIFICATE"
 printf '%s' "$APPLE_API_PRIVATE_KEY" > "$API_KEY"
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-security set-keychain-settings -lut 21600 "$KEYCHAIN"
+security set-keychain-settings -lut 3600 "$KEYCHAIN"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 python3 - "$KEYCHAIN" "$RUNNER_TEMP/fairway-keychains.txt" <<'PY'
 import shlex, subprocess, sys
@@ -31,3 +34,4 @@ xcrun notarytool store-credentials fairway-release --key "$API_KEY" --key-id "$A
 # Pass the temporary keychain explicitly when using the notarization profile.
 printf 'APPLE_NOTARY_PROFILE=fairway-release\nAPPLE_NOTARY_KEYCHAIN=%s\n' "$KEYCHAIN" >> "$GITHUB_ENV"
 rm -f "$CERTIFICATE" "$API_KEY"
+trap - EXIT

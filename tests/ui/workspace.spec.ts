@@ -54,7 +54,7 @@ test('terminal keeps its live instance, shell Escape and search behavior while m
   const workspace = await maximize(page, 'Terminal');
   await input.focus(); await input.press('Escape');
   await expect(workspace).toBeVisible();
-  await input.press('Control+f');
+  await input.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+Shift+f');
   await expect(page.getByRole('textbox', { name: 'Find in terminal' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(workspace).toBeVisible();
@@ -64,7 +64,7 @@ test('terminal keeps its live instance, shell Escape and search behavior while m
   await expect(output).toContainText('retained-workspace');
 });
 
-test('mail dialogs and HTML-frame Escape close only the active layer and preserve the selected message', async ({ page }) => {
+test('mail dialogs, safe HTML preview and restore preserve the selected message', async ({ page, browserName }) => {
   await open(page, 'View Mail');
   await page.getByRole('list', { name: 'Emails' }).getByRole('button', { name: /Welcome to My Shop/ }).click();
   const workspace = await maximize(page, 'Mail');
@@ -79,6 +79,12 @@ test('mail dialogs and HTML-frame Escape close only the active layer and preserv
   const body = page.frameLocator('iframe[title="Email content"]').locator('body');
   await expect(body).not.toContainText('scripts must not run');
   await body.click(); await body.press('Escape');
+  if (browserName === 'webkit') {
+    // WebKit blocks even parent-owned listeners in a script-disabled frame.
+    // Preserve the sandbox and use the always-visible restore control.
+    await expect(workspace).toBeVisible();
+    await workspace.getByRole('button', { name: 'Restore Mail', exact: true }).click();
+  }
   await expect(workspace).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Welcome to My Shop', exact: true })).toBeVisible();
 });

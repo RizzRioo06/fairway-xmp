@@ -30,30 +30,55 @@ on:
         type: boolean
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 concurrency:
   group: release-publication
   cancel-in-progress: false
 
 jobs:
+  prepare-verifier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Compile signature verifier with read-only repository permissions
+        run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --example verify_update --locked
+      - uses: actions/upload-artifact@v6
+        with:
+          name: publication-signature-verifier
+          path: src-tauri/target/debug/examples/verify_update
+          if-no-files-found: error
+          retention-days: 1
   publish:
+    needs: prepare-verifier
+    permissions:
+      contents: write
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v7
         with:
-          workspaces: src-tauri
+          name: publication-signature-verifier
+          path: artifacts/publication-verifier
+      - run: chmod +x artifacts/publication-verifier/verify_update
       - name: Publish exact tested release artifacts
         env:
+          FAIRWAY_UPDATE_VERIFIER: ${{ github.workspace }}/artifacts/publication-verifier/verify_update
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           FAIRWAY_RUN_ID: ${{ inputs.candidate_run }}

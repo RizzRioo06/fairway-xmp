@@ -400,6 +400,7 @@ pub fn open(layout: &Layout, target: &str, ports: &crate::config::Ports) -> Resu
             .ok_or("This site's web root folder is missing. Edit the site to choose it again.")?,
         "coursework" => layout.www.to_string_lossy().into(),
         "logs" => layout.data.join("logs").to_string_lossy().into(),
+        "data" => layout.data.to_string_lossy().into(),
         "backups" => layout.data.join("backups").to_string_lossy().into(),
         "terminal" => {
             #[cfg(feature = "terminal")]

@@ -8,6 +8,8 @@ use rcgen::{
 use std::{fs, path::PathBuf, process::Command, time::Duration};
 use time::OffsetDateTime;
 
+mod policy;
+
 pub const HTTPS_PORT: u16 = 8443;
 const CA_NAME: &str = "Fairway XMP Local CA";
 
@@ -26,8 +28,16 @@ pub fn https_port() -> u16 {
     HTTPS_PORT
 }
 
-fn directory(layout: &Layout) -> PathBuf {
+fn state_directory(layout: &Layout) -> PathBuf {
     layout.data.join("tls")
+}
+fn directory(layout: &Layout) -> PathBuf {
+    let base = state_directory(layout);
+    if base.join("active-v2").is_file() {
+        base.join("upgrade/tls")
+    } else {
+        base
+    }
 }
 
 pub fn certificate(layout: &Layout) -> PathBuf {
@@ -47,7 +57,7 @@ fn root_key(layout: &Layout) -> PathBuf {
 }
 
 fn trust_marker(layout: &Layout) -> PathBuf {
-    directory(layout).join("trusted")
+    state_directory(layout).join("trusted")
 }
 
 pub fn trusted(layout: &Layout) -> bool {
@@ -70,18 +80,55 @@ fn ca_params() -> CertificateParams {
     let mut params = CertificateParams::default();
     params.distinguished_name = DistinguishedName::new();
     params.distinguished_name.push(DnType::CommonName, CA_NAME);
-    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
     params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     params.name_constraints = Some(NameConstraints {
         permitted_subtrees: vec![GeneralSubtree::DnsName(".test".into())],
-        excluded_subtrees: Vec::new(),
+        excluded_subtrees: vec![
+            GeneralSubtree::IpAddress("0.0.0.0/0".parse().unwrap()),
+            GeneralSubtree::IpAddress("::/0".parse().unwrap()),
+        ],
     });
     params.not_before = OffsetDateTime::now_utc() - time::Duration::days(1);
     params.not_after = OffsetDateTime::now_utc() + time::Duration::days(3650);
     params
 }
 
+struct MaterialLock(std::fs::File);
+impl MaterialLock {
+    fn acquire(layout: &Layout) -> Result<Self> {
+        let dir = state_directory(layout);
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let mut options = fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+                .map_err(|e| e.to_string())?;
+            options.mode(0o600);
+        }
+        let file = options
+            .open(dir.join("material.lock"))
+            .map_err(|e| e.to_string())?;
+        file.try_lock().map_err(|_| {
+            "Another HTTPS setup is in progress. Wait for it to finish, then retry.".to_string()
+        })?;
+        Ok(Self(file))
+    }
+}
+impl Drop for MaterialLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 pub fn ensure_certificate(layout: &Layout) -> Result<()> {
+    let _lock = MaterialLock::acquire(layout)?;
+    ensure_certificate_inner(layout)
+}
+fn ensure_certificate_inner(layout: &Layout) -> Result<()> {
     let dir = directory(layout);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     #[cfg(unix)]
@@ -104,6 +151,11 @@ pub fn ensure_certificate(layout: &Layout) -> Result<()> {
         atomic_write(&ca_cert, ca.pem().as_bytes())?;
         atomic_write(&dir.join("root-ca.der"), ca.der().as_ref())?;
     }
+    let ca_bytes = policy::read_certificate(&ca_cert)?;
+    policy::validate(&ca_bytes, true, false)?;
+    let ca_pair = KeyPair::from_pem(&fs::read_to_string(&ca_key).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    policy::key_matches(&ca_bytes, &ca_pair)?;
     let mut domains = layout
         .registered_projects()?
         .into_iter()
@@ -127,7 +179,12 @@ pub fn ensure_certificate(layout: &Layout) -> Result<()> {
                     .and_then(|modified| modified.elapsed().map_err(std::io::Error::other))
                     .is_ok_and(|age| age < Duration::from_secs(300 * 24 * 3600))
             });
-    if recent {
+    if recent
+        && fs::read(certificate(layout))
+            .ok()
+            .zip(fs::read_to_string(private_key(layout)).ok())
+            .is_some_and(|(cert, key)| policy::leaf_matches(&cert, &key, &ca_bytes, &domains))
+    {
         return Ok(());
     }
     let key = KeyPair::from_pem(&fs::read_to_string(&ca_key).map_err(|e| e.to_string())?)
@@ -157,7 +214,72 @@ pub fn ensure_certificate(layout: &Layout) -> Result<()> {
         &domains_path,
         &serde_json::to_vec(&domains).map_err(|e| e.to_string())?,
     )?;
+    crate::durability::sync_directory(&dir)?;
+    crate::durability::sync_directory(&layout.data)?;
     Ok(())
+}
+
+/// Old certificates remain selected until approval for the replacement succeeds.
+pub fn trust_update_needed(layout: &Layout) -> bool {
+    let Ok(bytes) = policy::read_certificate(&root_certificate(layout)) else {
+        return false;
+    };
+    policy::validate(&bytes, false, true).is_err()
+        || state_directory(layout).join("retired-pending").exists()
+}
+
+pub fn ensure_trust(layout: &Layout) -> Result<()> {
+    let _lock = MaterialLock::acquire(layout)?;
+    ensure_trust_with(layout, install_trust)
+}
+fn ensure_trust_with(layout: &Layout, install: impl Fn(&Layout) -> Result<()>) -> Result<()> {
+    ensure_certificate_inner(layout)?;
+    if policy::validate(
+        &policy::read_certificate(&root_certificate(layout))?,
+        false,
+        true,
+    )
+    .is_err()
+    {
+        let staged = Layout::at(
+            layout.home.clone(),
+            state_directory(layout).join("upgrade"),
+            layout.runtime.clone(),
+        );
+        fs::create_dir_all(&staged.data).map_err(|e| e.to_string())?;
+        staged.save_projects(&layout.registered_projects()?)?;
+        ensure_certificate_inner(&staged)?;
+        crate::durability::sync_tree(&staged.data)?;
+        install(&staged)?;
+        // Publish one pointer rather than overwriting a root/key/leaf quartet.
+        // If reload fails or the app exits, the retired root is still trusted.
+        atomic_write(&state_directory(layout).join("retired-pending"), b"pending")?;
+        crate::durability::sync_directory(&state_directory(layout))?;
+        atomic_write(&state_directory(layout).join("active-v2"), b"2")?;
+        atomic_write(&trust_marker(layout), b"trusted")?;
+        crate::durability::sync_directory(&state_directory(layout))?;
+        return Ok(());
+    }
+    install(layout)
+}
+
+/// Called only after the new Nginx configuration has been applied successfully.
+pub fn finish_trust_update(layout: &Layout) -> Result<()> {
+    let _lock = MaterialLock::acquire(layout)?;
+    finish_trust_update_with(layout, remove_certificate_trust)
+}
+fn finish_trust_update_with(
+    layout: &Layout,
+    remove: impl Fn(&Layout, &std::path::Path) -> Result<()>,
+) -> Result<()> {
+    let pending = state_directory(layout).join("retired-pending");
+    if !pending.exists() || !state_directory(layout).join("active-v2").exists() {
+        return Ok(());
+    }
+    let retired = state_directory(layout).join("root-ca.pem");
+    remove(layout, &retired)?;
+    fs::remove_file(pending).map_err(|e| e.to_string())?;
+    crate::durability::sync_directory(&state_directory(layout))
 }
 
 fn run(mut command: Command) -> Result<()> {
@@ -194,8 +316,13 @@ fn verify_macos_trust(layout: &Layout) -> Result<()> {
     run(verify)
 }
 
-pub fn ensure_trust(layout: &Layout) -> Result<()> {
-    ensure_certificate(layout)?;
+fn install_trust(layout: &Layout) -> Result<()> {
+    ensure_certificate_inner(layout)?;
+    policy::validate(
+        &policy::read_certificate(&root_certificate(layout))?,
+        false,
+        true,
+    )?;
     #[cfg(not(target_os = "macos"))]
     let root = root_certificate(layout);
     #[cfg(target_os = "macos")]
@@ -255,6 +382,7 @@ pub fn ensure_trust(layout: &Layout) -> Result<()> {
 }
 
 pub fn remove_trust(layout: &Layout) -> Result<()> {
+    let _lock = MaterialLock::acquire(layout)?;
     let root = root_certificate(layout);
     if !trust_marker(layout).exists() {
         return clear_https(layout);
@@ -264,6 +392,41 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
             "The local CA certificate is missing; certificate trust could not be removed.".into(),
         );
     }
+    remove_certificate_trust(layout, &root)?;
+    if state_directory(layout).join("retired-pending").exists() {
+        remove_certificate_trust(layout, &state_directory(layout).join("root-ca.pem"))?;
+        fs::remove_file(state_directory(layout).join("retired-pending"))
+            .map_err(|e| e.to_string())?;
+    }
+    fs::remove_file(trust_marker(layout)).map_err(|e| e.to_string())?;
+    clear_https(layout)
+}
+
+#[cfg(any(
+    target_os = "linux",
+    windows,
+    not(feature = "native-macos-trust"),
+    test
+))]
+fn certificate_hash(der: &[u8], legacy: bool) -> String {
+    use ring::digest::{digest, SHA1_FOR_LEGACY_USE_ONLY, SHA256};
+    digest(
+        if legacy {
+            &SHA1_FOR_LEGACY_USE_ONLY
+        } else {
+            &SHA256
+        },
+        der,
+    )
+    .as_ref()
+    .iter()
+    .map(|byte| format!("{byte:02X}"))
+    .collect()
+}
+fn remove_certificate_trust(layout: &Layout, root: &std::path::Path) -> Result<()> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = layout;
+    policy::validate(&policy::read_certificate(root)?, true, false)?;
     #[cfg(target_os = "macos")]
     {
         // Trust removal can prompt just like installation. The native call
@@ -279,38 +442,38 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
         #[cfg(feature = "desktop")]
         let _authorization = crate::desktop::authorization::begin()?;
         #[cfg(feature = "native-macos-trust")]
-        macos_native::remove(&keychain)?;
+        macos_native::remove_certificate(root, &keychain)?;
         #[cfg(not(feature = "native-macos-trust"))]
         {
-            // Delete every Fairway CA with its trust setting, including ones left by an earlier CA.
+            let der = policy::validate(&policy::read_certificate(root)?, true, false)?;
+            let hash = certificate_hash(&der, true);
             let mut find = Command::new("/usr/bin/security");
-            find.args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
-                .arg(&keychain);
-            // find-certificate exits non-zero when nothing matches.
-            let found = find.output().map_err(|e| e.to_string())?;
-            for hash in String::from_utf8_lossy(&found.stdout)
-                .lines()
-                .filter_map(|line| line.strip_prefix("SHA-1 hash: "))
-            {
-                let mut delete = Command::new("/usr/bin/security");
-                delete
-                    .args(["delete-certificate", "-t", "-Z", hash.trim()])
-                    .arg(&keychain);
-                run(delete).map_err(|e| {
-                    format!("Could not remove Fairway's local certificate trust: {e}")
-                })?;
+            let found = find
+                .args(["find-certificate", "-a", "-Z", "-c", CA_NAME])
+                .arg(&keychain)
+                .output()
+                .map_err(|e| e.to_string())?;
+            if !found.status.success() && found.status.code() != Some(44) {
+                return Err(String::from_utf8_lossy(&found.stderr).into());
             }
+            if !String::from_utf8_lossy(&found.stdout).lines().any(|line| {
+                line.strip_prefix("SHA-1 hash: ")
+                    .is_some_and(|saved| saved.trim() == hash)
+            }) {
+                return Ok(());
+            }
+            let mut delete = Command::new("/usr/bin/security");
+            delete
+                .args(["delete-certificate", "-t", "-Z", &hash])
+                .arg(&keychain);
+            run(delete)
+                .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;
         }
     }
     #[cfg(windows)]
     {
-        use ring::digest::{digest, SHA1_FOR_LEGACY_USE_ONLY};
-        let der = fs::read(directory(layout).join("root-ca.der")).map_err(|e| e.to_string())?;
-        let thumbprint = digest(&SHA1_FOR_LEGACY_USE_ONLY, &der)
-            .as_ref()
-            .iter()
-            .map(|byte| format!("{byte:02X}"))
-            .collect::<String>();
+        let der = policy::validate(&policy::read_certificate(root)?, true, false)?;
+        let thumbprint = certificate_hash(&der, true);
         let mut remove = crate::process::command("certutil.exe");
         remove.args(["-user", "-delstore", "Root", &thumbprint]);
         run(remove)
@@ -330,39 +493,93 @@ pub fn remove_trust(layout: &Layout) -> Result<()> {
         run(remove)
             .map_err(|e| format!("Could not remove Fairway's local certificate trust: {e}"))?;
     }
-    fs::remove_file(trust_marker(layout)).map_err(|e| e.to_string())?;
-    clear_https(layout)
+    Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 pub fn apply_linux_trust(root: &std::path::Path, remove: bool) -> Result<()> {
     if unsafe { libc::geteuid() } != 0 {
         return Err("Administrator permission is required to trust the local certificate.".into());
     }
-    if !root.is_file() || root.file_name().is_none_or(|name| name != "root-ca.pem") {
-        return Err("Invalid Fairway certificate path.".into());
-    }
-    let destination =
-        std::path::Path::new("/usr/local/share/ca-certificates/fairway-xmp-local.crt");
-    if destination.parent().is_some_and(std::path::Path::is_dir) {
-        if remove {
-            if destination.exists()
-                && fs::read(destination).map_err(|e| e.to_string())?
-                    == fs::read(root).map_err(|e| e.to_string())?
-            {
-                fs::remove_file(destination).map_err(|e| e.to_string())?;
-            }
-        } else {
-            fs::copy(root, destination).map_err(|e| e.to_string())?;
+    // Read once, without following links or blocking on special files. Every
+    // store operation below uses these validated bytes, never the supplied path.
+    let bytes = policy::read_certificate(root)?;
+    let der = policy::validate(&bytes, remove, !remove)?;
+    let destination = std::path::Path::new("/usr/local/share/ca-certificates");
+    use std::os::unix::fs::MetadataExt;
+    if destination.is_dir() && std::path::Path::new("/usr/sbin/update-ca-certificates").is_file() {
+        let parent = fs::metadata(destination).map_err(|e| e.to_string())?;
+        if parent.uid() != 0 || parent.mode() & 0o022 != 0 {
+            return Err("The system CA directory must be owned and writable only by root.".into());
         }
-        return run(Command::new("update-ca-certificates"));
+        update_linux_anchor(destination, &bytes, &der, remove)?;
+        let mut update = Command::new("/usr/sbin/update-ca-certificates");
+        update
+            .env_clear()
+            .env("PATH", "/usr/sbin:/usr/bin:/sbin:/bin")
+            .env("LANG", "C");
+        return run(update);
     }
-    let mut command = Command::new("trust");
+    struct Temporary(std::path::PathBuf);
+    impl Drop for Temporary {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let path = Temporary(
+        std::env::temp_dir().join(format!("fairway-ca-{:032x}.pem", rand::random::<u128>())),
+    );
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path.0)
+        .map_err(|e| e.to_string())?;
+    file.write_all(&bytes).map_err(|e| e.to_string())?;
+    let mut command = Command::new("/usr/bin/trust");
+    command
+        .env_clear()
+        .env("PATH", "/usr/sbin:/usr/bin:/sbin:/bin")
+        .env("LANG", "C");
     command
         .arg("anchor")
         .arg(if remove { "--remove" } else { "--store" })
-        .arg(root);
+        .arg(&path.0);
     run(command)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn update_linux_anchor(
+    destination: &std::path::Path,
+    bytes: &[u8],
+    der: &[u8],
+    remove: bool,
+) -> Result<()> {
+    let named = destination.join(format!("fairway-xmp-{}.crt", certificate_hash(der, false)));
+    if !remove {
+        atomic_write(&named, bytes)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&named, fs::Permissions::from_mode(0o644))
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    for path in [named, destination.join("fairway-xmp-local.crt")] {
+        if !path.exists() {
+            continue;
+        }
+        let existing = policy::read_certificate(&path)?;
+        // The legacy fixed filename may belong to another profile. Never remove
+        // it on the strength of its name alone.
+        if policy::validate(&existing, true, false).is_ok_and(|saved| saved == der) {
+            fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -387,3 +604,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "tls/boundary_tests.rs"]
+mod boundary_tests;

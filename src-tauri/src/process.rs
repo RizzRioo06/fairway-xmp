@@ -58,7 +58,18 @@ pub fn sql(mut cmd: Command, input: &str) -> Result<()> {
 }
 
 pub fn available(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).is_ok()
+    probe_port(port).is_ok()
+}
+
+fn probe_port(port: u16) -> std::io::Result<()> {
+    // Drop our temporary listener before probing for an existing one. On macOS,
+    // SO_REUSEADDR can let this bind succeed alongside a wildcard listener.
+    drop(TcpListener::bind(("127.0.0.1", port))?);
+    #[cfg(target_os = "macos")]
+    if connected(port) {
+        return Err(std::io::Error::from(std::io::ErrorKind::AddrInUse));
+    }
+    Ok(())
 }
 
 pub fn connected(port: u16) -> bool {
@@ -93,7 +104,7 @@ pub fn health(port: u16) -> bool {
 }
 
 pub fn ensure_port(port: u16, label: &str, excluded: &[u16]) -> Result<()> {
-    match TcpListener::bind(("127.0.0.1", port)) {
+    match probe_port(port) {
         Ok(_) => Ok(()),
         Err(error) => {
             let suggestion = (port.saturating_add(1)..=port.saturating_add(100))
@@ -151,8 +162,10 @@ fn port_owner(port: u16) -> String {
 pub struct OwnedProcess {
     child: Option<Child>,
     pid: u32,
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     start_time: Option<u64>,
+    #[cfg(windows)]
+    adopted_handle: Option<std::os::windows::io::OwnedHandle>,
     #[cfg(windows)]
     job: isize,
 }
@@ -177,7 +190,8 @@ impl OwnedProcess {
             let mut job = 0;
             if !protect_database {
                 unsafe {
-                    let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                    let name = windows_job_name(log);
+                    let handle = CreateJobObjectW(std::ptr::null(), name.as_ptr());
                     if !handle.is_null() {
                         let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
                         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -201,6 +215,7 @@ impl OwnedProcess {
                 child: Some(child),
                 pid,
                 job,
+                adopted_handle: None,
             })
         }
         #[cfg(not(windows))]
@@ -210,8 +225,7 @@ impl OwnedProcess {
             Ok(Self {
                 child: Some(child),
                 pid,
-                #[cfg(target_os = "linux")]
-                start_time: linux_start_time(pid),
+                start_time: None,
             })
         }
     }
@@ -220,11 +234,26 @@ impl OwnedProcess {
         match &mut self.child {
             Some(child) => matches!(child.try_wait(), Ok(None)),
             None => {
-                #[cfg(target_os = "linux")]
-                if self.start_time.is_none() || linux_start_time(self.pid) != self.start_time {
-                    return false;
+                #[cfg(unix)]
+                {
+                    if self.start_time.is_none() || process_start_time(self.pid) != self.start_time
+                    {
+                        return false;
+                    }
+                    pid_alive(self.pid)
                 }
-                pid_alive(self.pid)
+                #[cfg(windows)]
+                {
+                    use std::os::windows::io::AsRawHandle;
+                    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, GetProcessId};
+                    self.adopted_handle.as_ref().is_some_and(|handle| unsafe {
+                        let handle = handle.as_raw_handle() as _;
+                        let mut code = 0;
+                        GetProcessId(handle) == self.pid
+                            && GetExitCodeProcess(handle, &mut code) != 0
+                            && code == 259
+                    })
+                }
             }
         }
     }
@@ -237,11 +266,73 @@ impl OwnedProcess {
         Self {
             child: None,
             pid,
-            #[cfg(target_os = "linux")]
-            start_time: linux_start_time(pid),
+            #[cfg(unix)]
+            start_time: process_start_time(pid),
+            #[cfg(windows)]
+            adopted_handle: open_process(pid),
             #[cfg(windows)]
             job: 0,
         }
+    }
+
+    pub(crate) fn adopt_verified(pid: u32, matches: impl FnOnce() -> bool) -> Option<Self> {
+        // Capture identity before inspecting executable/configuration, then
+        // recheck it so a PID recycled during those checks cannot be adopted.
+        let mut owned = Self::adopt_database(pid);
+        (owned.alive() && matches() && owned.alive()).then_some(owned)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn adopt_job(pid: u32, log: &Path) -> Option<Self> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::*;
+        const JOB_OBJECT_QUERY: u32 = 0x0004;
+        const JOB_OBJECT_SET_ATTRIBUTES: u32 = 0x0002;
+        let mut owned = Self::adopt_database(pid);
+        let name = windows_job_name(log);
+        let job = unsafe {
+            OpenJobObjectW(
+                JOB_OBJECT_QUERY | JOB_OBJECT_SET_ATTRIBUTES,
+                0,
+                name.as_ptr(),
+            )
+        };
+        if job.is_null() {
+            return None;
+        }
+        owned.job = job as isize;
+        let mut member = 0;
+        let handle = owned.adopted_handle.as_ref()?;
+        if unsafe { IsProcessInJob(handle.as_raw_handle() as _, job, &mut member) } == 0
+            || member == 0
+            || !owned.alive()
+        {
+            return None;
+        }
+        Some(owned)
+    }
+
+    pub(crate) fn leave_running(&mut self) -> Result<()> {
+        #[cfg(windows)]
+        if self.job != 0 {
+            use windows_sys::Win32::System::JobObjects::*;
+            let info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+            if unsafe {
+                SetInformationJobObject(
+                    self.job as _,
+                    JobObjectExtendedLimitInformation,
+                    (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                    std::mem::size_of_val(&info) as u32,
+                )
+            } == 0
+            {
+                return Err(format!(
+                    "Could not preserve a service job: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn wait(&mut self, seconds: u64) -> bool {
@@ -252,7 +343,10 @@ impl OwnedProcess {
         !self.alive()
     }
 
-    pub fn graceful_signal(&self) -> Result<()> {
+    pub fn graceful_signal(&mut self) -> Result<()> {
+        if !self.alive() {
+            return Ok(());
+        }
         #[cfg(unix)]
         {
             if unsafe { libc::kill(self.pid as i32, libc::SIGQUIT) } != 0 {
@@ -264,6 +358,9 @@ impl OwnedProcess {
 
     // Only used for web/PHP processes. MySQL is never forcibly terminated.
     pub fn terminate_web(&mut self) -> Result<()> {
+        if !self.alive() {
+            return Ok(());
+        }
         #[cfg(unix)]
         {
             unsafe {
@@ -367,7 +464,7 @@ pub fn matches_database(pid: u32, executable: &Path, config: &Path) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn linux_start_time(pid: u32) -> Option<u64> {
+fn process_start_time(pid: u32) -> Option<u64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     stat.rsplit_once(')')?
         .1
@@ -375,6 +472,63 @@ fn linux_start_time(pid: u32) -> Option<u64> {
         .nth(19)?
         .parse()
         .ok()
+}
+
+#[cfg(target_os = "macos")]
+fn process_start_time(pid: u32) -> Option<u64> {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return None;
+    }
+    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
+    let read = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            size,
+        )
+    };
+    if read != size {
+        return None;
+    }
+    let info = unsafe { info.assume_init() };
+    info.pbi_start_tvsec
+        .checked_mul(1_000_000)?
+        .checked_add(info.pbi_start_tvusec)
+}
+
+#[cfg(windows)]
+fn open_process(pid: u32) -> Option<std::os::windows::io::OwnedHandle> {
+    use std::os::windows::io::FromRawHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if handle.is_null() {
+        None
+    } else {
+        // Keeping the process object open pins its identity through exit and
+        // prevents its PID being reused while a PID-based command is pending.
+        Some(unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(handle as _) })
+    }
+}
+
+#[cfg(windows)]
+fn windows_job_name(log: &Path) -> Vec<u16> {
+    // A stable per-installation/service name permits recovery after an explicit
+    // leave-running exit. Membership is checked against a pinned process handle.
+    let path = std::fs::canonicalize(log)
+        .unwrap_or_else(|_| log.into())
+        .to_string_lossy()
+        .to_lowercase();
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in path.as_bytes() {
+        hash = (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+    }
+    format!("Local\\FairwayXMP-{hash:016x}")
+        .encode_utf16()
+        .chain(Some(0))
+        .collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -594,13 +748,125 @@ mod tests {
         assert!(error.contains("Command failed"), "{error}");
         assert!(error.contains('7'), "{error}");
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     #[test]
     fn adopted_process_does_not_accept_a_reused_pid() {
         let mut owned = OwnedProcess::adopt_database(std::process::id());
         assert!(owned.alive());
+        assert!(owned.start_time.is_some());
         owned.start_time = owned.start_time.map(|stamp| stamp + 1);
         assert!(!owned.alive());
+    }
+
+    struct TestChild(Child);
+
+    impl TestChild {
+        fn new() -> Self {
+            #[cfg(unix)]
+            let child = command("/bin/sleep").arg("30").spawn().unwrap();
+            #[cfg(windows)]
+            let child = command("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 30",
+                ])
+                .spawn()
+                .unwrap();
+            Self(child)
+        }
+    }
+
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn verified_adoption_rechecks_identity_after_executable_validation() {
+        let mut child = TestChild::new();
+        let pid = child.0.id();
+        assert!(OwnedProcess::adopt_verified(pid, || false).is_none());
+        assert!(OwnedProcess::adopt_verified(pid, || true).is_some());
+        assert!(OwnedProcess::adopt_verified(pid, || {
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            true
+        })
+        .is_none());
+        assert!(OwnedProcess::adopt_verified(u32::MAX, || panic!(
+            "invalid PID must fail before validation"
+        ))
+        .is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_or_unverifiable_identity_never_receives_a_signal() {
+        let mut child = TestChild::new();
+        let mut owned = OwnedProcess::adopt_database(child.0.id());
+        assert!(owned.alive());
+        let start_time = owned.start_time.unwrap();
+        for identity in [Some(start_time + 1), None] {
+            owned.start_time = identity;
+            assert!(!owned.alive());
+            owned.graceful_signal().unwrap();
+            owned.terminate_web().unwrap();
+            assert!(child.0.try_wait().unwrap().is_none());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn adopted_windows_handle_rejects_exit_and_another_live_pid() {
+        let mut original = TestChild::new();
+        let mut other = TestChild::new();
+        let mut owned = OwnedProcess::adopt_database(original.0.id());
+        assert!(owned.alive());
+        original.0.kill().unwrap();
+        original.0.wait().unwrap();
+        assert!(!owned.alive());
+        owned.pid = other.0.id();
+        assert!(!owned.alive());
+        owned.terminate_web().unwrap();
+        assert!(other.0.try_wait().unwrap().is_none());
+        let mut unverified = OwnedProcess::adopt_database(other.0.id());
+        unverified.adopted_handle = None;
+        assert!(!unverified.alive());
+        unverified.terminate_web().unwrap();
+        assert!(other.0.try_wait().unwrap().is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn named_service_job_survives_explicit_leave_and_rejects_foreign_membership() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-job-recovery-{}", rand::random::<u64>()));
+        std::fs::create_dir(&root).unwrap();
+        let log = root.join("php-process.log");
+        let mut cmd = command("powershell.exe");
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Start-Sleep -Seconds 30",
+        ]);
+        let mut owned = OwnedProcess::spawn(cmd, &log, false).unwrap();
+        assert_ne!(owned.job, 0);
+        let pid = owned.pid();
+        owned.leave_running().unwrap();
+        drop(owned);
+        let mut recovered =
+            OwnedProcess::adopt_job(pid, &log).expect("left-running service was not recovered");
+        assert!(recovered.alive());
+        assert!(OwnedProcess::adopt_job(std::process::id(), &log).is_none());
+        assert!(OwnedProcess::adopt_job(pid, &root.join("nginx-process.log")).is_none());
+        recovered.terminate_web().unwrap();
+        drop(recovered);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(target_os = "macos")]
@@ -689,5 +955,72 @@ exit 7
         // The successful connection proves ensure_port left the owner alive.
         // Immediate rebinding after close is OS-dependent (pending TCP teardown).
         assert_eq!(listener.local_addr().unwrap().port(), port);
+    }
+
+    #[test]
+    fn wildcard_listener_is_detected_by_preflight_and_port_suggestions() {
+        let listener = TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(!available(port));
+        assert!(ensure_port(port, "MySQL", &[port])
+            .unwrap_err()
+            .contains("unavailable"));
+        assert!(connected(port));
+        assert_eq!(listener.local_addr().unwrap().port(), port);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn ipv6_listener(only_v6: bool) -> TcpListener {
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+        let fd = unsafe { libc::socket(libc::AF_INET6, libc::SOCK_STREAM, 0) };
+        assert!(fd >= 0, "{}", std::io::Error::last_os_error());
+        let socket = unsafe { OwnedFd::from_raw_fd(fd) };
+        for (level, name, value) in [
+            (libc::SOL_SOCKET, libc::SO_REUSEADDR, 1i32),
+            (libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, i32::from(only_v6)),
+        ] {
+            assert_eq!(
+                unsafe {
+                    libc::setsockopt(
+                        socket.as_raw_fd(),
+                        level,
+                        name,
+                        (&value as *const i32).cast(),
+                        std::mem::size_of_val(&value) as _,
+                    )
+                },
+                0
+            );
+        }
+        let mut address: libc::sockaddr_in6 = unsafe { std::mem::zeroed() };
+        address.sin6_len = std::mem::size_of_val(&address) as u8;
+        address.sin6_family = libc::AF_INET6 as _;
+        assert_eq!(
+            unsafe {
+                libc::bind(
+                    socket.as_raw_fd(),
+                    (&address as *const libc::sockaddr_in6).cast(),
+                    std::mem::size_of_val(&address) as _,
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { libc::listen(socket.as_raw_fd(), 16) }, 0);
+        TcpListener::from(socket)
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn dual_stack_wildcard_blocks_loopback_but_ipv6_only_does_not() {
+        let dual_stack = ipv6_listener(false);
+        let port = dual_stack.local_addr().unwrap().port();
+        assert!(!available(port));
+        assert!(ensure_port(port, "Website", &[port]).is_err());
+        assert!(connected(port));
+        let ipv6_only = ipv6_listener(true);
+        let port = ipv6_only.local_addr().unwrap().port();
+        assert!(available(port));
+        assert!(ensure_port(port, "Website", &[port]).is_ok());
     }
 }

@@ -5,7 +5,7 @@ import {
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
 import { canControl, invoke, isDesktop, isUiTest, listen, preview } from './bridge';
-import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, UpdateInfo, UpdateProgress } from './types';
+import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, StartupStatus, UpdateInfo, UpdateProgress } from './types';
 import HelpTip from './HelpTip';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
@@ -13,8 +13,9 @@ import MailPage from './MailPage';
 import LogsPage from './LogsPage';
 import { insideDocumentRoot, siteSaveMessage } from './sites';
 import type { TerminalLaunch } from './TerminalPage';
-import { WorkspaceProvider, WorkspaceFeedback, useMaximizedWorkspace } from './Workspace';
+import { WorkspaceProvider, WorkspaceFeedback, useMaximizedWorkspace, useRestoreWorkspace } from './Workspace';
 import { useModalFocus } from './modal-focus';
+import RecoveryBoundary from './RecoveryBoundary';
 
 const UiTestToolbar = isUiTest ? lazy(() => import('./ui-test/Toolbar')) : null;
 const TerminalPage = lazy(() => import('./TerminalPage'));
@@ -39,7 +40,7 @@ const viewTitle: Record<View, string> = {
   terminal: 'Terminal',
   logs: 'Logs',
 };
-type Notice = { text: string; kind: 'error' | 'success' } | null;
+type Notice = { text: string; kind: 'error' | 'success' | 'info'; topic?: 'address-approval' } | null;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -67,6 +68,7 @@ export default function App() {
 
 function AppContent() {
   const maximized = useMaximizedWorkspace();
+  const restoreWorkspace = useRestoreWorkspace();
   const [data, setData] = useState<Snapshot>(preview);
   const [view, setCurrentView] = useState<View>('environment');
   const navigation = useRef({ view: 'environment' as View, id: 0 });
@@ -113,6 +115,8 @@ function AppContent() {
   const [phpVersion, setPhpVersion] = useState(preview.phpVersion);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
+  const [updatePending, setUpdatePending] = useState(false);
+  const [startup, setStartup] = useState<StartupStatus | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectForm | null>(null);
   const [removing, setRemoving] = useState<Project | null>(null);
@@ -153,6 +157,9 @@ function AppContent() {
       if (fetching || operation.current || disposed || !canControl) return;
       fetching = true;
       try {
+        const status = await invoke<StartupStatus>('startup_status').catch(() => null);
+        if (!disposed) setStartup(status);
+        if (status?.blocking) return;
         const current = await invoke<Snapshot>('snapshot');
         if (!disposed) setData(current);
       } catch (error) {
@@ -166,20 +173,25 @@ function AppContent() {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
         setNoticeState(null); lastBackendError.current = null;
-        setUpdate(null); setUpdateProgress(null); setReport(null); setHelp(false); setCopied(null);
+        setUpdate(null); setUpdateProgress(null); setUpdatePending(false); setStartup(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
-      listen('fairway-status', payload => setData(payload as Snapshot)),
+      listen('fairway-status', payload => {
+        const current = payload as Snapshot; setData(current);
+        if (!current.domainsApprovalPending) setNoticeState(notice => notice?.topic === 'address-approval' ? null : notice);
+      }),
       listen('fairway-operation-started', payload => {
         backendOperation.current = true; setBackendBusy(String(payload));
       }),
       listen('fairway-operation-finished', () => {
         backendOperation.current = false; setBackendBusy(null);
-        setUpdateProgress(null);
       }),
       listen('fairway-update-progress', payload => setUpdateProgress(payload as UpdateProgress)),
       listen('fairway-error', payload => {
         setBusy(null); operation.current = false;
         reportBackendError(String(payload));
+      }),
+      listen('fairway-action-error', payload => {
+        setNoticeState({ kind: 'error', text: String(payload) });
       }),
       listen('fairway-shutdown', () => {
         backendOperation.current = true; setBackendBusy('Stopping services before quitting…');
@@ -225,6 +237,15 @@ function AppContent() {
     });
   }
 
+  async function installUpdate(version: string) {
+    if (updatePending || operation.current || backendOperation.current) return;
+    const origin = navigation.current.id;
+    setUpdatePending(true); setUpdateProgress({ phase: 'downloading', downloaded: 0 });
+    try { await invoke<void>('install_update', { version }); }
+    catch (error) { if (navigation.current.id === origin) setNotice({ kind: 'error', text: message(error) }); }
+    finally { setUpdatePending(false); setUpdateProgress(null); }
+  }
+
   function open(target: string) {
     if (target === 'mail') { setView('mail'); return; }
     if (target === 'terminal') { setTerminalOpened(true); setView('terminal'); setTerminalFocus(value => value + 1); return; }
@@ -261,7 +282,7 @@ function AppContent() {
         const current = await invoke<Snapshot>('save_project', { previous, project });
         setData(current); setProjectForm(null);
         const saved = current.projects.find(site => site.domain === project.domain);
-        setNotice({ kind: 'success', text: saved ? siteSaveMessage(saved, current) : `${project.name} saved.` });
+        setNotice(current.domainsApprovalPending && saved && !saved.domainReady ? null : { kind: 'success', text: saved ? siteSaveMessage(saved, current) : `${project.name} saved.` });
       } catch (error) {
         // A saved project with a pending hosts update is shown in the list with a retry.
         if (message(error).startsWith('The site was saved')) { setProjectForm(null); throw error; }
@@ -286,7 +307,7 @@ function AppContent() {
 
   const foldTitle = (label: string) => sidebarFolded ? label : undefined;
   return <div className={`app-shell${sidebarFolded ? ' sidebar-folded' : ''}`}>
-    <aside className="sidebar">
+    <aside className="sidebar" inert={startup?.blocking}>
       <a className="brand" href="#" onClick={event => { event.preventDefault(); setView('environment'); }} aria-label="Fairway XMP home" title={foldTitle('Fairway XMP')}>
         <span className="brand-mark"><Leaf size={23} strokeWidth={2.2} /></span><span className="brand-name">fairway<span className="brand-period">.</span><span className="brand-edition">XMP</span></span>
       </a>
@@ -317,10 +338,21 @@ function AppContent() {
       <div className="main-content">
         {UiTestToolbar && <Suspense fallback={null}><UiTestToolbar busy={!!busy} /></Suspense>}
         {!isDesktop && !isUiTest && <div className="preview-banner"><Code2 size={16} />Interface preview — open the desktop app to manage services.</div>}
-        {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><TerminalPage active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></Suspense></div>}
-        {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></Activity>}
+        {!!startup?.errors.length && <section className="settings-card startup-recovery" aria-label="Startup recovery">
+          <h2>Startup needs attention</h2>
+          <div className="startup-errors" role="alert">{startup.errors.map((error, index) => <p key={index}>{error}</p>)}</div>
+          <p>Your saved settings, credentials, projects, and databases have been kept. Correct the reported problem, then retry. Services from an earlier session may still be running.</p>
+          {startup.dataDir && <code className="document-root-path">{startup.dataDir}</code>}
+          <div className="button-row"><button className="primary" disabled={!!busy} onClick={() => { void run('Retrying startup…', async () => {
+            const status = await invoke<StartupStatus>('retry_startup'); setStartup(status);
+            if (!status.blocking) setData(await invoke<Snapshot>('snapshot'));
+          }); }}>Retry startup</button>{startup.dataDir && <button className="secondary" disabled={!!busy} onClick={() => open('data')}>Open data folder<FolderOpen size={15} /></button>}</div>
+        </section>}
+        {!startup?.blocking && <>
+        {terminalOpened && <div hidden={view !== 'terminal'}><Suspense fallback={<p>Loading terminal…</p>}><RecoveryBoundary onError={maximized === 'terminal' ? restoreWorkspace : undefined} name="Terminal" reload><TerminalPage macos={data.os === 'macos'} active={view === 'terminal'} busy={!!busy} focusRequest={terminalFocus} launch={terminalLaunch} /></RecoveryBoundary></Suspense></div>}
+        {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><RecoveryBoundary onError={maximized === 'data' ? restoreWorkspace : undefined} name="Data browser"><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></RecoveryBoundary></Activity>}
 
-        <div hidden={view !== 'logs'}><LogsPage active={view === 'logs'} busy={!!busy} services={data.services} projects={data.projects} request={logRequest} openFolder={() => open('logs')} /></div>
+        <div hidden={view !== 'logs'}><RecoveryBoundary onError={maximized === 'logs' ? restoreWorkspace : undefined} name="Logs"><LogsPage active={view === 'logs'} busy={!!busy} services={data.services} projects={data.projects} request={logRequest} openFolder={() => open('logs')} /></RecoveryBoundary></div>
 
         {view === 'environment' && <>
           <div className="page-heading"><div><h1>Environment</h1><p>Start and stop local services.</p></div><button className="primary" disabled={anyRunning ? !canControl || !!busy : !usable} onClick={() => serviceAction(anyRunning ? 'stop_all' : 'start_all')}>{busy ? <LoaderCircle className="spin" size={16} /> : anyRunning ? <Square size={14} /> : <Play size={15} fill="currentColor" />}{anyRunning ? 'Stop all' : 'Start all'}</button></div>
@@ -344,20 +376,25 @@ function AppContent() {
           <footer className="content-footer"><span><span className="status-dot running" />127.0.0.1 · Local access only</span><button onClick={() => setView('settings')}>Configure environment<Settings2 size={13} /></button></footer>
         </>}
 
-        {view === 'projects' && <SitesPage data={data} busy={!!busy} copied={copied}
+        {view === 'projects' && <RecoveryBoundary name="Sites"><SitesPage data={data} busy={!!busy} copied={copied}
           add={() => setProjectForm({ previous: null, name: '', domain: '', root: '', https: false, indexFallback: false, domainEdited: false, error: null })}
           edit={site => setProjectForm({ ...site, previous: site.domain, domainEdited: true, error: null })}
           remove={setRemoving} open={open} copy={(url, key) => { void copy(url, key); }} terminal={openSiteTerminal}
           start={() => serviceAction('start', 'nginx')} logs={() => showLog('nginx')}
           retry={() => { void run('Loading sites…', async () => { setData(await invoke<Snapshot>('snapshot')); }); }}
-          sync={() => { void run('Setting up site addresses…', async () => { setData(await invoke<Snapshot>('sync_domains')); setNotice({ kind: 'success', text: 'Site addresses are set up.' }); }); }}
+          sync={(checkApproval = false) => { void run(checkApproval ? 'Checking address approval…' : 'Setting up site addresses…', async () => {
+            const current = await invoke<Snapshot>('sync_domains', { checkApproval }); setData(current);
+            setNotice(current.domainsApprovalPending && checkApproval
+              ? { kind: 'info', topic: 'address-approval', text: 'macOS still reports that this app’s address helper needs approval. If Fairway is already allowed, turn it off and on again in Login Items & Extensions, then choose Check approval. Check the app location in Settings if you have more than one Fairway copy.' }
+              : current.domainsPending ? null : { kind: 'success', text: 'Site addresses are set up.' });
+          }); }}
           https={(site, enabled) => { if (enabled && !data.httpsTrusted) setSslSetup(site); else setHttps(site, enabled); }}
           removeTrust={() => { void run('Removing certificate trust…', async () => { setData(await invoke<Snapshot>('remove_https_trust')); setNotice({ kind: 'success', text: 'Fairway’s local certificate is no longer trusted.' }); }); }}
-        />}
+        /></RecoveryBoundary>}
 
-        {view === 'mail' && <MailPage data={data} busy={!!busy} settings={() => setMailSettings(true)}
+        {view === 'mail' && <RecoveryBoundary onError={maximized === 'mail' ? restoreWorkspace : undefined} name="Mail"><MailPage data={data} busy={!!busy} settings={() => setMailSettings(true)}
           start={() => serviceAction('start', 'mail')} stop={() => serviceAction('stop', 'mail')} logs={() => showLog('mail')}
-          open={() => { void run('Opening…', () => invoke<void>('open_target', { target: 'mail' })); }} />}
+          open={() => { void run('Opening…', () => invoke<void>('open_target', { target: 'mail' })); }} /></RecoveryBoundary>}
 
         {view === 'settings' && <>
           <div className="page-heading"><div><h1>Settings</h1><p>Service ports, PHP version, and command-line tools.</p></div></div>
@@ -396,7 +433,7 @@ function AppContent() {
 
         {view === 'updates' && <>
           <div className="page-heading"><div><h1>Updates</h1><p>Installed versions and available updates.</p></div></div>
-          <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer', 'mailpit'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : name === 'mailpit' ? 'Mailpit' : 'Composer'}</span><code>{name === 'php' ? selectedPhp ?? 'Unavailable' : versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>{update?.configured === false ? 'Download a newer installer from View downloads. Back up your databases, stop all services, and quit Fairway XMP before installing. Your projects and database data are kept.' : 'Updates download and verify while your services keep running. Before installing, Fairway XMP backs up your databases, stops services and terminal sessions, then restarts. Your projects, saved sites, and settings are kept.'}</p><div className="button-row update-actions"><button className="primary" disabled={!canControl || !!busy} onClick={() => { void run('Checking for updates…', async () => {
+          <section className="settings-card"><div className="card-title"><h2>Fairway XMP {data.version}</h2><span className="status-label">Installed version</span></div><div className="runtime-list">{['php', 'nginx', 'mysql', 'phpmyadmin', 'composer', 'mailpit'].map(name => <div key={name}><span>{name === 'php' ? 'PHP' : name === 'mysql' ? 'MySQL' : name === 'phpmyadmin' ? 'phpMyAdmin' : name === 'nginx' ? 'Nginx' : name === 'mailpit' ? 'Mailpit' : 'Composer'}</span><code>{name === 'php' ? selectedPhp ?? 'Unavailable' : versions?.[name] ?? 'Unavailable'}</code></div>)}</div><p>{update?.configured === false ? 'Download a newer installer from View downloads. Back up your databases, stop all services, and quit Fairway XMP before installing. Your projects and database data are kept.' : 'Updates download and verify while your services keep running. Before installing, Fairway XMP backs up your databases, stops services and terminal sessions, then restarts. Your projects, saved sites, and settings are kept.'}</p><div className="button-row update-actions"><button className="primary" disabled={!canControl || !!busy || updatePending} onClick={() => { void run('Checking for updates…', async () => {
             const result = await invoke<UpdateInfo>('check_update'); setUpdate(result);
             if (result.configured && !result.version) setNotice({ kind: 'success', text: 'You’re using the latest available release.' });
             if (!result.configured) setNotice({ kind: 'success', text: 'This version uses manual updates. Choose View downloads to find a newer installer.' });
@@ -404,13 +441,14 @@ function AppContent() {
             <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('releases')}>View downloads<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('source')}>Source code<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('issues')}>Get help<ExternalLink size={15} /></button></div>
             {update && !update.configured && <p className="settings-hint">Visit the downloads page to see available releases.</p>}
             {updateProgress && <div className="update-progress" role="status"><span>{updateProgress.phase === 'downloading' ? `Downloading update${updateProgress.total ? ` · ${Math.min(100, Math.floor((updateProgress.downloaded ?? 0) / updateProgress.total * 100))}%` : ''}…` : updateProgress.phase === 'verifying' ? 'Verifying update…' : updateProgress.phase === 'preparing' ? 'Backing up databases and stopping services…' : 'Installing update and restarting…'}</span>{updateProgress.phase === 'downloading' && <progress aria-label="Update download" value={updateProgress.total ? updateProgress.downloaded ?? 0 : undefined} max={updateProgress.total ?? undefined} />}</div>}
-            {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy} onClick={() => { void run('Downloading update…', async () => { setUpdateProgress({ phase: 'downloading', downloaded: 0 }); try { await invoke<void>('install_update', { version: update.version }); } finally { setUpdateProgress(null); } }); }}>Install update</button></div>}
+            {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy || updatePending} onClick={() => { void installUpdate(update.version!); }}>Install update</button></div>}
           </section>
+        </>}
         </>}
       </div>
       <WorkspaceFeedback><div className={`operation-notice${notice ? ` notice ${notice.kind}` : ''}`}>
         <div className="operation-notice-message">
-          <div role={notice?.kind === 'success' ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice?.kind === 'success' ? notice.text : null}</div>
+          <div role={notice && notice.kind !== 'error' ? 'status' : undefined} aria-live="polite" aria-atomic="true">{notice && notice.kind !== 'error' ? notice.text : null}</div>
           <div role={notice?.kind === 'error' ? 'alert' : undefined} aria-live="assertive" aria-atomic="true">{notice?.kind === 'error' ? notice.text : null}</div>
         </div>
         {notice && <button aria-label="Dismiss message" onClick={() => setNoticeState(null)}><X size={17} /></button>}

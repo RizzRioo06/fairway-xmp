@@ -6,6 +6,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { canControl, invoke, isUiTest } from './bridge';
 import Workspace, { MaximizeWorkspace } from './Workspace';
 import { useModalFocus } from './modal-focus';
+import { terminalShortcut } from './terminal-shortcuts';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 
@@ -68,7 +69,7 @@ function useDismissDetails(ref: RefObject<HTMLDetailsElement | null>, active: bo
   }, [ref, active]);
 }
 
-export default function TerminalPage({ active, busy, focusRequest = 0, launch = null }: { active: boolean; busy: boolean; focusRequest?: number; launch?: TerminalLaunch | null }) {
+export default function TerminalPage({ active, busy, macos, focusRequest = 0, launch = null }: { active: boolean; busy: boolean; macos: boolean; focusRequest?: number; launch?: TerminalLaunch | null }) {
   const [workspace] = useState(() => crypto.randomUUID());
   const [rememberHistory, setRememberHistory] = useState(savedHistory);
   const [tabs, setTabs] = useState<Tab[]>(() => [{ key: crypto.randomUUID(), slot: 0, folder: launch?.folder ?? null, label: launch?.label }]);
@@ -179,7 +180,7 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
         <MaximizeWorkspace id="terminal" title="Terminal" />
       </div>}
       {tabs.map(tab => <div key={tab.key} id={`terminal-panel-${tab.slot}`} className="terminal-tab-panel" role="tabpanel" aria-labelledby={canControl ? `terminal-tab-${tab.slot}` : undefined} hidden={activeSlot !== tab.slot}>
-        <TerminalSession active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} setRememberHistory={checked => {
+        <TerminalSession macos={macos} active={active && activeSlot === tab.slot} focusInput={focusInput} focusRequest={focusRequest} rememberHistory={rememberHistory} setRememberHistory={checked => {
           setRememberHistory(checked);
           try { localStorage.setItem('fairway-terminal-history', String(checked)); } catch { /* Optional preference. */ }
         }} historySupported={context.historySupported} defaultDirectory={context.defaultDirectory} busy={busy} workspace={workspace} tab={tab} closeTab={closeTab} closeBySlot={closeBySlot} externalBySlot={externalBySlot} reportStatus={reportStatus} reportNotice={reportNotice} retryBySlot={retryBySlot} clearErrorBySlot={clearErrorBySlot} />
@@ -189,7 +190,8 @@ export default function TerminalPage({ active, busy, focusRequest = 0, launch = 
   </Workspace>;
 }
 
-function TerminalSession({ active, focusInput, focusRequest, rememberHistory, setRememberHistory, historySupported, defaultDirectory, busy, workspace, tab, closeTab, closeBySlot, externalBySlot, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
+function TerminalSession({ macos, active, focusInput, focusRequest, rememberHistory, setRememberHistory, historySupported, defaultDirectory, busy, workspace, tab, closeTab, closeBySlot, externalBySlot, reportStatus, reportNotice, retryBySlot, clearErrorBySlot }: {
+  macos: boolean;
   active: boolean; focusInput: boolean; focusRequest: number; rememberHistory: boolean; setRememberHistory: (checked: boolean) => void; historySupported: boolean; defaultDirectory: string; busy: boolean; workspace: string; tab: Tab;
   closeTab: (slot: number) => void; closeBySlot: { current: Record<number, () => void> }; externalBySlot: { current: Record<number, () => void> }; reportStatus: (slot: number, status: Status) => void;
   reportNotice: (slot: number, notice: SlotNotice) => void;
@@ -473,12 +475,12 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, se
 
   return <section className="terminal-page" aria-label="Embedded terminal" onKeyDownCapture={event => {
     if (!active || confirm || !canControl) return;
-    const modifier = event.metaKey || event.ctrlKey;
-    if (modifier && ['f', '+', '=', '-', '0'].includes(event.key.toLowerCase())) {
+    const shortcut = terminalShortcut(event, macos);
+    if (shortcut) {
       event.preventDefault(); event.stopPropagation();
-      if (event.key.toLowerCase() === 'f') { setSearchOpen(true); searchInput.current?.focus(); searchInput.current?.select(); }
-      else if (event.key === '0') resetZoom();
-      else zoom(event.key === '-' ? -1 : 1);
+      if (shortcut === 'find') { setSearchOpen(true); searchInput.current?.focus(); searchInput.current?.select(); }
+      else if (shortcut === 'reset') resetZoom();
+      else zoom(shortcut === 'decrease' ? -1 : 1);
     } else if (event.key === 'Escape' && searchOpen && event.target === searchInput.current) {
       event.preventDefault(); event.stopPropagation();
       closeSearch();
@@ -489,13 +491,13 @@ function TerminalSession({ active, focusInput, focusRequest, rememberHistory, se
       <summary aria-label="Terminal options" title="Terminal options" onClick={() => setContextPosition(null)}><MoreHorizontal size={18} /></summary>
       <div className="terminal-popover terminal-options" style={contextPosition ? { position: 'fixed', ...contextPosition, right: 'auto', maxWidth: 'calc(100vw - 24px)' } : undefined}>
         <div className="terminal-menu-label">{info?.shell ?? 'Local shell'}</div>
-        <button onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; setSearchOpen(true); }}><Search size={14} />Find output<span className="terminal-shortcut">⌘/Ctrl F</span></button>
+        <button onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; setSearchOpen(true); }}><Search size={14} />Find output<span className="terminal-shortcut">{macos ? '⌘ F' : 'Ctrl+Shift+F'}</span></button>
         <button onClick={() => { terminal.current?.clear(); if (toolsMenu.current) toolsMenu.current.open = false; terminal.current?.focus(); }}><Eraser size={14} />Clear output</button>
         <button disabled={!hasSelection} onClick={() => { void clipboard('copy'); }}>{copied ? <Check size={14} /> : <Copy size={14} />}Copy</button>
         <button disabled={status !== 'running'} onClick={() => { if (toolsMenu.current) toolsMenu.current.open = false; void clipboard('paste'); }}><Clipboard size={14} />Paste</button>
         <div className="terminal-zoom terminal-menu-divider" role="group" aria-label="Terminal text size">
           <span>Text size</span><button aria-label="Decrease terminal text size" disabled={fontSize <= 10} onClick={() => zoom(-1)}><Minus size={14} /></button>
-          <button className="terminal-font-size" aria-label={`Reset terminal text size (${fontSize} pixels)`} title="Reset text size (Ctrl/Cmd+0)" onClick={resetZoom}>{fontSize} px</button>
+          <button className="terminal-font-size" aria-label={`Reset terminal text size (${fontSize} pixels)`} title={`Reset text size (${macos ? '⌘+0' : 'Ctrl+Shift+0'})`} onClick={resetZoom}>{fontSize} px</button>
           <button aria-label="Increase terminal text size" disabled={fontSize >= 24} onClick={() => zoom(1)}><Plus size={14} /></button>
         </div>
         {historySupported && <label className="terminal-history terminal-menu-divider"><input type="checkbox" checked={rememberHistory} onChange={event => setRememberHistory(event.target.checked)} /><span>Remember commands<small>Applies to new terminals. A leading space skips saving.</small></span></label>}

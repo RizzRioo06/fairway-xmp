@@ -679,8 +679,12 @@ fn nginx_config(layout: &Layout, ports: &Ports, projects: &[ProjectConfig]) -> S
             nginx_variable_path(&crate::tls::certificate(layout)), nginx_variable_path(&crate::tls::private_key(layout))));
         format!("{http}{https}")
     }).collect::<String>();
+    let mut rejected = format!("server {{ listen 127.0.0.1:{} default_server; server_name _; return 444; }}\nserver {{ listen 127.0.0.1:{} default_server; server_name _; return 444; }}\n", ports.website, ports.phpmyadmin);
+    if projects.iter().any(|project| project.https) {
+        rejected.push_str(&format!("server {{ listen 127.0.0.1:{} ssl default_server; ssl_reject_handshake on; server_name _; return 444; }}\n", crate::tls::https_port()));
+    }
     format!(
-        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\ngeo $fairway_dollar {{ default \"$\"; }}\nmap $request_uri $fairway_request_path {{ ~^([^?]*) $1; default $uri; }}\nlog_format fairway escape=json '{{\"time\":\"$time_iso8601\",\"method\":\"$request_method\",\"uri\":\"$fairway_request_path\",\"status\":\"$status\",\"host\":\"$host\",\"port\":\"$server_port\",\"scheme\":\"$scheme\",\"duration\":\"$request_time\"}}';\naccess_log {} fairway;\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
+        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\ngeo $fairway_dollar {{ default \"$\"; }}\nmap $request_uri $fairway_request_path {{ ~^([^?]*) $1; default $uri; }}\nlog_format fairway escape=json '{{\"time\":\"$time_iso8601\",\"method\":\"$request_method\",\"uri\":\"$fairway_request_path\",\"status\":\"$status\",\"host\":\"$host\",\"port\":\"$server_port\",\"scheme\":\"$scheme\",\"duration\":\"$request_time\"}}';\naccess_log {} fairway;\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\n{rejected}server {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
         nginx_path(&layout.data.join("nginx.pid")), nginx_path(&layout.data.join("logs/nginx.log")),
         nginx_path(&layout.runtime.join("nginx/conf/mime.types")), nginx_variable_path(&layout.data.join("logs/access.log")),
         nginx_path(&layout.data.join("tmp/client")), nginx_path(&layout.data.join("tmp/fastcgi")),
@@ -909,7 +913,10 @@ mod tests {
         layout.save_projects(&projects).unwrap();
         assert_eq!(layout.registered_projects().unwrap(), projects);
         let nginx = nginx_config(&layout, &Ports::default(), &projects);
-        let localhost = format!("server_name localhost; root {}", nginx_path(&layout.www));
+        let localhost = format!(
+            "server_name localhost 127.0.0.1; root {}",
+            nginx_path(&layout.www)
+        );
         assert!(nginx.find(&localhost) < nginx.find("server_name shop.test"));
         assert!(nginx.contains(&format!(
             "server_name shop.test; root {}",

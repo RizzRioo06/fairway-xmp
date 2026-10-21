@@ -9,12 +9,13 @@ type Props = {
   add: () => void; edit: (site: Project) => void; remove: (site: Project) => void;
   open: (target: string) => void; copy: (url: string, key: string) => void;
   terminal: (site: Project, parent: boolean) => void;
-  start: () => void; logs: () => void; sync: () => void; retry: () => void;
+  start: () => void; logs: () => void; sync: (checkApproval?: boolean) => void; retry: () => void;
   https: (site: Project, enabled: boolean) => void; removeTrust: () => void;
 };
 
 export default function SitesPage({ data, busy, copied, add, edit, remove, open, copy, terminal, start, logs, sync, retry, https, removeTrust }: Props) {
   const usable = canControl && data.runtimeReady && !busy && !data.sitesError;
+  const httpsSite = data.projects.find(site => site.https);
   const server = data.services.find(service => service.id === 'nginx');
   return <div className="sites-page">
     <div className="page-heading"><div><h1>Your sites</h1><p>Local <code>.test</code> addresses and web roots.</p></div><button className="primary" disabled={!usable} onClick={add}><Plus size={15} />Add site</button></div>
@@ -25,7 +26,8 @@ export default function SitesPage({ data, busy, copied, add, edit, remove, open,
     {!data.runtimeReady && canControl && <div className="notice error" role="alert">The bundled web runtime is missing. Reinstall Fairway XMP to restore it. Your site files and saved registrations will be kept.</div>}
     {server?.message && <div className="notice error" role="alert">{server.message}</div>}
     {data.sitesError ? <div className="sites-load-error" role="alert"><h2>Your saved sites couldn’t be loaded</h2><p>Your site files haven’t been changed. Retry, or use these details when asking for help. Make a copy of the saved list before repairing it.</p><details><summary>Error details</summary><p>{data.sitesError}</p><p>Saved list: <code>{data.dataDir}{data.os === 'windows' ? '\\' : '/'}sites.json</code></p></details><button className="secondary" disabled={busy || !canControl} onClick={retry}>Retry loading sites</button></div> : <>
-      {data.domainsPending && <div className="project-pending" role="status"><span>Finish address setup to open the marked sites. Your computer will ask for administrator permission.</span><button className="secondary" disabled={!usable} onClick={sync}>Set up addresses</button></div>}
+      {data.domainsPending && <div className="project-pending" role="status"><span>{data.domainsApprovalPending ? 'Allow Fairway XMP in System Settings → General → Login Items & Extensions. Your sites are saved. Once macOS enables the helper, Fairway will finish address setup. After allowing it, choose Check approval if needed.' : 'Finish address setup to open the marked sites. Your computer will ask for administrator permission.'}</span><div className="project-pending-actions">{data.domainsApprovalPending && <button className="primary" disabled={!usable} onClick={() => sync(true)}>Check approval</button>}<button className="secondary" disabled={!usable} onClick={() => sync(false)}>{data.domainsApprovalPending ? 'Open System Settings' : 'Set up addresses'}</button></div></div>}
+      {data.httpsTrustUpdate && httpsSite && <div className="project-pending"><span>Update the local HTTPS certificate policy. Existing sites stay enabled while this computer approves the replacement.</span><button className="secondary" disabled={!usable} onClick={() => https(httpsSite, true)}>Update certificate trust</button></div>}
       {data.projects.length === 0 ? <section className="sites-empty"><FolderOpen size={26} /><h2>No sites yet.</h2><p>Add an existing project folder to open it at an address such as <code>http://shop.test:{data.ports.website}/</code>. Adding a site keeps your files where they are.</p></section> : <ul className="sites-list" aria-label="Saved sites">{data.projects.map(site => {
         const status = siteStatus(site, data), ready = status === 'Ready to open';
         const url = siteUrl(site, data.ports.website);
@@ -40,7 +42,8 @@ export default function SitesPage({ data, busy, copied, add, edit, remove, open,
           <div className="site-address-row"><code>{site.https && <Lock size={13} aria-label="HTTPS" />}{url}</code><div className="site-address-actions"><button className="secondary" aria-label={`Open ${site.name}`} disabled={!ready || busy || !canControl} onClick={() => open(`project:${site.domain}`)}><ExternalLink size={14} />Open</button><button className="icon-button" aria-label={`Copy URL for ${site.name}`} title="Copy URL" onClick={() => copy(url, site.domain)}>{copied === site.domain ? <Check size={16} /> : <Clipboard size={16} />}</button></div></div>
           <p className="site-root"><span>Web root</span><code>{site.root}</code></p>
           {!site.available && <p className="site-warning">The web root folder is missing. Edit this site to choose its new location.</p>}
-          {status === 'HTTPS setup needed' && <button className="secondary" disabled={!usable} onClick={() => https(site, true)}>Set up HTTPS</button>}
+
+          {status === 'HTTPS setup needed'  && <button className="secondary" disabled={!usable} onClick={() => https(site, true)}>Set up HTTPS</button>}
           <div className="site-options"><label className="ssl-toggle"><input type="checkbox" role="switch" aria-label={`HTTPS for ${site.name}`} checked={site.https} disabled={!usable || (!site.https && (!site.available || !site.domainReady))} onChange={event => https(site, event.target.checked)} /><span className="ssl-track" aria-hidden="true" /><span>HTTPS</span></label><span>{site.indexFallback ? 'Missing paths route to index.php' : 'Serves files directly'}</span></div>
         </li>;
       })}</ul>}

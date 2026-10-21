@@ -16,7 +16,7 @@ export default function ActionMenu({ label, disabled, actions, className = '' }:
     return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
   return <div className={`db-action-menu ${className}`} ref={root} onKeyDown={event => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }); return; }
+    if (open && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }); return; }
     if (!open) { if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); } return; }
     if (event.key === 'Tab') { setOpen(false); return; }
     const items = Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[role^=menuitem]:not(:disabled)') ?? []);

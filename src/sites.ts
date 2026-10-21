@@ -6,7 +6,7 @@ export function siteUrl(site: ProjectConfig, websitePort: number) {
 
 export function siteStatus(site: Project, data: Snapshot) {
   if (!site.available) return 'Folder missing';
-  if (!site.domainReady) return 'Address setup needed';
+  if (!site.domainReady) return data.domainsApprovalPending ? 'Waiting for macOS approval' : 'Address setup needed';
   if (!data.runtimeReady) return 'Web runtime missing';
   if (site.https && !data.httpsTrusted) return 'HTTPS setup needed';
   const server = data.services.find(service => service.id === 'nginx');

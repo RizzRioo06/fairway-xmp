@@ -2,6 +2,7 @@ pub mod config;
 pub mod data_browser;
 pub mod database;
 pub mod diagnostics;
+mod durability;
 pub mod hosts;
 pub mod integration;
 pub mod logs;
@@ -19,6 +20,9 @@ pub mod cli;
 
 #[cfg(any(feature = "desktop", test))]
 mod lifecycle;
+
+#[cfg(feature = "desktop")]
+mod startup;
 
 #[cfg(feature = "desktop")]
 mod tray;

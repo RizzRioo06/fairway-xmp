@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronLeft, ChevronRight, Database, Eye, FolderOpen, LoaderCircle, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { invoke, listen } from '../bridge';
 import Dialog from './Dialog';
 import ColumnFields from './ColumnFields';
 import RowFields, { initialInsertValues } from './RowFields';
 import RowViewer from './RowViewer';
+import { largeField, type CellChunk, type ReadCell } from './row-values';
 import TableWorkspace from './TableWorkspace';
 import ActionMenu from './ActionMenu';
 import HelpTip from '../HelpTip';
@@ -12,11 +13,11 @@ import Workspace, { MaximizeWorkspace, useMaximizedWorkspace } from '../Workspac
 import IndexFields, { indexableColumns, suggestedIndexName, type IndexDefinition } from './IndexFields';
 import SchemaDetails from './SchemaDetails';
 import { summarizeQueryResults } from './query-results';
-import { editableColumn, fromColumn, newColumn, type Column, type Definition, type Page, type QueryResult, type Row, type Structure, type Table, type TableIndex } from './types';
+import { editableColumn, fromColumn, newColumn, type Column, type Definition, type LargeFields, type RowRef, type Page, type QueryResult, type Row, type Structure, type Table, type TableIndex } from './types';
 import './data.css';
 
 type EditKind = 'import_sql' | 'create_database' | 'rename_database' | 'drop_database' | 'create_table' | 'rename_table' | 'drop_table' | 'add_column' | 'change_column' | 'drop_column' | 'create_index' | 'drop_index' | 'insert' | 'update' | 'delete';
-type Edit = { kind: EditKind; path?: string; row?: Row; column?: Column; index?: TableIndex };
+type Edit = { kind: EditKind; path?: string; row?: Row; column?: Column; index?: TableIndex; rowRef?: RowRef; largeFields?: LargeFields };
 const titles: Record<EditKind, string> = { import_sql: 'Import SQL', create_database: 'Create database', rename_database: 'Rename database', drop_database: 'Delete database', create_table: 'Create table', rename_table: 'Rename table', drop_table: 'Delete table', add_column: 'Add column', change_column: 'Edit column', drop_column: 'Delete column', create_index: 'Create index', drop_index: 'Remove index', insert: 'Insert row', update: 'Edit row', delete: 'Delete row' };
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 const idColumn = (): Definition => ({ ...newColumn('id'), type: 'BIGINT', nullable: false, primary: true, autoIncrement: true });
@@ -34,6 +35,7 @@ function recentFiles(): string[] {
 export default function DataBrowser({ ready, busy: appBusy, start, open }: { ready: boolean; busy: boolean; start: () => void; open: (target: string) => void }) {
   const maximized = useMaximizedWorkspace() === 'data';
   const [source, setSource] = useState<Source>({ driver: 'mysql' });
+  const selectedSource = useRef(source);
   const [recent, setRecent] = useState(recentFiles);
   const sqlite = source.driver === 'sqlite';
   const sqlitePath = sqlite ? source.path : null;
@@ -51,10 +53,11 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const [importPhase, setImportPhase] = useState<'working' | 'backup' | 'import' | 'canceling' | 'refreshing' | null>(null);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
   const [edit, setEdit] = useState<Edit | null>(null);
-  const [viewedRow, setViewedRow] = useState<{ row: Row; columns: Column[]; table: string; database: string; source: Source; position: number } | null>(null);
+  const [viewedRow, setViewedRow] = useState<{ row: Row; columns: Column[]; table: string; database: string; source: Source; position: number; rowRef?: RowRef; largeFields?: LargeFields } | null>(null);
   const [name, setName] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [definitions, setDefinitions] = useState<Definition[]>([]);
+  const [fieldLoading, setFieldLoading] = useState(false);
   const [values, setValues] = useState<Row>({});
   const [indexDefinition, setIndexDefinition] = useState<IndexDefinition>({ name: '', unique: false, columns: [] });
   const [sort, setSort] = useState({ sort: '', direction: 'ASC' });
@@ -77,10 +80,16 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
   const writable = page?.kind === 'BASE TABLE';
   const canEdit = writable && !!page?.key.length;
 
-  async function request<T>(body: Record<string, unknown>, targetSource = source): Promise<T> {
+  async function request<T>(body: Record<string, unknown>, targetSource = source, signal?: AbortSignal): Promise<T> {
+    signal?.throwIfAborted();
     const id = crypto.randomUUID(); job.current = id;
+    const cancel = () => { void invoke('cancel_data_browser', { id }).catch(() => {}); };
+    signal?.addEventListener('abort', cancel, { once: true });
     try { return await invoke<T>('data_browser', { id, request: { ...body, ...targetSource } }); }
-    finally { if (job.current === id) job.current = null; }
+    finally { signal?.removeEventListener('abort', cancel); if (job.current === id) job.current = null; }
+  }
+  function cellReader(db: string, tbl: string, target: Source, rowRef?: RowRef): ReadCell | undefined {
+    return rowRef ? (column, offset, signal) => request<CellChunk>({ op: 'cell', database: db, table: tbl, rowRef, column, offset }, target, signal) : undefined;
   }
   async function run(label: string, action: () => Promise<void>) {
     if (active.current) return;
@@ -133,16 +142,23 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     try { localStorage.setItem(recentKey, JSON.stringify(paths)); } catch { /* Browsing still works without local storage. */ }
   }
   async function switchSource(next: Source) {
-    const opened = next.driver === 'sqlite' ? next.path : null;
-    if ((next.driver === 'mysql' && !ready) || (next.driver === 'sqlite' && !opened)) {
-      setDatabases([]); setDatabase(''); setTables([]); setTable(''); setPage(null); setStructure(null); setCatalogLoaded(false);
-      setTableError(null);
-    } else await load(next.driver === 'mysql' ? mysqlSelection.current.database : '', next.driver === 'mysql' ? mysqlSelection.current.table : '', next);
-    setSource(next); setPane('rows'); setQuery(null); setHistory([]);
-    setSql(next.driver === 'sqlite' ? 'SELECT sqlite_version();' : 'SELECT VERSION();');
-    if (opened) {
-      restoreRecent.current = true;
-      remember([opened, ...recent.filter(path => path !== opened)].slice(0, 6));
+    const previous = selectedSource.current;
+    selectedSource.current = next;
+    try {
+      const opened = next.driver === 'sqlite' ? next.path : null;
+      if ((next.driver === 'mysql' && !ready) || (next.driver === 'sqlite' && !opened)) {
+        setDatabases([]); setDatabase(''); setTables([]); setTable(''); setPage(null); setStructure(null); setCatalogLoaded(false);
+        setTableError(null);
+      } else await load(next.driver === 'mysql' ? mysqlSelection.current.database : '', next.driver === 'mysql' ? mysqlSelection.current.table : '', next);
+      setSource(next); setPane('rows'); setQuery(null); setHistory([]);
+      setSql(next.driver === 'sqlite' ? 'SELECT sqlite_version();' : 'SELECT VERSION();');
+      if (opened) {
+        restoreRecent.current = true;
+        remember([opened, ...recent.filter(path => path !== opened)].slice(0, 6));
+      }
+    } catch (error) {
+      selectedSource.current = previous;
+      throw error;
     }
   }
   function selectMysql() {
@@ -191,6 +207,15 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     const timer = window.setTimeout(() => setShowPending(true), 200);
     return () => window.clearTimeout(timer);
   }, [pending, browsing]);
+  const refreshCurrentSource = useEffectEvent(() => {
+    // Read the current source after waiting for an active task; never publish
+    // a MySQL catalog into a SQLite workspace. Keep refresh on sidebar return.
+    // A switch can finish before React commits setSource. Its synchronous
+    // selection also protects this gap between task completion and rendering.
+    const target = selectedSource.current;
+    if (target.driver === 'sqlite' ? target.path : ready) void run('Loading databases…', () => load(undefined, undefined, target));
+    else { setPage(null); setStructure(null); }
+  });
   useEffect(() => {
     let disposed = false;
     // A sidebar return may overlap cancellation of the previous view's request.
@@ -198,12 +223,10 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     void (async () => {
       await activeTask.current;
       if (disposed) return;
-      if (sqlitePath || (!sqlite && ready)) void run('Loading databases…', () => load());
-      else { setPage(null); setStructure(null); }
+      refreshCurrentSource();
     })();
     return () => { disposed = true; };
     // Refresh on visibility/service changes, not on each snapshot poll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
   useEffect(() => {
     mounted.current = true;
@@ -228,17 +251,17 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
   }, [pane, table, database, sqlite, page, catalogLoaded, maximized]);
 
-  function begin(kind: EditKind, row?: Row, column?: Column, index?: TableIndex) {
+  function begin(kind: EditKind, row?: Row, column?: Column, index?: TableIndex, rowRef?: RowRef, largeFields?: LargeFields) {
     setNotice(null); setName(kind === 'rename_database' ? database : kind === 'rename_table' ? table : '');
-    setConfirmation(''); setValues(kind === 'insert' && page ? initialInsertValues(page.columns) : {});
+    setFieldLoading(false); setConfirmation(''); setValues(kind === 'insert' && page ? initialInsertValues(page.columns) : {});
     const fresh = (name = ''): Definition => ({ ...newColumn(name, sqlite), ...(sqlite ? { type: 'TEXT' } : {}) });
     setDefinitions(kind === 'create_table' ? [{ ...idColumn(), ...(sqlite ? { type: 'INTEGER' } : {}) }, fresh('name')] : column ? [fromColumn(column)] : [fresh()]);
     const first = indexableColumns(page?.columns ?? [], sqlite)[0]?.name;
     setIndexDefinition({ name: suggestedIndexName(table, first ? [first] : [], false), unique: false, columns: first ? [first] : [] });
-    setEdit({ kind, row, column, index });
+    setEdit({ kind, row, column, index, rowRef, largeFields });
   }
   async function save() {
-    if (!edit) return;
+    if (!edit || fieldLoading) return;
     const current = edit;
     await run('Saving database changes…', async () => {
       const body: Record<string, unknown> = { op: current.kind, database, table, confirmed: true };
@@ -246,7 +269,8 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
       if (['rename_database', 'rename_table', 'drop_column'].includes(current.kind)) body.name = current.kind === 'drop_column' ? current.column?.name : name;
       if (current.kind === 'create_table') { body.table = name; body.columns = definitions; }
       if (current.kind === 'add_column' || current.kind === 'change_column') { body.column = definitions[0]; body.oldName = current.column?.name; }
-      if (current.row) { body.original = current.row; body.binaryColumns = page?.columns.filter(c => c.binary).map(c => c.name); }
+      if (current.rowRef) body.rowRef = current.rowRef;
+      else if (current.row) { body.original = current.row; body.binaryColumns = page?.columns.filter(c => c.binary).map(c => c.name); }
       if (current.kind === 'insert' || current.kind === 'update') body.values = values;
       if (current.kind === 'create_index') { body.name = indexDefinition.name; body.indexColumns = indexDefinition.columns; body.unique = indexDefinition.unique; }
       if (current.kind === 'drop_index') { body.name = current.index?.name; body.originalIndex = current.index; }
@@ -368,7 +392,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
           {tableError && <div className="notice error" role="alert"><span>Could not load {table}. {tableError} Choose another table or use SQL to repair it.</span><button className="secondary" disabled={blocked} onClick={() => void run('Refreshing table…', () => load())}>Retry table</button></div>}
           {!table && pane !== 'query' ? <div className="db-empty"><p>Create a table or open SQL query to begin.</p><div className="db-empty-actions"><button className="secondary" disabled={blocked} onClick={() => begin('create_table')}>Create table</button><button className="secondary" disabled={blocked} onClick={() => showPane('query')}>Open SQL query</button></div></div> : pane === 'rows' && page ? <>
             {!canEdit && <p className="db-hint">{writable ? 'No non-null primary or unique key: browse and insert are available. Use SQL for row updates and deletes.' : page.kind === 'VIEW' ? 'This view is read-only. Use SQL for advanced changes.' : 'This virtual table is read-only in forms. Use SQL for advanced changes.'}</p>}
-            <div ref={rowsScroll} className="db-grid-scroll" tabIndex={0} role="region" aria-label="Table rows" style={!maximized && rowsHeight ? { maxHeight: rowsHeight } : undefined}><table className="db-grid"><thead><tr><th>Actions</th>{page.columns.map(c => <th key={c.name}><button disabled={blocked} onClick={() => { const next = { sort: c.name, direction: sort.sort === c.name && sort.direction === 'ASC' ? 'DESC' : 'ASC' }; setSort(next); void run('Sorting rows…', () => loadRows(database, table, 0, next)); }}>{c.name}{sort.sort === c.name ? sort.direction === 'ASC' ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead><tbody>{page.rows.map((row, index) => <tr key={index}><td className="db-actions-cell"><div className="db-row-actions"><button className="icon-button" title={`View row ${index + 1}`} aria-label={`View row ${index + 1}`} disabled={blocked} onClick={() => { setNotice(null); setViewedRow({ row, columns: page.columns, table, database, source, position: page.offset + index + 1 }); }}><Eye size={14} /></button>{canEdit && <><button className="icon-button" title={`Edit row ${index + 1}`} aria-label={`Edit row ${index + 1}`} disabled={blocked} onClick={() => begin('update', row)}><Pencil size={14} /></button><button className="icon-button db-icon-danger" title={`Delete row ${index + 1}`} aria-label={`Delete row ${index + 1}`} disabled={blocked} onClick={() => begin('delete', row)}><Trash2 size={14} /></button></>}</div></td>{page.columns.map(c => <td key={c.name}><span className="db-cell" title={row[c.name] ?? 'SQL NULL'}>{cell(row[c.name])}</span></td>)}</tr>)}</tbody></table>{!page.rows.length && <p className="db-grid-empty">{writable ? 'No rows yet. Insert a row to get started.' : 'This view has no rows.'}</p>}</div>
+            <div ref={rowsScroll} className="db-grid-scroll" tabIndex={0} role="region" aria-label="Table rows" style={!maximized && rowsHeight ? { maxHeight: rowsHeight } : undefined}><table className="db-grid"><thead><tr><th>Actions</th>{page.columns.map(c => <th key={c.name}><button disabled={blocked} onClick={() => { const next = { sort: c.name, direction: sort.sort === c.name && sort.direction === 'ASC' ? 'DESC' : 'ASC' }; setSort(next); void run('Sorting rows…', () => loadRows(database, table, 0, next)); }}>{c.name}{sort.sort === c.name ? sort.direction === 'ASC' ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead><tbody>{page.rows.map((row, index) => <tr key={index}><td className="db-actions-cell"><div className="db-row-actions"><button className="icon-button" title={`View row ${index + 1}`} aria-label={`View row ${index + 1}`} disabled={blocked} onClick={() => { setNotice(null); setViewedRow({ row, columns: page.columns, table, database, source, position: page.offset + index + 1, rowRef: page.rowRefs?.[index], largeFields: page.truncated?.[index] }); }}><Eye size={14} /></button>{canEdit && <><button className="icon-button" title={`Edit row ${index + 1}`} aria-label={`Edit row ${index + 1}`} disabled={blocked} onClick={() => begin('update', row, undefined, undefined, page.rowRefs?.[index], page.truncated?.[index])}><Pencil size={14} /></button><button className="icon-button db-icon-danger" title={`Delete row ${index + 1}`} aria-label={`Delete row ${index + 1}`} disabled={blocked} onClick={() => begin('delete', row, undefined, undefined, page.rowRefs?.[index], page.truncated?.[index])}><Trash2 size={14} /></button></>}</div></td>{page.columns.map(c => <td key={c.name}><span className="db-cell" title={largeField(page.truncated?.[index], c.name) ? `Preview · ${largeField(page.truncated?.[index], c.name)!.length.toLocaleString()} characters. Open the row for the complete value.` : row[c.name] ?? 'SQL NULL'}>{cell(row[c.name])}{largeField(page.truncated?.[index], c.name) && '…'}</span></td>)}</tr>)}</tbody></table>{!page.rows.length && <p className="db-grid-empty">{writable ? 'No rows yet. Insert a row to get started.' : 'This view has no rows.'}</p>}</div>
             <div className="db-pagination"><span>{page.rows.length ? page.offset + 1 : 0}–{page.offset + page.rows.length} of {page.total}</span><div className="db-actions"><button className="icon-button" aria-label="Previous page" disabled={blocked || page.offset === 0} onClick={() => void run('Loading rows…', () => loadRows(database, table, Math.max(0, page.offset - page.limit)))}><ChevronLeft size={17} /></button><button className="icon-button" aria-label="Next page" disabled={blocked || BigInt(page.offset + page.rows.length) >= BigInt(page.total)} onClick={() => void run('Loading rows…', () => loadRows(database, table, page.offset + page.limit))}><ChevronRight size={17} /></button><button className="icon-button" aria-label="Refresh rows" disabled={blocked} onClick={() => void run('Refreshing rows…', () => loadRows(database, table, page.offset))}><RefreshCw size={14} /></button></div></div>
           </> : pane === 'structure' && page ? <>
             <div className="db-row-tools"><p className="db-hint">{page.key.length ? `Row identity: ${page.key.join(', ')}` : 'No safe row identity found.'}</p><button className="secondary" disabled={blocked || !writable} onClick={() => begin('add_column')}><Plus size={14} />Column</button></div>
@@ -387,8 +411,8 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     </div>}
     <footer className="db-footer" inert={browsing}>{available && (sqlite ? <p className="db-hint">Backups are SQLite database files. Opening a file does not copy or import it into Fairway.</p> : <details className="db-cli"><summary>Command-line administration</summary><p>Add command-line tools to your user PATH in Settings, then open a new terminal. Exports never overwrite an existing file; imports back up the target database first.</p><pre>fairway db list{'\n'}fairway db export {database || 'my_database'} --output ~/Desktop/backup.sql{'\n'}fairway db import {database || 'my_database'} ~/Desktop/backup.sql --yes{'\n'}fairway db --help</pre></details>)}<button className="secondary" disabled={blocked} onClick={() => open('backups')}><FolderOpen size={14} />Open backups</button></footer>
     {pending && showPending && <div className="db-pending" role="status"><LoaderCircle className="spin" size={14} />{pending}{['Running SQL…', 'Loading rows…', 'Sorting rows…'].includes(pending) && <button className="secondary" disabled={!job.current} onClick={() => { if (job.current) void invoke('cancel_data_browser', { id: job.current }).catch(error => setNotice({ error: true, text: errorText(error) })); }}>Cancel query</button>}</div>}
-    {viewedRow && <RowViewer table={viewedRow.table} columns={viewedRow.columns} row={viewedRow.row} position={viewedRow.position} onClose={() => setViewedRow(null)} onEdit={canEdit && !blocked && viewedRow.database === database && viewedRow.table === table && viewedRow.source === source ? () => { setViewedRow(null); begin('update', viewedRow.row); } : undefined} />}
-    {edit && <Dialog key={edit.kind} title={titles[edit.kind]} busy={blocked} onClose={() => setEdit(null)} onSubmit={() => { if (edit.kind === 'import_sql') { void importSql(); return; } void save(); }} onCancelBusy={edit.kind === 'import_sql' && (importPhase === 'working' || importPhase === 'backup' || importPhase === 'import') ? cancelImport : undefined} submit={edit.kind === 'import_sql' ? 'Import SQL' : edit.kind === 'drop_index' ? 'Remove' : destructive ? 'Delete' : edit.kind.startsWith('create_') ? 'Create' : 'Save'} danger={destructive} valid={edit.kind === 'import_sql' ? confirmation === database : (edit.kind === 'create_index' ? !!indexDefinition.name.trim() && indexDefinition.columns.length > 0 && indexDefinition.columns.every(Boolean) : !destructive || edit.kind === 'delete' || confirmation === target)}>
+    {viewedRow && <RowViewer table={viewedRow.table} columns={viewedRow.columns} row={viewedRow.row} position={viewedRow.position} largeFields={viewedRow.largeFields} readCell={cellReader(viewedRow.database, viewedRow.table, viewedRow.source, viewedRow.rowRef)} onClose={() => setViewedRow(null)} onEdit={canEdit && !blocked && viewedRow.database === database && viewedRow.table === table && viewedRow.source === source ? () => { setViewedRow(null); begin('update', viewedRow.row, undefined, undefined, viewedRow.rowRef, viewedRow.largeFields); } : undefined} />}
+    {edit && <Dialog key={edit.kind} title={titles[edit.kind]} busy={blocked} onClose={() => setEdit(null)} onSubmit={() => { if (edit.kind === 'import_sql') { void importSql(); return; } void save(); }} onCancelBusy={edit.kind === 'import_sql' && (importPhase === 'working' || importPhase === 'backup' || importPhase === 'import') ? cancelImport : undefined} submit={edit.kind === 'import_sql' ? 'Import SQL' : edit.kind === 'drop_index' ? 'Remove' : destructive ? 'Delete' : edit.kind.startsWith('create_') ? 'Create' : 'Save'} danger={destructive} valid={!fieldLoading && (edit.kind === 'import_sql' ? confirmation === database : (edit.kind === 'create_index' ? !!indexDefinition.name.trim() && indexDefinition.columns.length > 0 && indexDefinition.columns.every(Boolean) : !destructive || edit.kind === 'delete' || confirmation === target))}>
       {notice?.error && <div className="notice error" role="alert"><span>{notice.text}</span></div>}
       {edit.kind === 'import_sql' && <>
         <p>Import <strong>{fileName(edit.path ?? '')}</strong> into <strong>{database}</strong>.</p>
@@ -401,7 +425,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
       {edit.kind === 'rename_database' && <p>Only empty databases can be renamed. For a populated database, export it, create a new database, and import it into the new database. Update your project’s connection settings afterward.</p>}
       {edit.kind === 'create_table' && <div className="db-new-columns">{definitions.map((definition, index) => <section className="db-column-card" key={index}><h3>Column {index + 1}</h3><ColumnFields sqlite={sqlite} value={definition} onChange={value => setDefinitions(previous => previous.map((c, i) => i === index ? value : c))} /><button type="button" className="db-danger-text" disabled={definitions.length === 1} onClick={() => setDefinitions(previous => previous.filter((_, i) => i !== index))}>Remove column</button></section>)}<button type="button" className="secondary" onClick={() => setDefinitions(previous => [...previous, { ...newColumn('', sqlite), ...(sqlite ? { type: 'TEXT' } : {}) }])} disabled={definitions.length >= 100}><Plus size={14} />Add column</button></div>}
       {columnForm && <><ColumnFields sqlite={sqlite} adding={edit.kind === 'add_column'} value={definitions[0]} existing={edit.kind === 'change_column'} hasPrimary={edit.kind === 'add_column' && (sqlite || !!page?.columns.some(c => c.columnKey === 'PRI'))} onChange={value => setDefinitions([value])} />{edit.kind === 'change_column' && <p>Changing type or length can alter existing values. A database backup is saved first. Primary keys are preserved; manage indexes in SQL.</p>}</>}
-      {(edit.kind === 'insert' || edit.kind === 'update') && page && <RowFields columns={page.columns} original={edit.row} onChange={setValues} />}
+      {(edit.kind === 'insert' || edit.kind === 'update') && page && <RowFields columns={page.columns} original={edit.row} largeFields={edit.largeFields} readCell={cellReader(database, table, source, edit.rowRef)} onLoadingChange={setFieldLoading} onChange={setValues} />}
       {edit.kind === 'create_index' && page && <IndexFields value={indexDefinition} table={table} columns={indexableColumns(page.columns, sqlite)} onChange={setIndexDefinition} />}
       {destructive && <><p>{edit.kind === 'delete' ? 'Delete this row permanently? The original values will be checked before deletion.' : edit.kind === 'drop_index' ? `Remove index “${target}”? Rows are kept.${edit.index?.unique ? ' This stops enforcing uniqueness through this index.' : ''} A ${sqlite ? 'SQLite' : 'SQL'} backup of this database will be saved first.` : `Delete “${target}” permanently? A ${sqlite ? 'SQLite' : 'SQL'} backup of this database will be saved first. Related application code may need changes.`}</p>{edit.kind !== 'delete' && <label>Type {target} to confirm<input autoComplete="off" value={confirmation} onChange={e => setConfirmation(e.target.value)} required /></label>}</>}
     </Dialog>}

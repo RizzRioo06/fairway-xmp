@@ -426,10 +426,10 @@ test('site terminals open registered locations without replacing existing sessio
   await expect(first).toHaveAttribute('aria-selected', 'true');
   await page.getByLabel('Terminal options', { exact: true }).click();
   await expect(page.locator('.terminal-details code')).toHaveText(/Code[\\/]shop$/);
-  await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(page.locator('.terminal-workspace .page-heading').getByText('Connected', { exact: true })).toBeVisible();
   await openSites(page); await siteAction(page, 'My Shop', 'Terminal in web root');
   await expect(page.getByRole('tab', { name: 'Terminal 2 · My Shop · web root', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(page.locator('.terminal-workspace .page-heading').getByText('Connected', { exact: true })).toBeVisible();
   await openSites(page); await siteAction(page, 'Blog', 'Terminal in web root');
   await expect(page.getByText('Both terminals are open.', { exact: false })).toBeVisible();
   await expect(first).toBeVisible();

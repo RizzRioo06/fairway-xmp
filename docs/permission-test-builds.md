@@ -42,10 +42,14 @@ its signed-app CI checks registration and cleanup without approval or hosts writ
 
 Adding or renaming an address registers the native hosts helper when needed. macOS
 requires one-time administrator approval in **System Settings → General → Login Items
-& Extensions**. Fairway opens that page. Approve the Fairway XMP / Ei Maung helper, then
-return and click **Set up addresses**. The site is already saved. macOS chooses Touch ID
-or credentials for this approval. Later address changes should reuse the approved
-helper without another password prompt. Test add, rename, remove and cancelled approval.
+& Extensions**. Fairway opens that page. Approve the Fairway XMP / Ei Maung helper.
+Fairway finishes the saved address update automatically after approval (normally within
+a few seconds), without another Add/Save or **Set up addresses** click. While waiting,
+the site says **Waiting for macOS approval**, with **Check approval** and **Open System Settings** available. After allowing it, Check approval refreshes the helper registration and retries without reopening Settings. A still-pending result gives guidance; use the Information button in Settings to confirm which app copy owns an entry.
+Other controls remain usable. macOS chooses Touch ID or credentials for this approval.
+Later address changes should reuse the approved helper without another password prompt.
+Test add, rename, remove, unfinished approval, approval after restarting the app, and a
+failed hosts write followed by the explicit **Set up addresses** retry.
 The helper is machine-wide and modifies only Fairway's loopback `.test` entries.
 
 The native HTTPS implementation is the one already reported to work with one Touch ID
@@ -100,3 +104,11 @@ Fairway creates a missing default index.
 
 Record the OS, embedded commit from `--build-info`, prompt/console behavior and whether
 cancellation followed by retry works. Existing RC 1 remains the installed fallback.
+
+### Approval recheck follow-up
+
+The first local approval-continuation test remained pending after the owner allowed background activity. Read-only `sfltool dumpbtm` inspection showed the running `local-macos-site-approval` copy still pending authorization and its daemon disabled/disallowed, while the older `local-macos-current` copy had an allowed parent record. `launchctl print system/dev.fairway.environment.hosts-helper` reported that the service was absent. This establishes that the current helper was not enabled; it does not establish which checkbox was changed or whether the duplicate-copy record is the sole cause. Gatekeeper separately rejected the local app with `source=Unnotarized Developer ID`; native approval acceptance requires a notarized app.
+
+Keep subsequent interactive updates at the same app path after a normal Quit. Do not launch each staged build from a new folder, reset all background items, or unregister another copy's helper as a troubleshooting shortcut. Explicit Check approval refreshes this app's registration without unregistering it or granting permission; macOS remains responsible for approval. If permission is still missing, the UI keeps the pending state and explains how to retry.
+
+Apple documents the Information button for identifying a background item's executable in [Manage login items and background tasks](https://support.apple.com/guide/deployment/depdca572563/web). Karabiner's maintainers document approved-but-unstarted daemon and misleading Settings states, including re-registration as one recovery step, in [macOS Service Management](https://github.com/pqrs-org/Karabiner-Elements/blob/main/DEVELOPMENT.md#macos-service-management). These reports inform the explicit retry; they are not treated as proof of this machine's exact failure.

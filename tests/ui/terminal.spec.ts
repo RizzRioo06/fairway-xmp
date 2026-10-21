@@ -206,7 +206,7 @@ test('find, text size, and resizing preserve output and keyboard input', async (
   await enter(page, 'echo search-needle search-needle');
   await expect(output(page)).toContainText('search-needle');
   const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
-  const shortcut = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const shortcut = process.platform === 'darwin' ? 'Meta' : 'Control+Shift';
   await input.press(`${shortcut}+f`);
   const find = page.getByRole('textbox', { name: 'Find in terminal', exact: true });
   await expect(find).toBeFocused();

@@ -17,8 +17,26 @@ fi
 case "$PREFIX" in /*) ;; *) echo 'The installation path must be absolute.' >&2; exit 1 ;; esac
 [ "$PREFIX" != / ] && [ "$PREFIX" != "$HOME" ] || { echo 'Choose a dedicated installation directory.' >&2; exit 1; }
 [ ! -L "$PREFIX" ] || { echo 'The installation directory must not be a symlink.' >&2; exit 1; }
+# Resolve existing symlink ancestors and missing path components before comparing
+# paths. A dedicated prefix must not contain, or live inside, student storage.
+PREFIX=$(realpath -m -- "$PREFIX")
+[ "$PREFIX" != / ] && [ "$PREFIX" != "$(realpath -m -- "$HOME")" ] || { echo 'Choose a dedicated installation directory.' >&2; exit 1; }
+case "${XDG_DATA_HOME:-}" in
+  /*) DATA_HOME=$XDG_DATA_HOME ;;
+  *) DATA_HOME="$HOME/.local/share" ;;
+esac
+for PROTECTED in "$HOME/fairway/www" "$DATA_HOME/dev.fairway.environment"; do
+  PROTECTED=$(realpath -m -- "$PROTECTED")
+  case "$PREFIX/" in "$PROTECTED/"*) echo 'Choose an installation directory separate from your projects and application data.' >&2; exit 1 ;; esac
+  case "$PROTECTED/" in "$PREFIX/"*) echo 'Choose an installation directory separate from your projects and application data.' >&2; exit 1 ;; esac
+done
 if [ -e "$PREFIX" ] && [ ! -f "$PREFIX/.fairway-installation" ]; then
   echo 'This directory already exists and is not a Fairway installation. Choose a new --prefix.' >&2; exit 1
+fi
+if [ -L "$PREFIX/.fairway-installation" ] || [ -L "$PREFIX/releases" ] ||
+   { [ -e "$PREFIX/releases" ] && [ ! -d "$PREFIX/releases" ]; } ||
+   { [ -e "$PREFIX/current" ] && [ ! -L "$PREFIX/current" ]; }; then
+  echo 'Installation layout mismatch; files preserved.' >&2; exit 1
 fi
 SOURCE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BUILD=$(cat "$SOURCE/BUILD")

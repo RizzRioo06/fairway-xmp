@@ -115,3 +115,9 @@
 .db-row-viewer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .db-row-viewer-actions .db-row-copy-all{margin-right:auto}
 @media(max-width:650px){.db-row-values>div{grid-template-columns:minmax(0,1fr);gap:10px;padding:15px 0}.db-row-viewer-context{flex-wrap:wrap;gap:5px}.db-row-viewer-actions{gap:7px}}
+
+.db-large-preview { max-height: 8rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.db-large-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.db-large-controls .db-hint { flex-basis: 100%; margin: 0; }
+
+.db-row-value-content pre.db-full-large { max-height: 20rem; overflow: auto; white-space: pre; overflow-wrap: normal; }

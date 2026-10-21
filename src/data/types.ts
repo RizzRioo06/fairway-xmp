@@ -15,7 +15,9 @@ export type ForeignKey = {
   onUpdate: string; onDelete: string;
 };
 export type Structure = { columns: Column[]; key: string[]; kind: string; sql?: string; indexes?: TableIndex[]; foreignKeys?: ForeignKey[]; referencedBy?: ForeignKey[] };
-export type Page = Structure & { rows: Row[]; total: string; offset: number; limit: number };
+export type RowRef = { key: Row; version: string };
+export type LargeFields = Record<string, { length: number }>;
+export type Page = Structure & { rows: Row[]; rowRefs?: RowRef[]; truncated?: LargeFields[]; total: string; offset: number; limit: number };
 export type QueryResult = { sets: { columns: string[]; rows: (string | null)[][]; affected: number; truncated: boolean; summary?: string }[]; elapsedMs: number; resultsTruncated?: boolean };
 export type Definition = {
   name: string; type: string; length: string; scale: string; unsigned: boolean;

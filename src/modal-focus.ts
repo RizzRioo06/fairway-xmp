@@ -68,13 +68,13 @@ function containFocus(event: FocusEvent) {
   if (top && event.target instanceof Node && !top.root.contains(event.target)) firstFocus(top);
 }
 
-export function useModalFocus(root: RefObject<HTMLElement | null>, enabled: boolean, onClose: () => void, options: { workspace?: boolean; canClose?: boolean } = {}) {
+export function useModalFocus(root: RefObject<HTMLElement | null>, enabled: boolean, onClose: () => void, options: { workspace?: boolean; canClose?: boolean; returnFocus?: HTMLElement | null } = {}) {
   const latest = useRef({ onClose, canClose: options.canClose !== false });
   useLayoutEffect(() => { latest.current = { onClose, canClose: options.canClose !== false }; });
   const workspace = !!options.workspace;
   useLayoutEffect(() => {
     if (!enabled || !root.current) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previous = options.returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const layer: Layer = { root: root.current, close: () => latest.current.onClose(), canClose: () => latest.current.canClose, workspace };
     if (!layers.length) {
       savedOverflow = document.body.style.overflow;
@@ -99,9 +99,13 @@ export function useModalFocus(root: RefObject<HTMLElement | null>, enabled: bool
         document.removeEventListener('keydown', shortcut, true);
         document.removeEventListener('focusin', containFocus, true);
       }
-      const top = layers.at(-1);
-      if (previous?.isConnected && !previous.closest('[inert]') && (!top || top.root.contains(previous))) previous.focus({ preventScroll: true });
-      else if (top) firstFocus(top);
+      // Layout-effect cleanup can run before maximize's hiding styles are
+      // removed. Restore focus after the commit, when the trigger is visible.
+      queueMicrotask(() => {
+        const top = layers.at(-1);
+        if (previous?.isConnected && previous.getClientRects().length && !previous.closest('[inert]') && (!top || top.root.contains(previous))) previous.focus({ preventScroll: true });
+        else if (top) firstFocus(top);
+      });
     };
   }, [enabled, root, workspace]);
 }

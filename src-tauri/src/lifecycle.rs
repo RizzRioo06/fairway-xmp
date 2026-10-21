@@ -1,4 +1,11 @@
-use std::sync::{Arc, Condvar, Mutex};
+use std::{
+    future::Future,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+    },
+    task::{Poll, Waker},
+};
 
 #[derive(Default)]
 struct State {
@@ -6,6 +13,7 @@ struct State {
     quitting: bool,
     exit_allowed: bool,
     installing: bool,
+    download: Option<Arc<DownloadState>>,
 }
 
 /// Coordinates panel/tray operations and explicit quit requests. Quit reserves
@@ -38,6 +46,11 @@ impl Lifecycle {
             return false;
         }
         state.quitting = true;
+        let download = state.download.clone();
+        drop(state);
+        if let Some(download) = download {
+            download.cancel();
+        }
         true
     }
 
@@ -82,6 +95,100 @@ impl Lifecycle {
         let state = self.0.state.lock().unwrap();
         state.working || state.quitting || state.exit_allowed
     }
+
+    pub fn begin_download(&self) -> Result<Download, String> {
+        let mut state = self.0.state.lock().unwrap();
+        if state.quitting || state.exit_allowed || state.installing {
+            return Err("Fairway XMP is quitting. The update was not downloaded.".into());
+        }
+        if state.download.is_some() {
+            return Err("An update is already downloading.".into());
+        }
+        let signal = Arc::new(DownloadState::default());
+        state.download = Some(signal.clone());
+        Ok(Download {
+            lifecycle: self.clone(),
+            signal,
+        })
+    }
+}
+
+#[derive(Default)]
+struct DownloadState {
+    cancelled: AtomicBool,
+    waker: Mutex<Option<Waker>>,
+}
+
+impl DownloadState {
+    fn wake(&self) {
+        let waker = self.waker.lock().unwrap().take();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+    }
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+        self.wake();
+    }
+}
+
+pub(crate) struct Download {
+    lifecycle: Lifecycle,
+    signal: Arc<DownloadState>,
+}
+
+impl Download {
+    pub async fn run<T>(
+        &self,
+        future: impl Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let mut future = std::pin::pin!(future);
+        std::future::poll_fn(|context| {
+            *self.signal.waker.lock().unwrap() = Some(context.waker().clone());
+            if self.signal.cancelled.load(Ordering::SeqCst) {
+                return Poll::Ready(Err(
+                    "The update was cancelled because Fairway XMP is quitting.".into(),
+                ));
+            }
+            future.as_mut().poll(context)
+        })
+        .await
+    }
+
+    pub async fn begin_operation(&self) -> Result<Operation, String> {
+        std::future::poll_fn(|context| {
+            let mut state = self.lifecycle.0.state.lock().unwrap();
+            if state.quitting
+                || state.exit_allowed
+                || state.installing
+                || self.signal.cancelled.load(Ordering::SeqCst)
+            {
+                return Poll::Ready(Err(
+                    "Fairway XMP is shutting down. The update was not installed.".into(),
+                ));
+            }
+            if state.working {
+                *self.signal.waker.lock().unwrap() = Some(context.waker().clone());
+                return Poll::Pending;
+            }
+            state.working = true;
+            Poll::Ready(Ok(Operation(self.lifecycle.clone())))
+        })
+        .await
+    }
+}
+
+impl Drop for Download {
+    fn drop(&mut self) {
+        let mut state = self.lifecycle.0.state.lock().unwrap();
+        if state
+            .download
+            .as_ref()
+            .is_some_and(|signal| Arc::ptr_eq(signal, &self.signal))
+        {
+            state.download = None;
+        }
+    }
 }
 
 pub(crate) struct Operation(Lifecycle);
@@ -96,7 +203,13 @@ impl Drop for Installation {
 
 impl Drop for Operation {
     fn drop(&mut self) {
-        self.0 .0.state.lock().unwrap().working = false;
+        let mut state = self.0 .0.state.lock().unwrap();
+        state.working = false;
+        let download = state.download.clone();
+        drop(state);
+        if let Some(download) = download {
+            download.wake();
+        }
         self.0 .0.completed.notify_all();
     }
 }
@@ -104,6 +217,102 @@ impl Drop for Operation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct WakeCounter(std::sync::atomic::AtomicUsize);
+    impl std::task::Wake for WakeCounter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn downloading_does_not_block_services_and_quit_drops_a_stalled_request() {
+        struct Request(Arc<AtomicBool>);
+        impl Future for Request {
+            type Output = Result<(), String>;
+            fn poll(
+                self: std::pin::Pin<&mut Self>,
+                _: &mut std::task::Context<'_>,
+            ) -> Poll<Self::Output> {
+                Poll::Pending
+            }
+        }
+        impl Drop for Request {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let lifecycle = Lifecycle::default();
+        let download = lifecycle.begin_download().unwrap();
+        assert!(!lifecycle.busy());
+        assert!(lifecycle.begin_download().is_err());
+        drop(lifecycle.begin().unwrap());
+        let dropped = Arc::new(AtomicBool::new(false));
+        let counter = Arc::new(WakeCounter(std::sync::atomic::AtomicUsize::new(0)));
+        let waker = std::task::Waker::from(counter.clone());
+        let mut context = std::task::Context::from_waker(&waker);
+        let mut pending = Box::pin(download.run(Request(dropped.clone())));
+        assert!(pending.as_mut().poll(&mut context).is_pending());
+        assert!(lifecycle.request_quit());
+        lifecycle.wait_for_operation();
+        assert!(counter.0.load(Ordering::SeqCst) > 0);
+        assert!(matches!(
+            pending.as_mut().poll(&mut context),
+            Poll::Ready(Err(_))
+        ));
+        assert!(dropped.load(Ordering::SeqCst));
+        assert!(lifecycle.begin_install().is_err());
+        drop(pending);
+        drop(download);
+        lifecycle.cancel_quit();
+        drop(lifecycle.begin_download().unwrap());
+        drop(lifecycle.begin().unwrap());
+    }
+
+    #[test]
+    fn verified_download_waits_for_active_work_then_reserves_installation() {
+        let lifecycle = Lifecycle::default();
+        let download = lifecycle.begin_download().unwrap();
+        let operation = lifecycle.begin().unwrap();
+        let waker = std::task::Waker::from(Arc::new(WakeCounter(
+            std::sync::atomic::AtomicUsize::new(0),
+        )));
+        let mut context = std::task::Context::from_waker(&waker);
+        let mut acquire = Box::pin(download.begin_operation());
+        assert!(acquire.as_mut().poll(&mut context).is_pending());
+        drop(operation);
+        let Poll::Ready(Ok(operation)) = acquire.as_mut().poll(&mut context) else {
+            panic!("verified update did not acquire operation");
+        };
+        let installation = lifecycle.begin_install().unwrap();
+        assert!(!lifecycle.request_quit());
+        assert!(lifecycle.begin().is_err());
+        drop(installation);
+        drop(operation);
+        drop(acquire);
+        drop(download);
+        drop(lifecycle.begin().unwrap());
+    }
+
+    #[test]
+    fn quit_prevents_installation_while_verified_update_waits_for_work() {
+        let lifecycle = Lifecycle::default();
+        let download = lifecycle.begin_download().unwrap();
+        let operation = lifecycle.begin().unwrap();
+        let waker = std::task::Waker::from(Arc::new(WakeCounter(
+            std::sync::atomic::AtomicUsize::new(0),
+        )));
+        let mut context = std::task::Context::from_waker(&waker);
+        let mut acquire = Box::pin(download.begin_operation());
+        assert!(acquire.as_mut().poll(&mut context).is_pending());
+        assert!(lifecycle.request_quit());
+        drop(operation);
+        assert!(matches!(
+            acquire.as_mut().poll(&mut context),
+            Poll::Ready(Err(_))
+        ));
+        assert!(lifecycle.begin_install().is_err());
+    }
 
     #[test]
     fn installation_and_quit_cannot_race_and_failure_allows_retry() {

@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "The local Fairway control panel",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:event:default"]
 }
