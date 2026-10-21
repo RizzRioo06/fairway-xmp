@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-rc.3 — Unreleased
+
+- View row is a dedicated reader with full wrapped text, field metadata, distinct NULL/empty values, per-field copy and exact JSON copying.
+
+- Terminal tabs and actions share one compact toolbar. Exiting the first terminal opens a fresh shell; exiting the extra terminal closes its tab. The prompt shows a green arrow and current folder (full path on Windows). External terminal opens the current folder without injecting scripts, commands or environment overrides; CLI availability follows Settings.
+- Terminal, Logs, Mail and Data browser share an in-window maximize mode with isolated input, nested dialogs and focus restoration. Terminal fitting keeps the final input line visible.
+- Logs adds Clear view and Open log folder, consolidates controls, and keeps recurring service failures visible after recovery. Page descriptions are shorter and functional.
+- MySQL adds confirmed SQL-file import with a mandatory target backup, visible phases, cancellation and partial-failure recovery. Open backups stays available outside CLI help. SQLite remains file/backup-only.
+- SQL results name inserts, deletes and updates. MySQL updates count changed rows; SQLite explicitly reports matched rows. MySQL remembers the selected database/table in the current app session, and nullable row fields accept typing directly.
+- Fast TypeScript unit tests now run in verification and candidate builds. Native regressions cover unchanged updates, import cancellation/phases and external-terminal path resolution.
+
+RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
+
 ## 0.1.0-rc.2 — 2026-10-20
 
 Published from [candidate run 36](https://github.com/eimg/fairway-xmp/actions/runs/39366414344), source `3ace851c69096a709549ef540955db4b630358dc`. The preview update feed offers this release to installed macOS and Windows beta and RC clients.

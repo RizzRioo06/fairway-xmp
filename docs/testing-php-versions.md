@@ -29,7 +29,7 @@ The last command starts isolated services and checks PHP and Composer, a PHP →
    export FAIRWAY_DEV_DATA="$PWD/.runtime-work/php-test-data"
    export ZDOTDIR="$FAIRWAY_DEV_HOME"
    mkdir -p "$FAIRWAY_DEV_HOME" "$FAIRWAY_DEV_DATA"
-   npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri dev
+   npm run tauri -- dev
    ```
 
 2. In **Settings → Service Settings → Advanced settings**, confirm **PHP 8.5** is selected. Click **Start all** and wait for **All services ready**.
@@ -55,7 +55,7 @@ For an isolated desktop test, set both debug paths before `tauri dev`:
 ```powershell
 $env:FAIRWAY_DEV_HOME = Join-Path $PWD '.runtime-work/php-test-home'
 $env:FAIRWAY_DEV_DATA = Join-Path $PWD '.runtime-work/php-test-data'
-npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri dev
+npm run tauri -- dev
 ```
 
 Use the same panel steps. Create the test page, open it in a browser, and check the launcher:

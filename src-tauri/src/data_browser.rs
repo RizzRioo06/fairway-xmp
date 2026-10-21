@@ -104,7 +104,7 @@ fn php(layout: &Layout, sqlite: bool) -> Result<Command> {
 fn name(value: &Value) -> Result<&str> {
     let value = value.as_str().ok_or("Choose a database name.")?;
     if value.is_empty()
-        || value.len() > 64
+        || value.chars().count() > 64
         || value.chars().any(char::is_control)
         || ["mysql", "sys", "information_schema", "performance_schema"]
             .contains(&value.to_ascii_lowercase().as_str())
@@ -120,6 +120,15 @@ fn connection(layout: &Layout) -> Result<()> {
     Ok(())
 }
 pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Result<Value> {
+    execute_with_progress(layout, request, cancel, |_| {})
+}
+
+pub fn execute_with_progress(
+    layout: &Layout,
+    request: Value,
+    cancel: Arc<AtomicBool>,
+    progress: impl Fn(&str),
+) -> Result<Value> {
     match request["driver"].as_str() {
         Some("sqlite") => return execute_sqlite(layout, request, cancel),
         None | Some("mysql") => (),
@@ -158,7 +167,17 @@ pub fn execute(layout: &Layout, request: Value, cancel: Arc<AtomicBool>) -> Resu
         .map(|path| json!({"message":format!("SQL export saved: {}",path.display()),"path":path}));
     }
     if op == "import" {
-        return Err("Import SQL files with fairway db import. The query editor accepts SQL scripts up to 1 MiB.".into());
+        if request["confirmed"].as_bool() != Some(true) {
+            return Err("Confirm the SQL import first.".into());
+        }
+        let path = Path::new(request["sqlFile"].as_str().ok_or("Choose a SQL file.")?);
+        if !path.is_absolute() {
+            return Err("Choose a SQL file using its full path.".into());
+        }
+        let backup = import_sql(layout, name(&request["database"])?, path, cancel, &progress)?;
+        return Ok(
+            json!({"message":format!("SQL imported into {}. Backup saved: {}", name(&request["database"])?, backup.display()), "backupPath":backup}),
+        );
     }
     if op == "rename_database" && request["confirmed"].as_bool() != Some(true) {
         return Err("Confirm the database rename first.".into());
@@ -265,10 +284,87 @@ fn execute_sqlite(layout: &Layout, mut request: Value, cancel: Arc<AtomicBool>) 
     worker(layout, json!({"request":request}), true, cancel)
 }
 
-fn worker(layout: &Layout, input: Value, sqlite: bool, cancel: Arc<AtomicBool>) -> Result<Value> {
+struct ChangedValueFiles(Vec<PathBuf>);
+impl Drop for ChangedValueFiles {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn stage_changed_values(
+    layout: &Layout,
+    input: &mut Value,
+    sqlite: bool,
+) -> Result<ChangedValueFiles> {
+    let mut files = ChangedValueFiles(Vec::new());
+    let request = input
+        .get_mut("request")
+        .ok_or("Missing database request.")?;
+    if request.get("valueFiles").is_some() {
+        return Err("Changed-value paths are private to the database worker.".into());
+    }
+    if sqlite || !matches!(request["op"].as_str(), Some("insert" | "update")) {
+        return Ok(files);
+    }
+    let Some(values) = request.get_mut("values").and_then(Value::as_object_mut) else {
+        return Ok(files);
+    };
+    let total: usize = values
+        .values()
+        .filter_map(Value::as_str)
+        .map(str::len)
+        .sum();
+    if total > 16 * 1024 * 1024 {
+        return Err("Changed text exceeds the form's 16 MiB limit. Change fewer fields together or use SQL.".into());
+    }
+    let mut paths = serde_json::Map::new();
+    for (name, value) in values.iter() {
+        let Some(text) = value.as_str() else {
+            continue;
+        };
+        if text.len() <= 64 * 1024 && total <= 128 * 1024 {
+            continue;
+        }
+        let path = layout.data.join(format!(
+            "tmp/database-value-{:032x}.tmp",
+            rand::random::<u128>()
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path).map_err(|error| error.to_string())?;
+        files.0.push(path.clone());
+        file.write_all(text.as_bytes())
+            .map_err(|error| error.to_string())?;
+        paths.insert(name.clone(), json!(path));
+    }
+    for name in paths.keys() {
+        values.remove(name);
+    }
+    if !paths.is_empty() {
+        request["valueFiles"] = Value::Object(paths);
+    }
+    Ok(files)
+}
+
+fn worker(
+    layout: &Layout,
+    mut input: Value,
+    sqlite: bool,
+    cancel: Arc<AtomicBool>,
+) -> Result<Value> {
     if cancel.load(Ordering::SeqCst) {
         return Err("Database request canceled.".into());
     }
+    // Large edited values travel once over IPC and through private temporary
+    // files to PHP. The bounded JSON request contains no original large cells.
+    let _files = stage_changed_values(layout, &mut input, sqlite)?;
     let input = serde_json::to_vec(&input).map_err(|e| e.to_string())?;
     if input.len() > 2 * 1024 * 1024 {
         return Err("The request is too large. Import SQL files using the command line.".into());
@@ -475,14 +571,51 @@ pub fn export(
     result
 }
 pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
+    import_sql(
+        layout,
+        database,
+        path,
+        Arc::new(AtomicBool::new(false)),
+        &|_| {},
+    )
+    .map(|_| ())
+}
+
+fn import_sql(
+    layout: &Layout,
+    database: &str,
+    path: &Path,
+    cancel: Arc<AtomicBool>,
+    progress: &dyn Fn(&str),
+) -> Result<PathBuf> {
     name(&json!(database))?;
     connection(layout)?;
     if database.starts_with('-') {
         return Err("Invalid database name.".into());
     }
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    export(layout, database, None, None, "all")?;
-    let output = mysql(layout, "mysql")
+    if cancel.load(Ordering::SeqCst) {
+        return Err("Import canceled before changing the database.".into());
+    }
+    if !path.is_file() {
+        return Err("Choose an existing SQL file.".into());
+    }
+    let file = File::open(path).map_err(|e| format!("Cannot open the SQL file: {e}"))?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return Err("Choose a non-empty SQL file.".into());
+    }
+    progress("backup");
+    let backup = export(layout, database, None, None, "all").map_err(|e| {
+        format!("Could not create the pre-import backup. Nothing was imported. {e}")
+    })?;
+    if cancel.load(Ordering::SeqCst) {
+        return Err(format!(
+            "Import canceled before changing the database. Backup saved: {}",
+            backup.display()
+        ));
+    }
+    progress("import");
+    let mut child = mysql(layout, "mysql")
         .args([
             "--binary-mode",
             "--default-character-set=utf8mb4",
@@ -492,15 +625,57 @@ pub fn import(layout: &Layout, database: &str, path: &Path) -> Result<()> {
         .stdin(Stdio::from(file))
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "Cannot start SQL import: {e}. Backup saved: {}",
+                backup.display()
+            )
+        })?;
+    let mut stderr = child.stderr.take().expect("import stderr is piped");
+    // Drain diagnostics without keeping an unbounded SQL error response in memory.
+    let errors = thread::spawn(move || {
+        let mut kept = Vec::new();
+        let mut buffer = [0; 4096];
+        while let Ok(count) = stderr.read(&mut buffer) {
+            if count == 0 {
+                break;
+            }
+            let take = count.min(16384_usize.saturating_sub(kept.len()));
+            kept.extend_from_slice(&buffer[..take]);
+        }
+        String::from_utf8_lossy(&kept).into_owned()
+    });
+    let result = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Ok(status),
+            Err(error) => break Err(format!("Cannot read import status: {error}")),
+            Ok(None) => (),
+        }
+        if cancel.load(Ordering::SeqCst) {
+            break Err("Import canceled".to_string());
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+    if result.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let errors = errors.join().unwrap_or_default();
+    let status = result.map_err(|e| {
+        format!(
+            "{e}; completed statements are not undone. Backup saved: {}",
+            backup.display()
+        )
+    })?;
+    if !status.success() {
         return Err(format!(
-            "Import failed; earlier statements may have completed. A backup was saved first. {}",
-            String::from_utf8_lossy(&output.stderr)
+            "Import failed; earlier statements may have completed. Backup saved: {}\n{}",
+            backup.display(),
+            errors.trim()
         ));
     }
-    Ok(())
+    Ok(backup)
 }
 
 pub fn cli(layout: &Layout, args: &[String]) -> Result<()> {
@@ -583,5 +758,81 @@ mod tests {
         assert!(worker.is_file());
         assert_eq!(std::fs::canonicalize(&worker).unwrap(), canonical);
         std::fs::remove_file(&file).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod row_protocol_tests {
+    use super::*;
+    fn fixture() -> Layout {
+        let root = std::env::temp_dir().join(format!(
+            "fairway-value-test-{:032x}",
+            rand::random::<u128>()
+        ));
+        fs::create_dir_all(root.join("data/tmp")).unwrap();
+        Layout::at(root.join("home"), root.join("data"), root.join("runtime"))
+    }
+    #[test]
+    fn identifiers_count_characters_and_reject_controls() {
+        let unicode = "日本".repeat(32);
+        assert_eq!(name(&json!(unicode)).unwrap(), unicode);
+        assert!(name(&json!(format!("{unicode}a"))).is_err());
+        assert!(name(&json!("line\nbreak")).is_err());
+    }
+    #[test]
+    fn changed_values_are_private_bounded_and_removed_by_guard() {
+        let layout = fixture();
+        let text = "🟢é\n\\'".repeat(20000);
+        let mut input = json!({"request":{"op":"update","values":{"body":text,"note":null}}});
+        let files = stage_changed_values(&layout, &mut input, false).unwrap();
+        assert!(input["request"]["values"].get("body").is_none());
+        assert!(input["request"]["values"]["note"].is_null());
+        assert!(serde_json::to_vec(&input).unwrap().len() < 1000);
+        assert_eq!(fs::read_to_string(&files.0[0]).unwrap(), text);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&files.0[0]).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let path = files.0[0].clone();
+        drop(files);
+        assert!(!path.exists());
+        assert!(stage_changed_values(
+            &layout,
+            &mut json!({"request":{"op":"update","valueFiles":{"body":"/etc/passwd"}}}),
+            false
+        )
+        .is_err());
+        assert!(stage_changed_values(
+            &layout,
+            &mut json!({"request":{"op":"insert","values":{"a":"x".repeat(16*1024*1024),"b":"x"}}}),
+            false
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(layout.data.join("tmp")).unwrap().count(), 0);
+        fs::remove_dir_all(layout.data.parent().unwrap()).unwrap();
+    }
+    #[test]
+    fn aggregate_values_stage_even_when_individual_fields_are_small() {
+        let layout = fixture();
+        let values: serde_json::Map<String, Value> = (0..100)
+            .map(|i| (format!("column{i}"), json!("x".repeat(2000))))
+            .collect();
+        let mut input = json!({"request":{"op":"insert","values":values}});
+        let files = stage_changed_values(&layout, &mut input, false).unwrap();
+        assert_eq!(files.0.len(), 100);
+        assert_eq!(input["request"]["values"].as_object().unwrap().len(), 0);
+        drop(files);
+        // SQLite retains its original protocol and limits.
+        let mut input = json!({"request":{"op":"insert","values":{"body":"x".repeat(100000)}}});
+        assert!(stage_changed_values(&layout, &mut input, true)
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(input["request"].get("valueFiles").is_none());
+        fs::remove_dir_all(layout.data.parent().unwrap()).unwrap();
     }
 }

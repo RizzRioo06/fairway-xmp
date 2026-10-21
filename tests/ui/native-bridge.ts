@@ -15,13 +15,19 @@ export async function nativeBridge(page: Page, info: TestInfo) {
   let next = 0;
   let stderr = '';
   const timings: { command: string; operation?: string; elapsedMs: number; failed: boolean }[] = [];
+  const externalDirectories: string[] = [];
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: Error) => void; command: string; operation?: string; started: number }>();
   const lines = createInterface({ input: child.stdout });
   child.stderr.on('data', chunk => { stderr += chunk; });
   lines.on('line', line => {
     const response = JSON.parse(line);
+    if (response.event) {
+      void page.evaluate(event => window.dispatchEvent(new CustomEvent('fairway-native-event', { detail: event })), response).catch(() => {});
+      return;
+    }
     const item = pending.get(response.requestId); pending.delete(response.requestId);
     if (item && !item.command.startsWith('terminal_read')) timings.push({ command: item.command, operation: item.operation, elapsedMs: Date.now() - item.started, failed: typeof response.error === 'string' });
+    if (item?.command === 'terminal_external' && typeof response.value?.directory === 'string') externalDirectories.push(response.value.directory);
     if (typeof response.error === 'string') item?.reject(new Error(response.error)); else item?.resolve(response.value);
   });
   child.on('exit', code => {
@@ -35,10 +41,26 @@ export async function nativeBridge(page: Page, info: TestInfo) {
   }));
   await page.addInitScript(() => {
     const bridge = window as unknown as { nativeTerminalInvoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>; __TAURI_INTERNALS__: unknown };
-    bridge.__TAURI_INTERNALS__ = { invoke: bridge.nativeTerminalInvoke, transformCallback: () => 1, unregisterCallback: () => {} };
+    const callbacks = new Map<number, (event: { payload: unknown }) => void>();
+    const listeners = new Map<number, { event: string; handler: number }>();
+    let next = 0;
+    window.addEventListener('fairway-native-event', event => {
+      const message = (event as CustomEvent<{ event: string; payload: unknown }>).detail;
+      for (const listener of listeners.values()) if (listener.event === message.event) callbacks.get(listener.handler)?.({ payload: message.payload });
+    });
+    bridge.__TAURI_INTERNALS__ = {
+      invoke: (command: string, args: Record<string, unknown> = {}) => {
+        if (command === 'plugin:event|listen') { const id = ++next; listeners.set(id, { event: String(args.event), handler: Number(args.handler) }); return Promise.resolve(id); }
+        if (command === 'plugin:event|unlisten') { listeners.delete(Number(args.eventId)); return Promise.resolve(); }
+        return bridge.nativeTerminalInvoke(command, args);
+      },
+      transformCallback: (callback: (event: { payload: unknown }) => void) => { const id = ++next; callbacks.set(id, callback); return id; },
+      unregisterCallback: (id: number) => { callbacks.delete(id); },
+    };
   });
   return {
     root,
+    externalDirectories: () => externalDirectories,
     errors: () => stderr,
     close: async () => {
       const exited = child.exitCode !== null ? Promise.resolve() : new Promise<void>(resolve => child.once('exit', () => resolve()));

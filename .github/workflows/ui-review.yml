@@ -17,6 +17,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - run: npm run test:unit
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:ui
       - name: Save visual review report

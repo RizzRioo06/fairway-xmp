@@ -1062,7 +1062,7 @@ dependencies = [
 
 [[package]]
 name = "fairway"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.3"
 dependencies = [
  "base64 0.22.1",
  "core-foundation 0.10.1",
@@ -1090,6 +1090,7 @@ dependencies = [
  "time",
  "windows-sys 0.61.2",
  "winreg 0.55.0",
+ "x509-parser",
 ]
 
 [[package]]

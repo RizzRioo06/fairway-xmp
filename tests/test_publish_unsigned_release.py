@@ -51,8 +51,8 @@ class ReleaseTagTests(unittest.TestCase):
                     publisher.human_acceptance(manifest, path)
 
     def test_signed_publisher_uses_prerelease_flags_for_rc_and_latest_for_stable(self):
-        for version, prerelease in [('0.1.0-rc.1', True), ('0.1.0', False)]:
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+        for version, prerelease, prebuilt in [('0.1.0-rc.1', True, False), ('0.1.0', False, False), ('0.1.0-rc.1', True, True), ('0.1.0', False, True)]:
+            with self.subTest(version=version, prebuilt=prebuilt), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary); fixture = root / 'fixture'; fixture.mkdir()
                 sha = 'a' * 40
                 manifest = {'version': version, 'commit': sha, 'signing': {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}, 'candidates': {}}
@@ -87,7 +87,7 @@ class ReleaseTagTests(unittest.TestCase):
                     return [uploaded] if uploaded else []
                 def execute(args, **kwargs):
                     commands.append(args)
-                    if args[0] == 'cargo' and fail_signature:
+                    if args[0] in ('cargo', str(root / 'verify_update')) and fail_signature:
                         raise subprocess.CalledProcessError(1, args)
                     if args[:3] == ['gh', 'run', 'download']:
                         shutil.copytree(fixture, Path(args[args.index('--dir') + 1]), dirs_exist_ok=True)
@@ -97,7 +97,7 @@ class ReleaseTagTests(unittest.TestCase):
                         self.assertTrue(any(p.name == 'acceptance.json' for p in paths))
                         uploaded.update({'id': 42, 'tag_name': 'v' + version, 'draft': True, 'assets': [
                             {'name': p.name, 'digest': 'sha256:' + publisher.sha256(p), 'size': p.stat().st_size} for p in paths]})
-                with mock.patch.dict(os.environ, {'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                with mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
                      mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
                      mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), mock.patch('builtins.print'):
                     publisher.main(signed=True)
@@ -112,7 +112,9 @@ class ReleaseTagTests(unittest.TestCase):
                 self.assertFalse(build['humanAccepted'])
                 self.assertEqual(build['humanAcceptance']['status'], 'awaiting-post-publication')
                 self.assertEqual(set(build['humanAcceptance']['pendingChecks']), {'macos-arm64', 'windows-x64'})
-                self.assertEqual(len([args for args in commands if args[0] == 'cargo']), 2)
+                self.assertEqual(len([args for args in commands if args[0] == ('cargo' if not prebuilt else str(root / 'verify_update'))]), 2)
+                if prebuilt:
+                    self.assertFalse(any(args[0] == 'cargo' for args in commands))
                 # Deferring the human check must not bypass the automated drill or signature verifier.
                 for failure in ('native-drill', 'signature'):
                     uploaded.clear(); commands.clear()
@@ -122,7 +124,7 @@ class ReleaseTagTests(unittest.TestCase):
                     else:
                         manifest['candidates']['windows-x64']['lifecycle']['updater']['status'] = 'passed'
                     (metadata / 'candidate-manifest.json').write_text(json.dumps(manifest))
-                    with self.subTest(failure=failure), mock.patch.dict(os.environ, {'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                    with self.subTest(failure=failure), mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
                          mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
                          mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), \
                          self.assertRaises((ValueError, subprocess.CalledProcessError)):

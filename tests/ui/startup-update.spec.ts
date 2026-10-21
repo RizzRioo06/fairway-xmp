@@ -1,0 +1,65 @@
+import { expect, test } from '@playwright/test';
+import type { Snapshot } from '../../src/types';
+
+test('startup errors stay visible and retry uses the repaired saved configuration', async ({ page }) => {
+  await page.goto('/');
+  const initial = await page.evaluate(async () => {
+    const path = '/src/ui-test/backend.ts';
+    return (await import(path)).invoke('snapshot') as Promise<Snapshot>;
+  });
+  await page.addInitScript((snapshot: Snapshot) => {
+    let repaired = false;
+    let retryCount = 0;
+    window.addEventListener('test-repair-settings', () => { repaired = true; snapshot.ports.website = 8899; snapshot.services.find(service => service.id === 'nginx')!.port = 8899; });
+    const status = () => ({ blocking: !repaired, errors: repaired ? [] : ['The saved settings file is invalid. It has been preserved.'], dataDir: snapshot.dataDir });
+    window.__TAURI_INTERNALS__ = {
+      transformCallback() { return 1; }, unregisterCallback() {},
+      async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+        if (command.startsWith('plugin:event|')) return 1 as T;
+        if (command === 'startup_status') return status() as T;
+        if (command === 'retry_startup') { retryCount++; return status() as T; }
+        if (command === 'snapshot') { if (!repaired) throw new Error('startup blocked'); return structuredClone(snapshot) as T; }
+        if (command === 'open_target' && args.target === 'data') return undefined as T;
+        if (command === 'test-retry-count') return retryCount as T;
+        throw new Error(`Unexpected command: ${command}`);
+      },
+    };
+  }, initial);
+  await page.goto('http://127.0.0.1:1422/');
+  const recovery = page.getByRole('region', { name: 'Startup recovery' });
+  await expect(recovery).toBeVisible();
+  await expect(recovery.getByRole('alert')).toContainText('has been preserved');
+  await expect(page.getByRole('button', { name: 'Start all', exact: true })).toHaveCount(0);
+  await recovery.getByRole('button', { name: 'Open data folder' }).click();
+  await recovery.getByRole('button', { name: 'Retry startup' }).click();
+  await expect(recovery.getByRole('button', { name: 'Retry startup' })).toBeEnabled();
+  await expect(recovery.getByRole('alert')).toContainText('invalid');
+  await page.evaluate(() => window.dispatchEvent(new Event('test-repair-settings')));
+  await recovery.getByRole('button', { name: 'Retry startup' }).click();
+  await expect(recovery).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start all', exact: true })).toBeEnabled();
+  await expect(page.locator('.services-grid')).toContainText(':8899');
+  expect(await page.evaluate(() => window.__TAURI_INTERNALS__!.invoke('test-retry-count'))).toBe(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('service controls, terminals, and database navigation remain usable during download', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Scenario', { exact: true }).selectOption('Update available');
+  await page.evaluate(() => { (window as Window & { __fairwayUpdateDownloadDelay?: number }).__fairwayUpdateDownloadDelay = 10000; });
+  await page.getByRole('button', { name: 'Updates', exact: true }).click();
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await page.getByRole('button', { name: 'Install update', exact: true }).click();
+  await expect(page.getByRole('progressbar', { name: 'Update download' })).toBeVisible();
+  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start all', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start all', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Stop all', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Terminal', exact: true }).click();
+  await expect(page.getByLabel('Terminal input')).toBeVisible();
+  await page.getByRole('button', { name: 'Browse Data', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Open SQLite file…', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Updates', exact: true }).click();
+  await expect(page.getByRole('progressbar', { name: 'Update download' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Install update', exact: true })).toBeDisabled();
+});

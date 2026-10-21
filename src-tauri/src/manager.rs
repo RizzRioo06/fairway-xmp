@@ -21,6 +21,8 @@ pub struct ServiceStatus {
     pub port: u16,
     pub pid: Option<u32>,
     pub message: Option<String>,
+    #[serde(default)]
+    pub message_generation: u64,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -34,7 +36,11 @@ pub struct Snapshot {
     pub sites_error: Option<String>,
     /// The hosts file does not match the registered domains yet.
     pub domains_pending: bool,
+    #[serde(default)]
+    pub domains_approval_pending: bool,
     pub https_trusted: bool,
+    #[serde(default)]
+    pub https_trust_update: bool,
     pub os: String,
     pub data_dir: String,
     pub runtime_ready: bool,
@@ -56,6 +62,9 @@ pub struct Manager {
     pub ports: Ports,
     processes: BTreeMap<String, OwnedProcess>,
     errors: BTreeMap<String, String>,
+    message_generations: BTreeMap<String, u64>,
+    /// An explicitly requested address update is waiting for macOS approval.
+    pub(crate) domains_approval_pending: bool,
 }
 
 impl Manager {
@@ -63,20 +72,39 @@ impl Manager {
         layout.initialize()?;
         let ports = layout.ports()?;
         layout.write_configs(&ports)?;
+        let domains_approval_pending =
+            cfg!(all(target_os = "macos", feature = "native-macos-hosts"))
+                && layout.data.join("address-approval-pending").is_file();
         let mut manager = Self {
             layout,
             ports,
             processes: BTreeMap::new(),
             errors: BTreeMap::new(),
+            message_generations: BTreeMap::new(),
+            domains_approval_pending,
         };
+        #[cfg(windows)]
+        for id in ["php", "nginx", "mail"] {
+            if let Some(pid) = fs::read_to_string(manager.layout.data.join(format!("{id}.pid")))
+                .ok()
+                .and_then(|text| text.trim().parse::<u32>().ok())
+            {
+                if let Some(owned) = OwnedProcess::adopt_job(
+                    pid,
+                    &manager.layout.data.join(format!("logs/{id}-process.log")),
+                ) {
+                    manager.processes.insert(id.into(), owned);
+                }
+            }
+        }
         #[cfg(unix)]
         for id in ["php", "nginx"] {
             if let Ok(pid) = fs::read_to_string(manager.layout.data.join(format!("{id}.pid"))) {
                 if let Ok(pid) = pid.trim().parse::<u32>() {
-                    if process::matches_web(pid, id, &manager.layout) {
-                        manager
-                            .processes
-                            .insert(id.into(), OwnedProcess::adopt_database(pid));
+                    if let Some(owned) = OwnedProcess::adopt_verified(pid, || {
+                        process::matches_web(pid, id, &manager.layout)
+                    }) {
+                        manager.processes.insert(id.into(), owned);
                     }
                 }
             }
@@ -85,10 +113,10 @@ impl Manager {
         if let Ok(pid) = fs::read_to_string(manager.layout.data.join("mail.pid")) {
             if let Ok(pid) = pid.trim().parse::<u32>() {
                 let exe = manager.layout.exe("mailpit", "mailpit");
-                if process::matches_command(pid, &exe, &manager.mail_args()) {
-                    manager
-                        .processes
-                        .insert("mail".into(), OwnedProcess::adopt_database(pid));
+                if let Some(owned) = OwnedProcess::adopt_verified(pid, || {
+                    process::matches_command(pid, &exe, &manager.mail_args())
+                }) {
+                    manager.processes.insert("mail".into(), owned);
                 } else if !process::pid_alive(pid) {
                     let _ = fs::remove_file(manager.layout.data.join("mail.pid"));
                 }
@@ -97,16 +125,16 @@ impl Manager {
         let pid_file = manager.layout.data.join("mysql.pid");
         if let Ok(text) = fs::read_to_string(&pid_file) {
             if let Ok(pid) = text.trim().parse::<u32>() {
-                if process::matches_database(
-                    pid,
-                    &manager.layout.exe("mysql", "mysqld"),
-                    &crate::config::windows_ansi_path(
-                        &manager.layout.data.join("config/mysql.cnf"),
-                    ),
-                ) {
-                    manager
-                        .processes
-                        .insert("mysql".into(), OwnedProcess::adopt_database(pid));
+                if let Some(owned) = OwnedProcess::adopt_verified(pid, || {
+                    process::matches_database(
+                        pid,
+                        &manager.layout.exe("mysql", "mysqld"),
+                        &crate::config::windows_ansi_path(
+                            &manager.layout.data.join("config/mysql.cnf"),
+                        ),
+                    )
+                }) {
+                    manager.processes.insert("mysql".into(), owned);
                 } else if !process::pid_alive(pid) {
                     let _ = fs::remove_file(pid_file);
                 }
@@ -172,12 +200,13 @@ impl Manager {
         for id in ids {
             if !self.processes.get_mut(&id).is_some_and(OwnedProcess::alive) {
                 self.processes.remove(&id);
-                self.errors
-                    .insert(id, "The service exited. Open its log for details.".into());
+                self.record_error(&id, "The service exited. Open its log for details.".into());
             }
         }
         let php = self.processes.contains_key("php") && process::connected(self.ports.php);
-        let mysql = self.processes.contains_key("mysql") && process::connected(self.ports.mysql);
+        let mysql = self.processes.contains_key("mysql")
+            && self.layout.data.join("database-ready").is_file()
+            && process::connected(self.ports.mysql);
         let nginx = self.processes.contains_key("nginx") && process::health(self.ports.website);
         let admin = nginx && php && mysql && process::health(self.ports.phpmyadmin);
         let mail = self.processes.contains_key("mail")
@@ -200,6 +229,7 @@ impl Manager {
                 port,
                 pid: self.processes.get(owner).map(|p| p.pid()),
                 message: self.errors.get(id).cloned(),
+                message_generation: self.message_generations.get(id).copied().unwrap_or(0),
             }
         })
         .collect();
@@ -220,15 +250,18 @@ impl Manager {
                 config,
             })
             .collect();
+        let domains_pending =
+            sites_error.is_none() && !crate::hosts::current(&domains).unwrap_or(false);
         Snapshot {
             ports: self.ports.clone(),
             services,
             document_root: self.layout.www.to_string_lossy().into(),
             projects,
             sites_error: sites_error.clone(),
-            domains_pending: sites_error.is_none()
-                && !crate::hosts::current(&domains).unwrap_or(false),
+            domains_pending,
+            domains_approval_pending: self.domains_approval_pending && domains_pending,
             https_trusted: crate::tls::trusted(&self.layout),
+            https_trust_update: crate::tls::trust_update_needed(&self.layout),
             os: std::env::consts::OS.into(),
             data_dir: self.layout.data.to_string_lossy().into(),
             runtime_ready: self.runtime_ready(),
@@ -356,7 +389,11 @@ impl Manager {
             .find(|p| p.domain == domain)
             .ok_or("This site is no longer registered.")?;
         if project.https == enabled {
-            return Ok(());
+            return if enabled && crate::tls::trust_update_needed(&self.layout) {
+                self.reload_sites()
+            } else {
+                Ok(())
+            };
         }
         project.https = enabled;
         self.apply_projects(projects)
@@ -375,6 +412,21 @@ impl Manager {
             .into_iter()
             .map(|p| p.domain)
             .collect())
+    }
+
+    #[cfg(feature = "desktop")]
+    pub(crate) fn remember_address_approval(&mut self, pending: bool) -> Result<()> {
+        self.domains_approval_pending = false;
+        let marker = self.layout.data.join("address-approval-pending");
+        if pending {
+            atomic_write(&marker, b"pending\n")?;
+        } else if let Err(error) = fs::remove_file(&marker) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                return Err(format!("Could not clear pending address setup: {error}"));
+            }
+        }
+        self.domains_approval_pending = pending;
+        Ok(())
     }
 
     pub fn save_settings(&mut self, ports: Ports, version: String) -> Result<()> {
@@ -513,22 +565,44 @@ impl Manager {
     }
 
     pub fn start(&mut self, id: &str) -> Result<()> {
+        self.start_with_timeout(id, Duration::from_secs(if id == "mysql" { 60 } else { 15 }))
+    }
+
+    fn start_with_timeout(&mut self, id: &str, timeout: Duration) -> Result<()> {
         if !["php", "mysql", "nginx", "mail"].contains(&id) {
             return Err("Unknown service.".into());
         }
         let _ = self.snapshot();
-        if self.processes.contains_key(id) {
+        let tracked = self.processes.contains_key(id);
+        if tracked
+            && (id != "mysql"
+                || (self.layout.data.join("database-ready").is_file()
+                    && !self.errors.contains_key(id)))
+        {
             return Ok(());
         }
         self.errors.remove(id);
-        let result = self.start_inner(id);
+        let result = if tracked {
+            // A readiness timeout can leave MySQL alive. Retry must finish that
+            // same instance rather than treating a tracked PID as completed setup.
+            self.wait_ready(id, timeout)
+                .and_then(|_| self.finish_database_start())
+        } else {
+            self.start_inner(id, timeout)
+        };
         if let Err(e) = &result {
-            self.errors.insert(id.into(), e.clone());
+            self.record_error(id, e.clone());
         }
         result
     }
 
-    fn start_inner(&mut self, id: &str) -> Result<()> {
+    fn record_error(&mut self, id: &str, error: String) {
+        let generation = self.message_generations.entry(id.into()).or_default();
+        *generation = generation.saturating_add(1);
+        self.errors.insert(id.into(), error);
+    }
+
+    fn start_inner(&mut self, id: &str, timeout: Duration) -> Result<()> {
         if id == "mail" && !self.mail_available() {
             return Err("The mail catcher files are missing. Reinstall Fairway XMP to restore them; your projects and data will be kept.".into());
         }
@@ -539,7 +613,7 @@ impl Manager {
             self.start("php")?;
             if let Err(e) = self
                 .prepare_phpmyadmin()
-                .and_then(|_| self.spawn_service(id))
+                .and_then(|_| self.spawn_service(id, timeout))
             {
                 if !php_was_running {
                     let _ = self.stop("php");
@@ -552,16 +626,20 @@ impl Manager {
             crate::database::prepare_upgrade(&self.layout)?;
             self.initialize_database()?;
         }
-        self.spawn_service(id)?;
+        self.spawn_service(id, timeout)?;
         if id == "mysql" {
-            if let Err(e) = self.provision_database() {
-                // Keep the owned process tracked if shutdown fails, never orphan/kill MySQL.
-                let shutdown = self.stop("mysql");
-                return Err(format!(
-                    "Database setup failed: {e}. {}",
-                    shutdown.err().unwrap_or_default()
-                ));
-            }
+            self.finish_database_start()?;
+        }
+        Ok(())
+    }
+
+    fn finish_database_start(&mut self) -> Result<()> {
+        if let Err(error) = self.provision_database() {
+            // Keep the owned process tracked if shutdown fails, never orphan/kill MySQL.
+            return Err(match self.stop("mysql") {
+                Ok(()) => format!("Database setup failed: {error}"),
+                Err(shutdown) => format!("Database setup failed: {error}. {shutdown}"),
+            });
         }
         Ok(())
     }
@@ -576,7 +654,7 @@ impl Manager {
             .env("COMPOSER_HOME", self.layout.data.join("composer"));
     }
 
-    fn spawn_service(&mut self, id: &str) -> Result<()> {
+    fn spawn_service(&mut self, id: &str, timeout: Duration) -> Result<()> {
         crate::logs::trim_stopped(&self.layout.data.join("logs"), id)?;
         let mut cmd = match id {
             "php" => {
@@ -644,15 +722,18 @@ impl Manager {
             id == "mysql",
         )?;
         // Mailpit writes no PID file; record one so a restarted Fairway can adopt it.
-        #[cfg(unix)]
-        if id == "mail" {
+        if id == "mail" || (cfg!(windows) && id == "php") {
             atomic_write(
-                &self.layout.data.join("mail.pid"),
+                &self.layout.data.join(format!("{id}.pid")),
                 owned.pid().to_string().as_bytes(),
             )?;
         }
         self.processes.insert(id.into(), owned);
-        let deadline = Instant::now() + Duration::from_secs(if id == "mysql" { 60 } else { 15 });
+        self.wait_ready(id, timeout)
+    }
+
+    fn wait_ready(&mut self, id: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
         loop {
             if !self.processes.get_mut(id).is_some_and(OwnedProcess::alive) {
                 self.processes.remove(id);
@@ -704,19 +785,45 @@ impl Manager {
         {
             return Err("The database folder contains an incomplete initialization. It has been preserved; inspect the MySQL log before retrying.".into());
         }
-        let mut cmd = process::command(crate::config::windows_ansi_path(
-            &self.layout.exe("mysql", "mysqld"),
-        ));
-        cmd.arg(format!(
-            "--defaults-file={}",
-            crate::config::windows_ansi_path(&self.layout.data.join("config/mysql.cnf")).display()
-        ))
-        .arg("--initialize-insecure");
-        process::output(cmd)?;
-        atomic_write(
-            &self.layout.data.join("database-version"),
-            crate::database::runtime_family(&self.layout)?.as_bytes(),
-        )
+        let secret = self.layout.secret()?;
+        let init_file = self.layout.data.join("tmp/mysql-init.sql");
+        let result = (|| {
+            atomic_write(
+                &init_file,
+                format!("ALTER USER 'root'@'localhost' IDENTIFIED BY '{secret}';\n").as_bytes(),
+            )?;
+            crate::config::private_file(&init_file)?;
+            let mut cmd = process::command(crate::config::windows_ansi_path(
+                &self.layout.exe("mysql", "mysqld"),
+            ));
+            cmd.arg(format!(
+                "--defaults-file={}",
+                crate::config::windows_ansi_path(&self.layout.data.join("config/mysql.cnf"))
+                    .display()
+            ))
+            // Bootstrap never listens. Secure initialization also leaves root
+            // password-protected if interrupted before the init-file is applied.
+            .arg("--initialize")
+            .arg(format!(
+                "--init-file={}",
+                crate::config::windows_ansi_path(&init_file).display()
+            ))
+            .current_dir(crate::config::windows_ansi_path(&self.layout.data));
+            process::output(cmd).map_err(|error| error.replace(&secret, "[redacted]"))?;
+            atomic_write(
+                &self.layout.data.join("database-version"),
+                crate::database::runtime_family(&self.layout)?.as_bytes(),
+            )
+        })();
+        // Remove the one-shot SQL secret after both successful and failed initialization.
+        let cleanup = match fs::remove_file(&init_file) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "Could not remove the private database setup file: {error}"
+            )),
+        };
+        result.and(cleanup)
     }
 
     fn nginx_command(&self) -> std::process::Command {
@@ -754,13 +861,15 @@ impl Manager {
                 crate::config::windows_ansi_path(&self.layout.data.join("config/admin.cnf"))
                     .display()
             ));
+            cmd.arg("--no-login-paths");
         } else {
-            cmd.arg("--no-defaults").args([
-                "--user=root",
-                "--host=127.0.0.1",
-                "--protocol=TCP",
-                &format!("--port={}", self.ports.mysql),
-            ]);
+            cmd.args(["--no-defaults", "--no-login-paths", "--skip-password"])
+                .args([
+                    "--user=root",
+                    "--host=127.0.0.1",
+                    "--protocol=TCP",
+                    &format!("--port={}", self.ports.mysql),
+                ]);
         }
         if executable != "mysqldump" {
             cmd.arg("--connect-timeout=3");
@@ -835,18 +944,37 @@ impl Manager {
                 "mysql" => {
                     let mut cmd = self.database_command("mysqladmin", true);
                     cmd.arg("shutdown");
-                    process::output(cmd)?;
+                    if let Err(error) = process::output(cmd) {
+                        if self.layout.data.join("database-ready").exists() {
+                            return Err(error);
+                        }
+                        // Compatibility recovery for older interrupted first-run
+                        // setup. Only a tracked, unprovisioned instance may use it.
+                        let mut fallback = self.database_command("mysqladmin", false);
+                        fallback.arg("shutdown");
+                        process::output(fallback).map_err(|fallback| {
+                            format!("{error}\nUnprovisioned database shutdown failed: {fallback}")
+                        })?;
+                    }
                 }
                 "nginx" => {
                     let mut cmd = self.nginx_command();
                     cmd.args(["-s", "quit"]);
-                    process::output(cmd)?;
+                    if let Err(error) = process::output(cmd) {
+                        #[cfg(unix)]
+                        let fallback = self.processes.get_mut(id).unwrap().graceful_signal();
+                        #[cfg(windows)]
+                        let fallback = self.processes.get_mut(id).unwrap().terminate_web();
+                        fallback.map_err(|fallback| {
+                            format!("{error}\nNginx shutdown fallback failed: {fallback}")
+                        })?;
+                    }
                 }
                 // Mailpit shuts down cleanly on SIGTERM; SIGQUIT would dump and abort.
                 "mail" => self.processes.get_mut(id).unwrap().terminate_web()?,
                 _ => {
                     #[cfg(unix)]
-                    self.processes.get(id).unwrap().graceful_signal()?;
+                    self.processes.get_mut(id).unwrap().graceful_signal()?;
                     #[cfg(windows)]
                     self.processes.get_mut(id).unwrap().terminate_web()?;
                 }
@@ -879,6 +1007,14 @@ impl Manager {
         } else {
             Err(errors.join("\n"))
         }
+    }
+
+    /// Preserve owned services after the user explicitly chooses to leave them running.
+    pub fn leave_services_running(&mut self) -> Result<()> {
+        for process in self.processes.values_mut() {
+            process.leave_running()?;
+        }
+        Ok(())
     }
 
     pub fn log(&self, id: &str) -> Result<String> {
@@ -927,9 +1063,7 @@ impl Manager {
                 output
                     .write_all(b"-- Fairway XMP backup: no student databases were present.\n")
                     .map_err(|e| e.to_string())?;
-                output.sync_all().map_err(|e| e.to_string())?;
-                drop(output);
-                fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+                crate::durability::publish_file(output, &partial, &path)?;
                 return Ok(path.to_string_lossy().into());
             }
             cmd.args([
@@ -942,13 +1076,13 @@ impl Manager {
                 "--",
             ])
             .args(names)
-            .stdout(Stdio::from(output))
+            .stdout(Stdio::from(output.try_clone().map_err(|e| e.to_string())?))
             .stderr(Stdio::piped());
             let result = cmd.output().map_err(|e| e.to_string())?;
             if !result.status.success() {
                 return Err(String::from_utf8_lossy(&result.stderr).into());
             }
-            fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+            crate::durability::publish_file(output, &partial, &path)?;
             Ok(path.to_string_lossy().into())
         })();
         if result.is_err() {
@@ -1002,9 +1136,49 @@ fn copy_tree(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(test, unix))]
+#[path = "manager_mysql_tests.rs"]
+mod mysql_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identical_failed_retries_have_distinct_message_occurrences() {
+        let root = std::env::temp_dir().join(format!(
+            "fairway-error-generation-{}",
+            rand::random::<u64>()
+        ));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let mut manager = Manager::new(layout).unwrap();
+        let mut previous = None;
+        for generation in 1..=2 {
+            assert!(manager.start("mail").is_err());
+            let service = manager
+                .snapshot()
+                .services
+                .into_iter()
+                .find(|s| s.id == "mail")
+                .unwrap();
+            assert_eq!(service.message_generation, generation);
+            if let Some(message) = previous {
+                assert_eq!(service.message, message);
+            }
+            previous = Some(service.message);
+            assert_eq!(
+                manager
+                    .snapshot()
+                    .services
+                    .into_iter()
+                    .find(|s| s.id == "mail")
+                    .unwrap()
+                    .message_generation,
+                generation
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn snapshot_reports_mail_binary_availability_independently_of_its_manifest() {
@@ -1019,6 +1193,49 @@ mod tests {
         assert!(manager.snapshot().mail_available);
         fs::remove_file(executable).unwrap();
         assert!(!manager.snapshot().mail_available);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn pending_address_approval_survives_restart_without_caching_site_domains() {
+        let root = std::env::temp_dir().join(format!(
+            "fairway-address-approval-{}",
+            rand::random::<u64>()
+        ));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let mut manager = Manager::new(layout.clone()).unwrap();
+        assert!(!manager.domains_approval_pending);
+        manager.remember_address_approval(true).unwrap();
+        drop(manager);
+        let mut manager = Manager::new(layout.clone()).unwrap();
+        assert_eq!(
+            manager.domains_approval_pending,
+            cfg!(all(target_os = "macos", feature = "native-macos-hosts"))
+        );
+        let mut site = ProjectConfig {
+            name: "Shop".into(),
+            domain: "shop".into(),
+            root: layout.www.clone(),
+            https: false,
+            index_fallback: false,
+        };
+        layout.save_projects(&[site.clone()]).unwrap();
+        assert_eq!(manager.domains().unwrap(), ["shop"]);
+        site.domain = "renamed".into();
+        layout.save_projects(&[site]).unwrap();
+        assert_eq!(manager.domains().unwrap(), ["renamed"]);
+        layout.save_projects(&[]).unwrap();
+        assert!(manager.domains().unwrap().is_empty());
+        manager.remember_address_approval(false).unwrap();
+        manager.remember_address_approval(false).unwrap();
+        drop(manager);
+        assert!(
+            !Manager::new(layout.clone())
+                .unwrap()
+                .domains_approval_pending
+        );
+        assert!(!layout.data.join("address-approval-pending").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -2,18 +2,19 @@ export type ServiceId = 'nginx' | 'php' | 'mysql' | 'phpmyadmin' | 'mail';
 export type Ports = { website: number; phpmyadmin: number; mysql: number; php: number; mail: number; smtp: number };
 export type ServiceStatus = {
   id: ServiceId; running: boolean; ready: boolean; port: number;
-  pid: number | null; message: string | null;
+  pid: number | null; message: string | null; messageGeneration?: number;
 };
 export type ProjectConfig = { name: string; domain: string; root: string; https: boolean; indexFallback: boolean };
 export type Project = ProjectConfig & { available: boolean; domainReady: boolean };
 export type Snapshot = {
-  ports: Ports; services: ServiceStatus[]; documentRoot: string; projects: Project[]; sitesError: string | null; domainsPending: boolean; httpsTrusted: boolean; os: string; dataDir: string;
+  ports: Ports; services: ServiceStatus[]; documentRoot: string; projects: Project[]; sitesError: string | null; domainsPending: boolean; domainsApprovalPending?: boolean; httpsTrusted: boolean; httpsTrustUpdate?: boolean; os: string; dataDir: string;
   runtimeReady: boolean; runtimeVersions: Record<string, string> | null; mailAvailable: boolean;
   phpVersion: string; phpVersions: Record<string, string>;
   pathInstalled: boolean; cliPhp: string | null; cliComposer: string | null;
   pathPhp: string | null; pathComposer: string | null; version: string;
 };
 export type UpdateInfo = { configured: boolean; version: string | null; notes: string | null };
+export type StartupStatus = { blocking: boolean; errors: string[]; dataDir: string | null };
 export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'preparing' | 'installing'; downloaded?: number; total?: number | null };
 export type MailAddress = { Name: string; Address: string };
 export type MailSummary = { ID: string; Read: boolean; From: MailAddress | null; To: MailAddress[] | null; Subject: string; Created: string; Snippet: string; Attachments: number };

@@ -20,7 +20,7 @@ use tauri_plugin_updater::UpdaterExt;
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
 
-type Shared = Arc<Mutex<Manager>>;
+type Shared = Arc<Mutex<crate::startup::Startup>>;
 
 #[derive(Default)]
 struct DesktopControl {
@@ -47,7 +47,9 @@ impl Drop for DesktopOperation {
 
 fn begin_operation(app: &tauri::AppHandle, label: &str) -> Result<DesktopOperation> {
     let operation = app.state::<DesktopControl>().lifecycle.begin()?;
-    let _ = app.state::<NativeTray>().set_busy(false);
+    if let Some(tray) = app.try_state::<NativeTray>() {
+        let _ = tray.set_busy(false);
+    }
     let _ = app.emit("fairway-operation-started", label);
     Ok(DesktopOperation {
         operation: Some(operation),
@@ -76,14 +78,14 @@ fn report_error(app: &tauri::AppHandle, error: String) {
     // skips activation while a macOS authorization prompt is still in progress.
     // Site-save approval returns to the already open panel and does not use this path.
     show_window(app);
-    let _ = app.emit("fairway-error", error);
+    let _ = app.emit("fairway-action-error", error);
 }
 
 fn publish_status(app: &tauri::AppHandle, snapshot: &Snapshot) {
     let control = app.state::<DesktopControl>();
-    let _ = app
-        .state::<NativeTray>()
-        .refresh(snapshot, &control.lifecycle);
+    if let Some(tray) = app.try_state::<NativeTray>() {
+        let _ = tray.refresh(snapshot, &control.lifecycle);
+    }
     let _ = app.emit("fairway-status", snapshot);
 }
 
@@ -110,7 +112,9 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
     if !lifecycle.request_quit() {
         return;
     }
-    let _ = app.state::<NativeTray>().set_busy(true);
+    if let Some(tray) = app.try_state::<NativeTray>() {
+        let _ = tray.set_busy(true);
+    }
     let _ = app.emit("fairway-shutdown", ());
     let state = app.state::<Shared>().inner().clone();
     let app = app.clone();
@@ -121,10 +125,11 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
             let mut manager = state.lock().map_err(|_| {
                 "The service manager is unavailable. Restart Fairway XMP.".to_string()
             })?;
+            let manager = manager.manager()?;
             manager.stop_all()?;
             // Terminal processes are owned separately from managed services.
             // A hidden window keeps them alive; explicit Quit closes them.
-            remove_app_marker(&manager)
+            remove_app_marker(manager)
         })
         .await
         .map_err(|e| e.to_string())
@@ -136,10 +141,43 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
                 app.exit(0);
             }
             Err(error) => {
-                lifecycle.cancel_quit();
-                let _ = app.emit("fairway-operation-finished", ());
-                report_error(&app, error);
-                refresh_status(&app);
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+                show_window(&app);
+                let handle = app.clone();
+                app.dialog().message(format!("{error}\n\nKeep Fairway XMP open to retry, or quit and leave any remaining services running. Your project and database files will be kept. Embedded terminal sessions will close."))
+                    .title("Services could not be stopped")
+                    .buttons(MessageDialogButtons::OkCancelCustom("Quit anyway".into(), "Keep open".into()))
+                    .show(move |leave| {
+                        let handle = handle.clone();
+                        let lifecycle = lifecycle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if leave {
+                                let state = handle.state::<Shared>().inner().clone();
+                                let detached = tauri::async_runtime::spawn_blocking(move || {
+                                    let mut startup = state.lock().map_err(|_| "The service manager is unavailable.")?;
+                                    if let Some(manager) = startup.manager.as_mut() {
+                                        manager.leave_services_running()?;
+                                        let _ = remove_app_marker(manager);
+                                    }
+                                    Ok::<_, String>(())
+                                }).await.map_err(|error| error.to_string()).and_then(|result| result);
+                                if let Err(error) = detached {
+                                    lifecycle.cancel_quit();
+                                    let _ = handle.emit("fairway-operation-finished", ());
+                                    report_error(&handle, error);
+                                    return;
+                                }
+                                handle.state::<crate::terminal::Terminals>().close_all();
+                                lifecycle.allow_exit();
+                                handle.exit(0);
+                            } else {
+                                lifecycle.cancel_quit();
+                                let _ = handle.emit("fairway-operation-finished", ());
+                                report_error(&handle, error);
+                                refresh_status(&handle);
+                            }
+                        });
+                    });
             }
         }
     });
@@ -179,7 +217,7 @@ async fn access<T: Send + 'static>(
         let mut manager = state
             .lock()
             .map_err(|_| "The service manager is unavailable. Restart Fairway XMP.")?;
-        f(&mut manager)
+        f(manager.manager()?)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -188,6 +226,31 @@ async fn access<T: Send + 'static>(
 #[tauri::command]
 async fn snapshot(state: State<'_, Shared>) -> Result<Snapshot> {
     access(state.inner().clone(), |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+fn startup_status(state: State<'_, Shared>) -> Result<crate::startup::Status> {
+    Ok(state
+        .lock()
+        .map_err(|_| "Startup status is unavailable.")?
+        .status())
+}
+
+#[tauri::command]
+async fn retry_startup(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+) -> Result<crate::startup::Status> {
+    let _operation = begin_operation(&app, "Retrying startup…")?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(state
+            .lock()
+            .map_err(|_| "Startup status is unavailable.")?
+            .retry())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -212,6 +275,19 @@ async fn terminal_context(state: State<'_, Shared>) -> Result<crate::terminal::T
         crate::terminal::context(&m.layout)
     })
     .await
+}
+
+#[tauri::command]
+async fn terminal_external(app: tauri::AppHandle, id: String) -> Result<()> {
+    let _operation = begin_operation(&app, "Opening external terminal…")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = app
+            .state::<crate::terminal::Terminals>()
+            .current_directory(&id)?;
+        crate::terminal::open_external(&directory)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -268,9 +344,16 @@ async fn data_browser(
     let jobs = app.state::<crate::data_browser::Jobs>();
     let cancel = jobs.register(&id)?;
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await;
+    let progress_app = app.clone();
+    let progress_id = id.clone();
     let result = match layout {
         Ok(layout) => tauri::async_runtime::spawn_blocking(move || {
-            crate::data_browser::execute(&layout, request, cancel)
+            crate::data_browser::execute_with_progress(&layout, request, cancel, |phase| {
+                let _ = progress_app.emit(
+                    "data-browser-progress",
+                    serde_json::json!({ "id": progress_id, "phase": phase }),
+                );
+            })
         })
         .await
         .map_err(|e| e.to_string())
@@ -401,10 +484,38 @@ async fn save_settings(
 /// Match the hosts file to the registered domains. Runs outside the manager lock
 /// because the OS approval prompt waits for the user.
 async fn sync_hosts(state: Shared) -> Result<()> {
-    let domains = access(state, |m| m.domains()).await?;
-    tauri::async_runtime::spawn_blocking(move || crate::hosts::ensure(&domains, "--sync-hosts"))
+    sync_hosts_with(state, crate::hosts::ensure_for_desktop).await
+}
+
+async fn sync_hosts_with(
+    state: Shared,
+    ensure: fn(&[String]) -> Result<crate::hosts::SetupStatus>,
+) -> Result<()> {
+    // Read the latest desired sites under the operation guard, including edits
+    // or removals made while Settings was open. A failed write needs an explicit
+    // retry rather than repeating an error on every monitoring tick.
+    let domains = access(state.clone(), |m| {
+        let domains = m.domains()?;
+        m.domains_approval_pending = false;
+        Ok(domains)
+    })
+    .await?;
+    let result = tauri::async_runtime::spawn_blocking(move || ensure(&domains))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+        .and_then(|result| result);
+    access(state, move |m| {
+        let pending = result
+            .as_ref()
+            .is_ok_and(|status| *status == crate::hosts::SetupStatus::ApprovalRequired);
+        let remembered = m.remember_address_approval(pending);
+        match (result, remembered) {
+            (Err(error), Err(cleanup)) => Err(format!("{error} {cleanup}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            (Ok(_), Ok(())) => Ok(()),
+        }
+    })
+    .await
 }
 
 #[tauri::command]
@@ -442,6 +553,11 @@ async fn remove_project(
     sync_hosts(state.clone())
         .await
         .map_err(|e| format!("The site was removed, but the hosts file was not updated: {e}"))?;
+    if access(state.clone(), |m| Ok(m.domains_approval_pending)).await? {
+        // Complete the address handoff first. Unused certificate trust remains
+        // visible for an explicit retry, rather than opening a second OS prompt.
+        return access(state, |m| Ok(m.snapshot())).await;
+    }
     if let Some(layout) = unused_trust {
         tauri::async_runtime::spawn_blocking(move || crate::tls::remove_trust(&layout))
             .await
@@ -454,11 +570,53 @@ async fn remove_project(
 }
 
 #[tauri::command]
-async fn sync_domains(app: tauri::AppHandle, state: State<'_, Shared>) -> Result<Snapshot> {
+async fn sync_domains(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    check_approval: Option<bool>,
+) -> Result<Snapshot> {
     let _operation = begin_operation(&app, "Updating the hosts file…")?;
     let state = state.inner().clone();
-    sync_hosts(state.clone()).await?;
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    if check_approval.unwrap_or(false) {
+        sync_hosts_with(state.clone(), crate::hosts::macos_native::check_approval).await?;
+    } else {
+        sync_hosts(state.clone()).await?;
+    }
+    #[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
+    {
+        let _ = check_approval;
+        sync_hosts(state.clone()).await?;
+    }
     access(state, |m| Ok(m.snapshot())).await
+}
+
+#[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+fn resume_approved_addresses(app: &tauri::AppHandle, state: &Shared) {
+    if !crate::hosts::macos_native::approval_enabled() {
+        return;
+    }
+    // A manual action or Quit may have started since the monitor took its
+    // snapshot. Reserving the normal operation guard keeps the same ordering.
+    let Ok(operation) = begin_operation(app, "Finishing site address setup…") else {
+        return;
+    };
+    let app = app.clone();
+    let state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        let _operation = operation;
+        if let Err(error) =
+            sync_hosts_with(state, crate::hosts::macos_native::finish_approved).await
+        {
+            // Keep the error visible without taking focus from System Settings.
+            let _ = app.emit(
+                "fairway-action-error",
+                format!(
+                    "Address setup could not finish. Choose Set up addresses to retry. {error}"
+                ),
+            );
+        }
+    });
 }
 
 #[tauri::command]
@@ -491,6 +649,12 @@ async fn set_project_https(
         Ok((!enabled && m.unused_trust()?).then(|| m.layout.clone()))
     })
     .await?;
+    if enabled {
+        let layout = access(shared.clone(), |m| Ok(m.layout.clone())).await?;
+        tauri::async_runtime::spawn_blocking(move || crate::tls::finish_trust_update(&layout))
+            .await.map_err(|e| e.to_string())?
+            .map_err(|e| format!("HTTPS is enabled, but retiring the previous certificate trust did not finish. Choose Update certificate trust to retry. {e}"))?;
+    }
     if let Some(layout) = unused_trust {
         // The site/config change has succeeded. A cancelled cleanup leaves
         // HTTPS off and exposes the existing unused-trust retry in the panel.
@@ -519,6 +683,23 @@ async fn remove_https_trust(app: tauri::AppHandle, state: State<'_, Shared>) -> 
         .await
         .map_err(|e| e.to_string())??;
     access(shared, |m| Ok(m.snapshot())).await
+}
+
+#[tauri::command]
+async fn pick_sql_file(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Import SQL file")
+            .add_filter("SQL dump (.sql)", &["sql"])
+            .add_filter("All files", &["*"])
+            .blocking_pick_file()
+            .map(|path| path.into_path().map_err(|e| e.to_string()))
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -557,6 +738,22 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<PathBuf>> {
 
 #[tauri::command]
 async fn open_target(state: State<'_, Shared>, target: String) -> Result<()> {
+    if target == "data" {
+        let state = state.inner().clone();
+        return tauri::async_runtime::spawn_blocking(move || {
+            let startup = state.lock().map_err(|_| "Startup status is unavailable.")?;
+            integration::open(
+                startup
+                    .layout
+                    .as_ref()
+                    .ok_or("The data directory is unavailable.")?,
+                "data",
+                &Ports::default(),
+            )
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
     access(state.inner().clone(), move |m| {
         integration::open(&m.layout, &target, &m.ports)
     })
@@ -639,7 +836,8 @@ async fn install_update(
     state: State<'_, Shared>,
     version: String,
 ) -> Result<()> {
-    let _operation = begin_operation(&app, "Downloading update…")?;
+    let download = app.state::<DesktopControl>().lifecycle.begin_download()?;
+    let (update, bytes) = download.run(async {
     let updater = app
         .updater_builder()
         .timeout(Duration::from_secs(30))
@@ -673,8 +871,20 @@ async fn install_update(
         let _ = app.emit("fairway-update-progress", serde_json::json!({"phase": "verifying"}));
     }).await.map_err(|e| format!("Could not download or verify the update. Services are still available. Try again later. {e}"))?;
 
-    // Reserve replacement against Quit only after download AND verification.
-    // During the download Quit can still run once this operation completes.
+    Ok((update, bytes))
+    }).await?;
+
+    // Only verified bytes may reserve normal operations and bundle replacement.
+    // Wait for an active service/database action; Quit cancels this wait too.
+    let operation = download.begin_operation().await?;
+    let _operation = DesktopOperation {
+        operation: Some(operation),
+        app: app.clone(),
+    };
+    if let Some(tray) = app.try_state::<NativeTray>() {
+        let _ = tray.set_busy(false);
+    }
+    let _ = app.emit("fairway-operation-started", "Preparing update…");
     let _installation = app.state::<DesktopControl>().lifecycle.begin_install()?;
     let _ = app.emit(
         "fairway-update-progress",
@@ -894,24 +1104,15 @@ pub fn run() {
             } else {
                 app.path().resource_dir()?.join("runtime")
             };
-            let manager = Manager::new(Layout::new(runtime).map_err(std::io::Error::other)?)
-                .map_err(std::io::Error::other)?;
-            integration::refresh(&manager.layout).map_err(std::io::Error::other)?;
-            crate::config::atomic_write(
-                &manager.layout.data.join("app.pid"),
-                std::process::id().to_string().as_bytes(),
-            )
-            .map_err(std::io::Error::other)?;
-            app.manage(crate::logs::LogDirectory::new(
-                manager.layout.data.join("logs"),
-            ));
-            app.manage(Arc::new(Mutex::new(manager)));
+            let startup = crate::startup::Startup::new(runtime);
+            if let Some(layout) = &startup.layout { app.manage(crate::logs::LogDirectory::new(layout.data.join("logs"))); }
+            app.manage(Arc::new(Mutex::new(startup)));
             app.manage(DesktopControl::default());
             app.manage(crate::data_browser::Jobs::default());
             app.manage(crate::terminal::Terminals::default());
-            // Fail initialization if the tray cannot be created; otherwise a
-            // hidden window could leave users without a way to control the app.
-            NativeTray::install(app.handle())?;
+            if let Err(error) = NativeTray::install(app.handle()) {
+                app.state::<Shared>().lock().unwrap().add_error(format!("The tray could not be created. Closing the window will quit Fairway XMP. {error}"));
+            }
             let handle = app.handle().clone();
             let state = handle.state::<Shared>().inner().clone();
             std::thread::spawn(move || loop {
@@ -922,9 +1123,13 @@ pub fn run() {
                 // Native monitoring keeps working when the hidden webview is
                 // throttled. Never hold the manager lock while updating menus.
                 if !control.lifecycle.busy() {
-                    let snapshot = state.try_lock().ok().map(|mut m| m.snapshot());
+                    let snapshot = state.try_lock().ok().and_then(|mut startup| startup.manager.as_mut().map(Manager::snapshot));
                     if let Some(snapshot) = snapshot {
                         publish_status(&handle, &snapshot);
+                        #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+                        if snapshot.domains_approval_pending {
+                            resume_approved_addresses(&handle, &state);
+                        }
                     }
                 }
                 std::thread::sleep(Duration::from_millis(2500));
@@ -933,8 +1138,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             snapshot,
+            startup_status,
+            retry_startup,
             terminal_start,
             terminal_context,
+            terminal_external,
             terminal_read,
             terminal_write,
             terminal_resize,
@@ -952,6 +1160,7 @@ pub fn run() {
             set_project_https,
             remove_https_trust,
             pick_folder,
+            pick_sql_file,
             pick_sqlite_file,
             open_target,
             read_logs,
@@ -963,6 +1172,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
+                if window.app_handle().try_state::<NativeTray>().is_none() { request_quit(window.app_handle()); return; }
                 if let Err(error) = window.hide() {
                     report_error(window.app_handle(), error.to_string());
                 }

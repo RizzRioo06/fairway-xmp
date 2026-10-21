@@ -18,6 +18,27 @@ const LEGACY_END: &str = "# <<< Fairway XMP project domains <<<";
 const BEGIN: &str = "# >>> Fairway XMP sites >>>";
 const END: &str = "# <<< Fairway XMP sites <<<";
 
+#[cfg(feature = "desktop")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SetupStatus {
+    Complete,
+    ApprovalRequired,
+}
+
+/// Native background approval is an unfinished step, rather than a failed save.
+/// Other platforms retain their existing synchronous authorization flow.
+#[cfg(feature = "desktop")]
+pub fn ensure_for_desktop(names: &[String]) -> Result<SetupStatus> {
+    #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
+    {
+        macos_native::ensure(names)
+    }
+    #[cfg(not(all(target_os = "macos", feature = "native-macos-hosts")))]
+    {
+        ensure(names, "--sync-hosts").map(|()| SetupStatus::Complete)
+    }
+}
+
 fn block_markers(text: &str) -> Result<Option<(&'static str, &'static str)>> {
     let current = text.contains(BEGIN) || text.contains(END);
     let legacy = text.contains(LEGACY_BEGIN) || text.contains(LEGACY_END);
@@ -302,7 +323,10 @@ pub fn ensure(names: &[String], helper_flag: &str) -> Result<()> {
 
 #[cfg(all(target_os = "macos", feature = "native-macos-hosts"))]
 pub fn ensure(names: &[String], _helper_flag: &str) -> Result<()> {
-    macos_native::ensure(names)
+    match macos_native::ensure(names)? {
+        SetupStatus::Complete => Ok(()),
+        SetupStatus::ApprovalRequired => Err(macos_native::APPROVAL_MESSAGE.into()),
+    }
 }
 
 #[cfg(test)]

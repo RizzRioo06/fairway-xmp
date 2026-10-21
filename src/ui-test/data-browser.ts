@@ -40,6 +40,7 @@ export async function databaseRequest(id: string, r: Record<string, unknown>) {
   if (op === 'drop_database') { delete schemas[db]; return { message: 'Database deleted. A SQL backup was saved first.' }; }
   if (op === 'rename_database') { if (Object.keys(schema).length) throw new Error('Only empty databases can be renamed. Use SQL export/import for a populated database.'); if (schemas[name]) throw new Error('Database already exists.'); schemas[name] = schema; delete schemas[db]; return { message: 'Database renamed. Update project connection settings.' }; }
   if (op === 'tables') return { tables: Object.entries(schema).map(([name, t]) => ({ name, kind: t.kind })) };
+  if (op === 'import') { if (r.confirmed !== true || !r.sqlFile) throw new Error('Confirm the SQL import first.'); return { message: `SQL imported into ${db}. Backup saved: /Users/Student May/Library/Application Support/dev.fairway.environment/backups/pre-import.sql` }; }
   if (op === 'export') return { message: 'SQL export saved: /Users/Student May/Library/Application Support/dev.fairway.environment/backups/database-ui-test.sql' };
   if (op === 'query') {
     const sql = String(r.sql).trim();

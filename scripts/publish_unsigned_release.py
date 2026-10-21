@@ -138,11 +138,16 @@ def main(signed=False):
         if signed:
             from update_feed import generate
             feed = generate(manifest, directories, repo, notes.read_text())
+            verifier = os.environ.get('FAIRWAY_UPDATE_VERIFIER')
+            require(verifier or os.environ.get('GITHUB_ACTIONS') != 'true',
+                    'Hosted publication requires a verifier compiled in the read-only job')
+            verify_command = [verifier] if verifier else [
+                'cargo', 'run', '--manifest-path', str(ROOT / 'src-tauri/Cargo.toml'),
+                '--no-default-features', '--example', 'verify_update', '--locked', '--',
+            ]
             for target in ('macos-arm64', 'windows-x64'):
                 candidate = manifest['candidates'][target]
-                subprocess.check_call([
-                    'cargo', 'run', '--manifest-path', str(ROOT / 'src-tauri/Cargo.toml'),
-                    '--no-default-features', '--example', 'verify_update', '--locked', '--',
+                subprocess.check_call([*verify_command,
                     str(ROOT / 'packaging/updater.pub'),
                     str(directories[target] / candidate['updater']['artifact']),
                     str(directories[target] / candidate['updater']['signature']), version,

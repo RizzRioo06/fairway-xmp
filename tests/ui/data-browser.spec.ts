@@ -17,6 +17,26 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
+test('SQL import confirms the database and backups are available outside the CLI disclosure', async ({ page }) => {
+  await open(page);
+  const backups = page.locator('.db-footer').getByRole('button', { name: 'Open backups', exact: true });
+  await expect(backups).toBeVisible();
+  expect(await page.locator('.db-cli').evaluate(element => (element as HTMLDetailsElement).open)).toBe(false);
+  await action(page, 'Database', 'Import SQL file…');
+  const dialog = page.getByRole('dialog', { name: 'Import SQL', exact: true });
+  await expect(dialog).toContainText('school.sql');
+  await expect(dialog).toContainText('only this target is backed up automatically');
+  const submit = dialog.getByRole('button', { name: 'Import SQL', exact: true });
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel('Type fairway to confirm', { exact: true }).fill('other_database');
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel('Type fairway to confirm', { exact: true }).fill('fairway');
+  await submit.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: /SQL imported into fairway/ })).toBeVisible();
+  await expect(backups).toBeVisible();
+});
+
 test('controls align and the table sidebar resizes, collapses, and restores without losing data', async ({ page }, info) => {
   await open(page);
   const database = await page.getByLabel('Database', { exact: true }).boundingBox();
@@ -142,6 +162,7 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(rows).toContainText('NULL');
   await page.getByRole('button', { name: 'View row 1', exact: true }).click();
   let view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.locator('form, input, textarea, select')).toHaveCount(0);
   await expect(view.getByText('Student May', { exact: true })).toBeVisible();
   await expect(view.getByText('NULL', { exact: true })).toBeVisible();
   await view.getByRole('button', { name: 'Close', exact: true }).click();
@@ -179,6 +200,59 @@ test('database rows preserve exact values, pagination, and protect rows without 
   await expect(page.getByRole('button', { name: 'View row 1', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: /^Edit row/ })).toHaveCount(0);
   await expect(page.getByText('This view is read-only. Use SQL for advanced changes.')).toBeVisible();
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+  await expect(view.getByRole('button', { name: 'Copy row JSON', exact: true })).toBeEnabled();
+});
+
+test('row viewer copies exact values and JSON, keeps full text readable, and handles clipboard errors', async ({ page }) => {
+  const copied: string[] = [];
+  await page.exposeFunction('recordRowCopy', (value: string) => { copied.push(value); });
+  await page.addInitScript(() => {
+    const bridge = window as unknown as { recordRowCopy: (value: string) => Promise<void> };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: bridge.recordRowCopy } });
+  });
+  await open(page);
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  let view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.locator('form, input, textarea, select')).toHaveCount(0);
+  await view.getByRole('button', { name: 'Copy id', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('9007199254740993');
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('NULL');
+  await view.getByRole('button', { name: 'Copy row JSON', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe(JSON.stringify({ id: '9007199254740993', name: 'Student May', notes: null }, null, 2));
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } }));
+  await view.getByRole('button', { name: 'Copy id', exact: true }).click();
+  await expect(view.getByRole('alert')).toContainText('Could not copy');
+  await expect(view.getByText('9007199254740993', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const bridge = window as unknown as { recordRowCopy: (value: string) => Promise<void> };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: bridge.recordRowCopy } });
+  });
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'View row 2', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  await expect(view.getByText('empty', { exact: true })).toBeVisible();
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe('');
+  await view.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const fullText = 'A multiline value\n' + 'unbroken-long-content'.repeat(160) + '\n<script>plain text</script>\n';
+  await page.getByRole('button', { name: 'Edit row 1', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit row', exact: true });
+  await edit.getByLabel('notes value', { exact: true }).fill(fullText);
+  await edit.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'View row 1', exact: true }).click();
+  view = page.getByRole('dialog', { name: 'View row', exact: true });
+  expect(await view.locator('dd').nth(2).locator('pre').textContent()).toBe(fullText);
+  await view.getByRole('button', { name: 'Copy notes', exact: true }).click();
+  await expect.poll(() => copied.at(-1)).toBe(fullText);
+  await expect(view.locator('script')).toHaveCount(0);
+  expect(await view.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await view.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit row', exact: true }).getByLabel('notes value', { exact: true })).toHaveValue(fullText);
 });
 
 test('create database/table, insert default and NULL, edit empty text, delete with confirmation', async ({ page }, info) => {
@@ -200,13 +274,16 @@ test('create database/table, insert default and NULL, edit empty text, delete wi
   await page.getByRole('button', { name: 'Insert row', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Insert row', exact: true });
   await expect(dialog.getByLabel('id value mode', { exact: true })).toHaveValue('default');
-  await dialog.getByLabel('name value mode', { exact: true }).selectOption('null');
+  await expect(dialog.getByLabel('name value mode', { exact: true })).toHaveValue('null');
+  await expect(dialog.getByLabel('name value', { exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Table rows' })).toContainText('NULL');
   await page.getByRole('button', { name: 'Edit row 1', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Edit row', exact: true });
-  await dialog.getByLabel('name value mode', { exact: true }).selectOption('value');
+  await expect(dialog.getByLabel('name value mode', { exact: true })).toHaveValue('null');
+  await expect(dialog.getByLabel('name value', { exact: true })).toBeEnabled();
   await dialog.getByLabel('name value', { exact: true }).fill('Student May');
+  await expect(dialog.getByLabel('name value mode', { exact: true })).toHaveValue('value');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Table rows' })).toContainText('Student May');
   await capture(page, info, 'created-data');
@@ -271,6 +348,16 @@ test('insert offers defaults only where available and saves untouched value and 
   await expect(dialog.getByLabel('name value mode', { exact: true })).toHaveValue('value');
   await expect(dialog.getByLabel('name value', { exact: true })).toBeEnabled();
   await expect(dialog.getByLabel('notes value mode', { exact: true })).toHaveValue('null');
+  const notes = dialog.getByLabel('notes value', { exact: true });
+  await expect(notes).toBeEnabled();
+  await notes.fill('draft');
+  await expect(dialog.getByLabel('notes value mode', { exact: true })).toHaveValue('value');
+  await notes.fill('');
+  await expect(dialog.getByLabel('notes value mode', { exact: true })).toHaveValue('null');
+  await dialog.getByLabel('notes value mode', { exact: true }).selectOption('value');
+  await expect(dialog.getByLabel('notes value mode', { exact: true })).toHaveValue('value');
+  await expect(notes).toHaveValue('');
+  await dialog.getByLabel('notes value mode', { exact: true }).selectOption('null');
   for (const name of ['name', 'notes']) await expect(dialog.getByLabel(`${name} value mode`, { exact: true }).locator('option[value=default]')).toHaveCount(0);
   await capture(page, info, 'insert-value-modes');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();

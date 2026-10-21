@@ -1,35 +1,19 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useModalFocus } from '../modal-focus';
 
-export default function Dialog({ title, busy, onClose, onSubmit, children, submit = 'Save', cancel = 'Cancel', danger = false, valid = true, showSubmit = true }: {
+export default function Dialog({ title, busy, onClose, onSubmit, children, submit = 'Save', cancel = 'Cancel', danger = false, valid = true, showSubmit = true, onCancelBusy }: {
   title: string; busy: boolean; onClose: () => void; onSubmit: () => void;
-  children: ReactNode; submit?: string; cancel?: string; danger?: boolean; valid?: boolean; showSubmit?: boolean;
+  children: ReactNode; submit?: string; cancel?: string; danger?: boolean; valid?: boolean; showSubmit?: boolean; onCancelBusy?: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
-  const pending = useRef(busy);
   const label = useId();
-  useEffect(() => { close.current = onClose; pending.current = busy; }, [onClose, busy]);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    container.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
-    function key(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !pending.current) close.current();
-      if (event.key !== 'Tab') return;
-      const items = container.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]');
-      if (!items?.length) return;
-      const first = items[0], last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener('keydown', key);
-    return () => { document.removeEventListener('keydown', key); previous?.focus(); };
-  }, []);
+  useModalFocus(container, true, onClose, { canClose: !busy });
   return <div className="modal-backdrop"><div ref={container} className="modal db-dialog" role="dialog" aria-modal="true" aria-labelledby={label}>
     <form className="modal-form" onSubmit={event => { event.preventDefault(); if (!busy && valid) onSubmit(); }}>
       <div className="card-title"><h2 id={label}>{title}</h2></div>
       <div className="modal-form-body"><fieldset disabled={busy}>{children}</fieldset></div>
-      <div className="db-dialog-actions modal-form-actions"><button type="button" className="secondary" onClick={onClose} disabled={busy}><X size={14} />{cancel}</button>{showSubmit && <button type="submit" className={danger ? 'db-danger' : 'primary'} disabled={busy || !valid}>{busy ? 'Working…' : submit}</button>}</div>
+      <div className="db-dialog-actions modal-form-actions"><button type="button" className="secondary" onClick={busy && onCancelBusy ? onCancelBusy : onClose} disabled={busy && !onCancelBusy}><X size={14} />{busy && onCancelBusy ? 'Cancel import' : cancel}</button>{showSubmit && <button type="submit" className={danger ? 'db-danger' : 'primary'} disabled={busy || !valid}>{busy ? 'Working…' : submit}</button>}</div>
     </form>
   </div></div>;
 }

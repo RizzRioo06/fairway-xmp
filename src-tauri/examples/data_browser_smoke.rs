@@ -115,6 +115,13 @@ fn main() -> Result<(), String> {
             )?;
             assert_eq!(sets["sets"][0]["rows"][0][0], "9007199254740993");
             assert!(sets["sets"][1]["rows"][0][0].is_null());
+            let counts = call(
+                l,
+                json!({"op":"query","database":db,"sql":"CREATE TABLE update_counts(id INT PRIMARY KEY, value INT); INSERT INTO update_counts VALUES(1,10),(2,20); UPDATE update_counts SET value=10 WHERE id=1; UPDATE update_counts SET value=20; UPDATE update_counts SET value=20; DROP TABLE update_counts;"}),
+            )?;
+            assert_eq!(counts["sets"][2]["affected"], 0);
+            assert_eq!(counts["sets"][3]["affected"], 1);
+            assert_eq!(counts["sets"][4]["affected"], 0);
             let limited = call(
                 l,
                 json!({"op":"query","database":db,"sql":"WITH RECURSIVE n AS (SELECT 1 x UNION ALL SELECT x+1 FROM n WHERE x<250) SELECT x FROM n LIMIT 250; SELECT 42 AS answer;"}),
@@ -293,6 +300,84 @@ fn main() -> Result<(), String> {
             assert_eq!(restored["rows"][0]["id"], "9007199254740993");
             assert_eq!(restored["rows"][0]["amount"], "12.5000");
             assert_eq!(restored["rows"][0]["note"], "");
+            call(
+                l,
+                json!({"op":"create_database","database":"browser_ui_import"}),
+            )?;
+            let import_request = json!({"op":"import","database":"browser_ui_import","sqlFile":dump,"confirmed":true});
+            let mut unconfirmed = import_request.clone();
+            unconfirmed["confirmed"] = json!(false);
+            assert!(call(l, unconfirmed).unwrap_err().contains("Confirm"));
+            let imported = call(l, import_request.clone())?;
+            assert!(PathBuf::from(imported["backupPath"].as_str().unwrap()).is_file());
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"rows","database":"browser_ui_import","table":"students"})
+                )?["rows"][0]["id"],
+                "9007199254740993"
+            );
+            let canceled = Arc::new(AtomicBool::new(true));
+            assert!(data_browser::execute(l, import_request, canceled)
+                .unwrap_err()
+                .contains("canceled"));
+
+            // Full client dumps support DELIMITER while shell commands remain disabled.
+            let script = l.data.join("import-procedure.sql");
+            std::fs::write(&script, "DELIMITER $$\nCREATE PROCEDURE imported_proc() BEGIN SELECT 1; END$$\nDELIMITER ;\nCALL imported_proc();\n").map_err(|e| e.to_string())?;
+            call(
+                l,
+                json!({"op":"import","database":"browser_ui_import","sqlFile":script,"confirmed":true}),
+            )?;
+            let invalid = l.data.join("partial-import.sql");
+            std::fs::write(&invalid, "CREATE TABLE partial_import (id INT); INSERT INTO partial_import VALUES (1); INVALID SQL;").map_err(|e| e.to_string())?;
+            let error = call(l, json!({"op":"import","database":"browser_ui_import","sqlFile":invalid,"confirmed":true})).unwrap_err();
+            assert!(
+                error.contains("earlier statements may have completed")
+                    && error.contains("Backup saved:")
+            );
+            assert_eq!(
+                call(
+                    l,
+                    json!({"op":"rows","database":"browser_ui_import","table":"partial_import"})
+                )?["total"],
+                "1"
+            );
+
+            // A failed protective backup must prevent any import statement.
+            let backup_folder = l.data.join("backups");
+            let kept_backups = l.data.join("backups-kept");
+            std::fs::rename(&backup_folder, &kept_backups).map_err(|e| e.to_string())?;
+            std::fs::write(&backup_folder, "block backup creation").map_err(|e| e.to_string())?;
+            let guarded = call(
+                l,
+                json!({"op":"import","database":"browser_ui_import","sqlFile":script,"confirmed":true}),
+            );
+            std::fs::remove_file(&backup_folder).map_err(|e| e.to_string())?;
+            std::fs::rename(&kept_backups, &backup_folder).map_err(|e| e.to_string())?;
+            assert!(guarded.unwrap_err().contains("Nothing was imported"));
+            let slow = l.data.join("cancel-import.sql");
+            std::fs::write(
+                &slow,
+                "SELECT SLEEP(10); CREATE TABLE must_not_import (id INT);",
+            )
+            .map_err(|e| e.to_string())?;
+            let cancel_import = Arc::new(AtomicBool::new(false));
+            let signal = cancel_import.clone();
+            let timer_import = thread::spawn(move || {
+                thread::sleep(Duration::from_millis(500));
+                signal.store(true, Ordering::SeqCst);
+            });
+            let canceled = data_browser::execute(l, json!({"op":"import","database":"browser_ui_import","sqlFile":slow,"confirmed":true}), cancel_import).unwrap_err();
+            timer_import.join().unwrap();
+            assert!(canceled.contains("canceled") && canceled.contains("Backup saved:"));
+            assert!(
+                !call(l, json!({"op":"tables","database":"browser_ui_import"}))?["tables"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|table| table["name"] == "must_not_import")
+            );
             let cancel = Arc::new(AtomicBool::new(false));
             let signal = cancel.clone();
             let timer = thread::spawn(move || {
@@ -318,7 +403,7 @@ fn main() -> Result<(), String> {
             )?;
             call(
                 l,
-                json!({"op":"query","database":db,"sql":"DROP DATABASE browser_ready; DROP DATABASE fairway;"}),
+                json!({"op":"query","database":db,"sql":"DROP DATABASE browser_ui_import; DROP DATABASE browser_ready; DROP DATABASE fairway;"}),
             )?;
             let empty = manager.backup()?;
             assert!(std::fs::read_to_string(empty)

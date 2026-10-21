@@ -50,6 +50,7 @@ jobs:
           workspaces: src-tauri
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npm run test:unit
       - run: npm run test:scripts
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked ${{ runner.os == 'macOS' && '--all-features' || '' }}

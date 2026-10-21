@@ -168,10 +168,14 @@ fn fairway_certificates(keychain: &SecKeychain) -> Result<Vec<SecCertificate>> {
     Ok(certificates)
 }
 
-pub(super) fn remove(keychain_path: &Path) -> Result<()> {
+pub(super) fn remove_certificate(root: &Path, keychain_path: &Path) -> Result<()> {
+    let target = certificate_from_pem(&super::policy::read_certificate(root)?)?.to_der();
     let keychain = SecKeychain::open(keychain_path)
         .map_err(|error| removal_error("open your login keychain", error))?;
     for certificate in fairway_certificates(&keychain)? {
+        if certificate.to_der() != target {
+            continue;
+        }
         // SAFETY: the certificate remains alive for the call. Only the current
         // user's trust domain is changed. This may display Apple's authorization
         // UI; the caller already relinquished focus and runs off the UI thread.

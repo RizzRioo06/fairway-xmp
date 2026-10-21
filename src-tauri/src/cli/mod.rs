@@ -209,6 +209,9 @@ pub fn run() -> Result<()> {
         std::process::exit(status.code().unwrap_or(1));
     }
     let mut data = supervisor::call(&layout, &request)?;
+    if matches!(request, Request::ProjectHttps { enabled: true, .. }) {
+        crate::tls::finish_trust_update(&layout)?;
+    }
     if command == "site" && args[1] != "https" {
         let projects = layout.registered_projects()?;
         let domains = projects

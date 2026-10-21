@@ -1,15 +1,16 @@
 {
   "name": "fairway-xmp",
   "private": true,
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "tauri": "cargo tauri",
+    "tauri": "tauri",
     "runtime:prepare": "python3 scripts/prepare_runtime.py",
     "test:scripts": "python3 -m unittest discover -s tests -v",
+    "test:unit": "node scripts/test_unit.mjs",
     "dev:ui": "vite --host 127.0.0.1 --mode ui-test",
     "test:ui": "playwright test",
     "test:ui:report": "playwright show-report"
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
+    "@tauri-apps/cli": "2.12.2",
     "@types/node": "24.13.4",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",

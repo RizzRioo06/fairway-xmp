@@ -168,8 +168,20 @@ def main(installer, baseline=None, report=None):
             assert probe.exists() and json.loads(call('ports').stdout)['website'] == ports[0]
             call('start')
             assert urllib.request.urlopen(f'http://127.0.0.1:{website}/linux-smoke.php', timeout=15).read().startswith(b'8.0.')
+            # A custom prefix may also contain user files; uninstall owns only
+            # its releases and current link. A retained marker permits reinstall.
+            prefix_coursework = prefix / 'www/keep.php'
+            prefix_coursework.parent.mkdir()
+            prefix_coursework.write_text('<?php echo "Coursework retained";')
+            prefix_backup = prefix / 'backups/keep.sql'
+            prefix_backup.parent.mkdir()
+            prefix_backup.write_text('-- Student backup retained\n')
             call('uninstall')
-            assert not prefix.exists()
+            assert prefix_coursework.read_text() == '<?php echo "Coursework retained";'
+            assert prefix_backup.read_text() == '-- Student backup retained\n'
+            assert not (prefix / 'releases').exists()
+            assert not (prefix / 'current').is_symlink()
+            assert (prefix / '.fairway-installation').is_file()
             assert probe.exists() and backup.exists() and (data / 'mysql/mysql').is_dir()
             assert not (data / 'supervisor.sock').exists()
             assert not (data / 'bin/fairway').exists()
@@ -180,7 +192,9 @@ def main(installer, baseline=None, report=None):
             call('start')
             assert call('mysql', '--batch', '--skip-column-names', '-e', 'SELECT id FROM fairway.linux_smoke;').stdout.strip() == '42'
             assert probe.exists() and backup.exists()
+            assert prefix_coursework.exists() and prefix_backup.exists()
             call('uninstall')
+            assert prefix_coursework.exists() and prefix_backup.exists()
             if report:
                 with installer.open('rb') as stream:
                     assert hashlib.file_digest(stream, 'sha256').hexdigest() == installer_sha256, 'Installer changed during lifecycle testing'

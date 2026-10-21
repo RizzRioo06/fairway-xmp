@@ -69,7 +69,7 @@ pub fn prepare_upgrade(layout: &Layout) -> Result<()> {
         }
         // A failed startup may already have changed the data dictionary. Keep the
         // original backup and retry the new server; never overwrite the backup.
-        return Ok(());
+        return crate::durability::sync_directory(&layout.data);
     }
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -78,9 +78,12 @@ pub fn prepare_upgrade(layout: &Layout) -> Result<()> {
     let backup = layout
         .data
         .join(format!("backups/mysql-{current}-before-{target}-{stamp}"));
-    fs::create_dir_all(&backup)
+    let mut staged = backup.as_os_str().to_os_string();
+    staged.push(".partial");
+    let staged = std::path::PathBuf::from(staged);
+    fs::create_dir_all(&staged)
         .map_err(|e| format!("Could not create the database upgrade backup: {e}"))?;
-    copy_directory(&data, &backup.join("mysql"))
+    copy_directory(&data, &staged.join("mysql"))
         .map_err(|e| format!("Could not finish the database upgrade backup: {e}. The existing database has not been opened."))?;
     for file in [
         "credentials",
@@ -90,15 +93,17 @@ pub fn prepare_upgrade(layout: &Layout) -> Result<()> {
     ] {
         let source = layout.data.join(file);
         if source.exists() {
-            fs::copy(source, backup.join(file)).map_err(|e| e.to_string())?;
+            fs::copy(source, staged.join(file)).map_err(|e| e.to_string())?;
         }
     }
     // Alpha 1 recorded its family in database-ready only. Include the explicit
     // version file in its backup so restoring cannot retain the newer marker.
-    fs::write(backup.join("database-version"), current).map_err(|e| e.to_string())?;
-    fs::write(backup.join("README.txt"),
+    fs::write(staged.join("database-version"), current).map_err(|e| e.to_string())?;
+    fs::write(staged.join("README.txt"),
         "This is a copy of your stopped MySQL 8.4 database before its upgrade to MySQL 9.7. Keep it until you have checked your databases. To restore it, quit Fairway XMP, use the previous version, and restore the mysql folder and the saved credentials, database-ready, database-version, and settings.json files together. Never open this backup with the newer MySQL server.\n")
         .map_err(|e| e.to_string())?;
+    crate::durability::sync_tree(&staged)?;
+    crate::durability::publish(&staged, &backup)?;
     atomic_write(
         &journal,
         &serde_json::to_vec_pretty(&Upgrade {
@@ -107,7 +112,8 @@ pub fn prepare_upgrade(layout: &Layout) -> Result<()> {
             backup,
         })
         .map_err(|e| e.to_string())?,
-    )
+    )?;
+    crate::durability::sync_directory(&layout.data)
 }
 
 fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
@@ -133,6 +139,55 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn interrupted_or_failed_copy_is_never_recorded_as_complete() {
+        use std::os::unix::fs::symlink;
+        let root =
+            std::env::temp_dir().join(format!("fairway-upgrade-partial-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        layout.initialize().unwrap();
+        fs::create_dir_all(&layout.runtime).unwrap();
+        fs::write(
+            layout.runtime.join("manifest.json"),
+            br#"{"mysql":"9.7.2"}"#,
+        )
+        .unwrap();
+        fs::create_dir(layout.data.join("mysql/mysql")).unwrap();
+        fs::write(layout.data.join("database-ready"), "8.4").unwrap();
+        let student = layout.data.join("mysql/student.ibd");
+        fs::write(&student, b"original work").unwrap();
+        let interrupted = layout.data.join("backups/interrupted.partial/mysql/mysql");
+        fs::create_dir_all(&interrupted).unwrap();
+        let unexpected = layout.data.join("mysql/unexpected-link");
+        symlink(&student, &unexpected).unwrap();
+        assert!(prepare_upgrade(&layout).is_err());
+        assert!(!layout.data.join("database-upgrade.json").exists());
+        assert_eq!(fs::read(&student).unwrap(), b"original work");
+        assert!(fs::read_dir(layout.data.join("backups"))
+            .unwrap()
+            .all(|entry| entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "partial")));
+        fs::remove_file(unexpected).unwrap();
+        prepare_upgrade(&layout).unwrap();
+        let journal: Upgrade =
+            serde_json::from_slice(&fs::read(layout.data.join("database-upgrade.json")).unwrap())
+                .unwrap();
+        assert_ne!(
+            journal.backup.extension().and_then(|value| value.to_str()),
+            Some("partial")
+        );
+        assert_eq!(
+            fs::read(journal.backup.join("mysql/student.ibd")).unwrap(),
+            b"original work"
+        );
+        assert!(interrupted.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn upgrade_preserves_original_data_and_credentials_on_retry() {

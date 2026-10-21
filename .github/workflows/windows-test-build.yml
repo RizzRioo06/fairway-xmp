@@ -10,6 +10,11 @@ on:
       record_runtime_checksums:
         type: boolean
         default: false
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
   workflow_dispatch:
     inputs:
       standalone_only:
@@ -36,8 +41,17 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify signing source is merged into main
+        if: inputs.signed_release
+        run: python scripts/verify_signing_source.py
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -58,6 +72,7 @@ jobs:
           save-if: ${{ github.ref_type != 'tag' }}
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npm run test:unit
       - run: npm run test:scripts
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
@@ -66,6 +81,7 @@ jobs:
         run: |
           $version = python scripts/release_candidate.py version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
       - uses: ./.github/actions/restore-runtime-downloads
         id: downloads
@@ -137,27 +153,95 @@ jobs:
       - name: Build native updater probe
         if: inputs.signed_release
         run: cargo build --release --example updater_probe --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --locked
-      - name: Build x64 NSIS installer with signed updater
+      - name: Build updater-enabled x64 NSIS installer without credentials
+        if: inputs.signed_release
+        run: |
+          python scripts/configure_release.py --public-key packaging/updater.pub
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run tauri -- build --bundles nsis --target x86_64-pc-windows-msvc --config artifacts/tauri.release.json --no-sign
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build unsigned development installer
+        if: ${{ !inputs.signed_release }}
+        run: npm run tauri -- build --bundles nsis --target x86_64-pc-windows-msvc
+      - name: Stage installer and lifecycle inputs
+        run: |
+          New-Item -ItemType Directory -Force artifacts/windows-build-inputs | Out-Null
+          Copy-Item 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe' artifacts/windows-build-inputs/
+          Copy-Item runtime-downloads.lock.json artifacts/windows-build-inputs/
+          if ('${{ inputs.record_runtime_checksums }}' -ne 'true') {
+            Copy-Item .runtime-work/baseline-windows.exe artifacts/windows-build-inputs/
+            Copy-Item src-tauri/target/x86_64-pc-windows-msvc/release/examples/installer_probe.exe artifacts/windows-build-inputs/
+          }
+          if ('${{ inputs.signed_release }}' -eq 'true') {
+            Copy-Item src-tauri/target/x86_64-pc-windows-msvc/release/examples/updater_probe.exe artifacts/windows-build-inputs/
+          }
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-build-inputs
+          path: artifacts/windows-build-inputs/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Save build failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-build-diagnostics
+          path: |
+            runtime-downloads.lock.json
+            .runtime-work/windows-smoke/student data/logs/*.log
+            .runtime-work/windows-upgrade/student data/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  package:
+    needs: build
+    if: inputs.standalone_only != true
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.build.outputs.commit }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked signing tools without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify signing source is merged into main
+        if: inputs.signed_release
+        run: python scripts/verify_signing_source.py --expected ${{ needs.build.outputs.commit }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-build-inputs
+          path: artifacts/windows-build-inputs
+      - name: Sign exact installer with the locked CLI
         if: inputs.signed_release
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Updater signing key is required.' }
-          python scripts/configure_release.py --public-key packaging/updater.pub
+          $installers = @(Get-ChildItem 'artifacts/windows-build-inputs/*-setup.exe')
+          if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          node node_modules/@tauri-apps/cli/tauri.js signer sign --app-version '${{ needs.build.outputs.version }}' $installers[0].FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc --config artifacts/tauri.release.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build unsigned development installer
-        if: ${{ !inputs.signed_release }}
-        run: npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --bundles nsis --target x86_64-pc-windows-msvc
       - name: Collect installer and checksums
         run: |
           $output = 'artifacts/windows-installer'
           New-Item -ItemType Directory -Force $output | Out-Null
-          $installers = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe')
+          $installers = @(Get-ChildItem 'artifacts/windows-build-inputs/*-setup.exe')
           if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
-          $version = '${{ steps.metadata.outputs.version }}'
+          $version = '${{ needs.build.outputs.version }}'
           $filename = "fairway-xmp-$version-windows-x64-setup.exe"
           Copy-Item $installers[0].FullName (Join-Path $output $filename)
           if ('${{ inputs.signed_release }}' -eq 'true') {
@@ -165,7 +249,7 @@ jobs:
             if (-not (Test-Path $signature)) { throw 'Missing updater signature.' }
             Copy-Item $signature (Join-Path $output "$filename.sig")
           }
-          Copy-Item runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
+          Copy-Item artifacts/windows-build-inputs/runtime-downloads.lock.json, runtime-manifest.json, LICENSE, THIRD_PARTY_NOTICES.md $output
           $hash = Get-FileHash $installers[0].FullName -Algorithm SHA256
           "$($hash.Hash.ToLower())  $filename" | Set-Content "$output/SHA256SUMS.txt" -Encoding utf8
           git archive --format=tar.gz --output="$output/fairway-xmp-$version-build-source.tar.gz" HEAD
@@ -189,12 +273,12 @@ jobs:
           $installer = (Get-ChildItem 'artifacts/windows-installer/*-setup.exe').FullName
           $extra = @()
           if ('${{ inputs.signed_release }}' -eq 'true') {
-            $extra = @('--updater', $installer, '--update-probe', 'src-tauri/target/x86_64-pc-windows-msvc/release/examples/updater_probe.exe')
+            $extra = @('--updater', $installer, '--update-probe', 'artifacts/windows-build-inputs/updater_probe.exe')
           }
-          python tests/installer_lifecycle.py @extra --installer $installer --baseline .runtime-work/baseline-windows.exe --probe src-tauri/target/x86_64-pc-windows-msvc/release/examples/installer_probe.exe --output .runtime-work/windows-lifecycle --allow-user-profile-changes
+          python tests/installer_lifecycle.py @extra --installer $installer --baseline artifacts/windows-build-inputs/baseline-windows.exe --probe artifacts/windows-build-inputs/installer_probe.exe --output .runtime-work/windows-lifecycle --allow-user-profile-changes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $signing = if ('${{ inputs.signed_release }}' -eq 'true') { 'updater-only' } else { 'unsigned' }
-          python scripts/release_candidate.py record --target windows-x64 --signing $signing --directory artifacts/windows-installer --artifact fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
+          python scripts/release_candidate.py record --target windows-x64 --signing $signing --directory artifacts/windows-installer --artifact fairway-xmp-windows-x64-${{ needs.build.outputs.version }} --lifecycle .runtime-work/windows-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-windows-x64.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v6
         if: inputs.record_runtime_checksums != true
@@ -205,7 +289,7 @@ jobs:
           retention-days: 90
       - uses: actions/upload-artifact@v6
         with:
-          name: fairway-xmp-windows-x64-${{ steps.metadata.outputs.version }}
+          name: fairway-xmp-windows-x64-${{ needs.build.outputs.version }}
           path: artifacts/windows-installer/
           if-no-files-found: error
           retention-days: 90
@@ -213,7 +297,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: windows-build-diagnostics
+          name: windows-packaging-diagnostics
           path: |
             runtime-downloads.lock.json
             .runtime-work/windows-smoke/student data/logs/*.log
@@ -271,7 +355,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
           @{ app = @{ windows = @(@{ title = 'Fairway XMP — Permissions Test'; width = 1080; height = 760; minWidth = 820; minHeight = 650 }) } } | ConvertTo-Json -Depth 5 | Set-Content artifacts/permissions-build.json -Encoding utf8
-          npm exec --yes --package @tauri-apps/cli@2.12.2 -- tauri build --no-bundle --target x86_64-pc-windows-msvc --config artifacts/permissions-build.json
+          npm run tauri -- build --no-bundle --target x86_64-pc-windows-msvc --config artifacts/permissions-build.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package app, complete runtime, identity and test guide
         run: python scripts/package_windows_standalone.py --executable src-tauri/target/x86_64-pc-windows-msvc/release/fairway.exe --output artifacts/windows-standalone

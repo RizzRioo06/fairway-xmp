@@ -24,6 +24,12 @@ The shared `installer-complete-v1` key names the set of warmed Rust profiles. Bu
 
 Runtime version checks are local. In particular, Mailpit verification uses `version --no-release-check` to compare the bundled version without contacting GitHub for an upstream release lookup. A network failure during that unrelated lookup must not invalidate an otherwise correct locked runtime.
 
+## Signing runner boundary
+
+Desktop compilation and packaging now use separate runners. The builder uploads unsigned inputs and already compiled lifecycle probes; packaging installs locked tools with npm lifecycle scripts disabled, imports credentials only for signing, and runs the existing native acceptance checks after credential cleanup. Packaging does not restore build caches. Compilation caches can therefore be saved after a successful build even when later signing or installation checks fail. The publication signature verifier is likewise built with read-only permissions before its write-enabled publication job.
+
+Intermediate transfer artifacts expire after one day. Re-run failed packaging jobs while their build inputs remain available; rebuild if those inputs have expired. Tar preserves macOS bundle symlinks and executable modes across transfer. The final installer/updater artifacts, source identity and acceptance checks are still generated from the same exact build inputs.
+
 ## Candidate retry rules
 
 For a transient failure at the same commit, use GitHub's **Re-run failed jobs** on the existing candidate run. This preserves successful platform jobs and their exact installer artifacts. For example:

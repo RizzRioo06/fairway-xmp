@@ -1,4 +1,7 @@
 //! Exercise real packaged runtimes against an isolated student directory.
+#[path = "support/mysql_recovery.rs"]
+mod mysql_recovery;
+
 use fairway_core::{
     config::{Layout, Ports, ProjectConfig},
     integration,
@@ -36,7 +39,11 @@ fn http_host(port: u16, route: &str, host: &str) -> String {
     socket
         .set_read_timeout(Some(std::time::Duration::from_secs(15)))
         .unwrap();
-    write!(socket, "GET {route} HTTP/1.0\r\nHost: {host}\r\n\r\n").unwrap();
+    if host.is_empty() {
+        write!(socket, "GET {route} HTTP/1.0\r\n\r\n").unwrap();
+    } else {
+        write!(socket, "GET {route} HTTP/1.0\r\nHost: {host}\r\n\r\n").unwrap();
+    }
     let mut bytes = Vec::new();
     socket.read_to_end(&mut bytes).unwrap();
     String::from_utf8_lossy(&bytes).into()
@@ -206,6 +213,7 @@ fn main() -> Result<(), String> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime"));
     let upgrade_runtime = std::env::args().nth(3).map(PathBuf::from);
+    mysql_recovery::run(&root.join("mysql startup recovery"), &runtime)?;
     let layout = Layout::at(
         root.join("student's home"),
         root.join("student data"),
@@ -296,6 +304,27 @@ fn main() -> Result<(), String> {
             manager.start_all()?;
             // Older runtimes (such as the alpha 1 upgrade fixture) have no Mailpit; the rest must still work.
             let mail_available = manager.mail_available();
+            let before_leave = manager.snapshot();
+            manager.leave_services_running()?;
+            manager = Manager::new(manager.layout.clone())?;
+            let recovered = manager.snapshot();
+            for service in before_leave
+                .services
+                .iter()
+                .filter(|service| service.running)
+            {
+                assert_eq!(
+                    recovered
+                        .services
+                        .iter()
+                        .find(|current| current.id == service.id)
+                        .unwrap()
+                        .pid,
+                    service.pid,
+                    "Leave-running recovery replaced {}",
+                    service.id
+                );
+            }
             assert!(manager
                 .snapshot()
                 .services
@@ -340,6 +369,31 @@ fn main() -> Result<(), String> {
                     },
                 )?;
                 assert_eq!(empty["messages_count"], 0, "{empty}");
+            }
+            for port in [chosen.website, chosen.phpmyadmin] {
+                for host in [
+                    "localhost".to_string(),
+                    format!("127.0.0.1:{port}"),
+                    "LOCALHOST.".into(),
+                ] {
+                    assert!(http_host(port, "/__fairway_health", &host).contains("200 OK"));
+                }
+                assert!(
+                    http_host(port, "http://rebound.example/__fairway_health", "localhost")
+                        .is_empty()
+                );
+                for host in [
+                    "rebound.example",
+                    "shop.test.evil.example",
+                    "unknown.test",
+                    "127.0.0.1.evil.example",
+                    "",
+                ] {
+                    assert!(
+                        http_host(port, "/", host).is_empty(),
+                        "Unknown Host reached port {port}: {host}"
+                    );
+                }
             }
             assert!(http_host(chosen.website, "/", "plain-project.test").contains("plain project"));
             assert!(http_host(chosen.website, "/courses/1", "shop.test")
@@ -387,6 +441,36 @@ fn main() -> Result<(), String> {
                     "HTTPS project did not serve a trusted certificate: {:?}",
                     https(&manager.layout, "new-project.test")
                 ));
+            }
+            for (sni, host) in [
+                ("unknown.test", "unknown.test"),
+                ("new-project.test", "rebound.example"),
+            ] {
+                let mut curl = process::command("curl");
+                curl.args([
+                    "--silent",
+                    "--show-error",
+                    "--fail",
+                    "--insecure",
+                    "--max-time",
+                    "3",
+                    "--noproxy",
+                    "*",
+                    "--resolve",
+                ])
+                .arg(format!(
+                    "{sni}:{}:127.0.0.1",
+                    fairway_core::tls::https_port()
+                ))
+                .args(["-H", &format!("Host: {host}")])
+                .arg(format!(
+                    "https://{sni}:{}/",
+                    fairway_core::tls::https_port()
+                ));
+                assert!(
+                    !curl.output().map_err(|e| e.to_string())?.status.success(),
+                    "Unknown HTTPS authority was accepted"
+                );
             }
             manager.set_project_https("plain-project", true)?;
             let mut both_ready = false;
