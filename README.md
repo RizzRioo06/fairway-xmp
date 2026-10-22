@@ -2,9 +2,9 @@
 
 A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. Run your web server and database from one control panel, write code in your preferred editor, and manage your data with the built-in database browser or phpMyAdmin.
 
-![Fairway XMP beta 3 on macOS with all services ready and Sites, Data browser, and Terminal in the sidebar](docs/images/control-panel.jpg)
+![Fairway XMP RC 3 on macOS showing the Environment page with services stopped](docs/images/control-panel.png)
 
-*Fairway XMP beta 3 on macOS.*
+*Fairway XMP RC 3 on macOS.*
 
 ## Downloads
 
