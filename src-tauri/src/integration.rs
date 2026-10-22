@@ -451,7 +451,7 @@ fn open_path(path: &str) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         let mut cmd = process::command("xdg-open");
-        cmd.arg(&path)
+        cmd.arg(path)
             .spawn()
             .map_err(|e| format!("Open {path} manually ({e})."))?;
     }

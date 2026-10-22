@@ -16,10 +16,10 @@ for (const driver of ['mysql', 'sqlite'] as const) test(`${driver}: an unreadabl
       const invoke = window.__TAURI_INTERNALS__!.invoke;
       if (driver === 'mysql') {
         await invoke('service_action', { action: 'start', service: 'mysql' });
-        await invoke('data_browser', { request: { op: 'create_database', database: 'recovery' } });
+        await invoke('data_browser', { id: crypto.randomUUID(), request: { op: 'create_database', database: 'recovery' } });
       }
       const sql = `${driver === 'mysql' ? 'CREATE TABLE missing_table(id INT); ' : ''}CREATE VIEW a_broken AS SELECT * FROM missing_table; CREATE TABLE healthy(id INTEGER PRIMARY KEY, value TEXT); INSERT INTO healthy VALUES(1,'available');${driver === 'mysql' ? ' DROP TABLE missing_table;' : ''}`;
-      await invoke('data_browser', { request: { driver, path, database: 'recovery', op: 'query', sql } });
+      await invoke('data_browser', { id: crypto.randomUUID(), request: { driver, path, database: 'recovery', op: 'query', sql } });
     }, { path, driver });
     // Fixture seeding bypasses the production service action/event handler.
     // Read its resulting status on mount before driving the actual UI.

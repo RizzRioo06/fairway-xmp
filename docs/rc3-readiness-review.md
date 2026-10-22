@@ -26,6 +26,10 @@ Candidate run [39695343589](https://github.com/eimg/fairway-xmp/actions/runs/396
 
 Local verification passed: 60 terminal/workspace checks across Chromium/WebKit at normal/minimum sizes, both native MySQL/SQLite schema checks, 113 all-feature Mac Rust tests, 79 Python tests, 14 TypeScript unit tests, production TypeScript/Vite build, Clippy with warnings denied, formatting, actionlint and whitespace checks. The native schema checks used the existing local runtime; the replacement candidate must verify the patched runtime, native Windows execution, Linux staging and the exact signed installers. Local checks do not establish those distribution results.
 
+Candidate [#39](https://github.com/eimg/fairway-xmp/actions/runs/39701024604) passed browser review and all platform Rust tests, including the Windows process regressions. Its Mac and Windows native browser jobs each failed the two unreadable-view recovery fixtures before reaching UI assertions: their direct setup calls omitted the request IDs required by the production Jobs registry. Those calls now provide unique IDs, matching the other direct native fixtures; request validation remains enabled. Linux stopped at Clippy because `open_path` borrowed an already borrowed string for `xdg-open`; that unnecessary borrow is removed. These corrections require a fresh candidate before any distribution acceptance.
+
+After these corrections, all nine native desktop browser checks passed locally against the existing staged Mac runtime, including both unreadable-view recovery cases. The production build, CLI-feature Clippy with warnings denied, formatting and whitespace checks also passed. Linux-specific compilation and Windows execution remain checks for the replacement candidate.
+
 ## Remediation — 2026-10-20
 
 | Finding/gap | Resolution and evidence |
