@@ -5,8 +5,12 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import threading
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from staple_macos import validate as validate_notarization
 
 
 def run_probe(command, output):
@@ -65,7 +69,7 @@ def exercise(probe, executable, artifact, output):
             else: raise RuntimeError('NSIS update did not finish its post-install hook')
         else:
             subprocess.run(['codesign', '--verify', '--deep', '--strict', str(executable.parents[2])], check=True)
-            subprocess.run(['xcrun', 'stapler', 'validate', str(executable.parents[2])], check=True)
+            validate_notarization(executable.parents[2])
         result['status'] = 'passed'
         result['checks'].append('real-tauri-install-of-exact-signed-candidate')
         result['note'] = 'Same-version native reinstall drill; production version comparison remains enabled. Human restart and subsequent-version acceptance are separate.'

@@ -6,10 +6,27 @@ import unittest
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from staple_macos import staple
+from staple_macos import staple, validate
 
 
 class StaplingTests(unittest.TestCase):
+    def test_installed_bundle_validation_retries_without_restapling(self):
+        run = Mock(side_effect=[SimpleNamespace(returncode=code) for code in (68, 65, 0)])
+        sleep = Mock()
+        validate('installed.app', run, sleep)
+        self.assertEqual([call.args[0] for call in run.call_args_list],
+                         [['xcrun', 'stapler', 'validate', 'installed.app']] * 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [5, 15])
+
+    def test_installed_bundle_validation_requires_success_with_bounded_retries(self):
+        run = Mock(return_value=SimpleNamespace(returncode=68)); sleep = Mock()
+        with self.assertRaises(subprocess.CalledProcessError): validate('installed.app', run, sleep)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [5, 15, 30])
+        run = Mock(return_value=SimpleNamespace(returncode=73)); sleep = Mock()
+        with self.assertRaises(subprocess.CalledProcessError): validate('installed.app', run, sleep)
+        run.assert_called_once(); sleep.assert_not_called()
+
     def test_network_failure_retries_then_requires_validation(self):
         run = Mock(side_effect=[SimpleNamespace(returncode=68), SimpleNamespace(returncode=0), SimpleNamespace(returncode=0)])
         sleep = Mock()

@@ -34,6 +34,10 @@ Candidate [#40](https://github.com/eimg/fairway-xmp/actions/runs/39703395782) pa
 
 The corrected focused recovery and full service/backup smoke checks passed locally using the existing staged Mac runtime and disposable data. The full check exercised all four supported PHP branches, PHP/MySQL/HTTP, phpMyAdmin, backup restoration, retained service recovery, graceful shutdown, PATH cleanup and data preservation. Core Clippy for all targets with warnings denied, formatting and whitespace checks passed. Native Windows verification remains pending in the next candidate.
 
+Candidate [#41](https://github.com/eimg/fairway-xmp/actions/runs/39705900000) passed Windows packaging, all platform builds, browser review and all five Linux portable-runtime checks. Mac signing/notarization, pkg upgrade and the real updater installation completed, but final validation of the updated app failed twice when Apple's CloudKit connection was lost (`NSURLErrorDomain -1005`, stapler exit 68). That lifecycle check bypassed the bounded retry helper already used during packaging. It now uses a validation-only entry point in the shared helper, with four attempts and 5/15/30-second waits for the existing recognized ticket/service errors. It never re-staples the delivered app, and persistent or other validation errors still fail acceptance. Regression coverage verifies validation-only retries, bounded failure and immediate failure for other errors. A replacement candidate must complete the Mac lifecycle and acceptance assembly.
+
+After this correction, all 81 Python tests passed locally, including the six ticket/stapling regressions, and the updater lifecycle imports the shared validation helper successfully. Whitespace checks passed. Actual Apple validation and installer lifecycle completion remain candidate checks.
+
 ## Remediation — 2026-10-20
 
 | Finding/gap | Resolution and evidence |
