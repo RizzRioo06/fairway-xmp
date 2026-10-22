@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-rc.3 — Unreleased
+## 0.1.0-rc.3 — 2026-10-22
 
 - View row is a dedicated reader with full wrapped text, field metadata, distinct NULL/empty values, per-field copy and exact JSON copying.
 
@@ -18,7 +18,7 @@
 
 - Update bundled PHP to 8.2.35, 8.3.36, 8.4.27 and 8.5.12, fixing CVE-2026-109618 and CVE-2026-109619 across Windows, macOS and Linux. PHP 8.5 remains the default.
 
-The patched runtime inputs are pinned for the fresh RC 3 candidate. See the [PHP update checklist](docs/rc3-php-security-update.md). RC 3 is staged for a fresh candidate; it has not been published or accepted on devices. See [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
+Published from [candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813), source `809547ab1b71143faedc39ca6c0492aa46be3a13`, using the exact accepted artifacts without rebuilding. The preview update feed offers RC 3 to installed macOS and Windows beta and RC clients; Linux updates remain manual. The owner confirmed pre-publication device checks. Actual in-app update/restart checks remain pending. See the [PHP update record](docs/rc3-php-security-update.md), [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
 
 ## 0.1.0-rc.2 — 2026-10-20
 

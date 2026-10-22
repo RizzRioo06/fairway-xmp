@@ -1,12 +1,16 @@
 # 0.1.0 RC release preparation
 
-**0.1.0-rc.1 was published on 2026-10-19**. Feature scope is locked by the release owner on **2026-10-18**. Only correctness/security fixes, tests and release preparation remain in scope. The exact candidate source commit and installer acceptance are recorded separately.
+**0.1.0-rc.3 was published on 2026-10-22**. Feature scope is locked by the release owner on **2026-10-18**. The exact candidate source commit and installer acceptance are recorded below; earlier release records are retained as history.
 
-## RC 3 source preparation — 2026-10-22
+## RC 3 release — 2026-10-22
 
-The owner authorized the terminal/workspace/log/data-browser changes and resolution of the [RC 3 review findings](rc3-readiness-review.md). Source versions are staged as **0.1.0-rc.3**. [RC 3 notes](../releases/0.1.0-rc.3-notes.md) describe the changes; no candidate, publication or human acceptance is claimed yet. PHP 8.0/8.1 have been removed. PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12 are pinned for the security update. The owner authorized preparation and the GitHub candidate build on October 22, and will report workflow progress. See the [PHP update checklist](rc3-php-security-update.md); candidate success and exact-installer acceptance remain pending.
+**0.1.0-rc.3 is published** from [candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813), source `809547ab1b71143faedc39ca6c0492aa46be3a13`. Tag `v0.1.0-rc.3` identifies that exact tested commit; publication reuses its installers, updater files and corresponding sources without rebuilding. The owner explicitly authorized release and in-app update feed promotion after confirming the RC 3 device checks passed on Mac, Windows and Linux. [Acceptance evidence](release-acceptance/0.1.0-rc.3.json) records that owner report against the exact installer hashes; OS editions/versions were not separately supplied.
 
-Before publication, build from the final committed inputs using the cross-platform candidate workflow, require all automated gates, and obtain new exact-installer acceptance. Verify RC 2 → RC 3 upgrade preservation and the signed Mac app's SQLite protected-folder prompts. The local unsigned app cannot settle the reported duplicate-prompt behavior. Complete actual in-app update/restart checks after feed promotion. Do not reuse RC 2 acceptance for new binaries or alter the published RC 2 assets.
+All automated platform builds, browser/native checks, services/restore, signed updater drills, actual installer lifecycles, Mac signing/notarization and the five Linux clean-distro checks passed. PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12 replace the vulnerable inputs; PHP 8.0/8.1 remain removed. See [release notes](../releases/0.1.0-rc.3-notes.md) and the [PHP update record](rc3-php-security-update.md).
+
+The preview feed offers RC 3 to installed desktop beta/RC clients. The human subsequent-version update/restart checks remain explicitly false on Mac and Windows until tested after publication, including protected Mac authorization prompt approval/cancellation. Prior RC 2 results are not reused for these checks, and published RC 2 assets/evidence are unchanged.
+
+[Publication run 39713690870](https://github.com/eimg/fairway-xmp/actions/runs/39713690870) passed and published [v0.1.0-rc.3](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3) as a prerelease. Post-publication verification matched all 22 asset digests to the published checksum inventory, the candidate files' hashes/sizes, runtime/acceptance metadata and the live preview feed's exact RC 3 updater URLs/signatures. README downloads now point to these assets. The release tag remains on the tested application commit; documentation and acceptance were committed afterward without rebuilding.
 
 ## RC 2 build preparation — 2026-10-20
 

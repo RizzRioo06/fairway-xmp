@@ -1,6 +1,6 @@
 # RC 3 PHP security update — 2026-10-22
 
-RC 3 remains unreleased. Runtime inputs are now pinned to PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12, addressing CVE-2026-109618 and CVE-2026-109619. Candidate compilation, platform checks and device acceptance remain pending.
+RC 3 is published from [candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813), source `809547ab1b71143faedc39ca6c0492aa46be3a13`, using its exact files without rebuilding. PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12 address CVE-2026-109618 and CVE-2026-109619. All candidate platform, signing, installer and updater gates passed. The owner confirmed pre-publication device acceptance and authorized release/feed promotion on October 22; actual subsequent-version desktop update/restart acceptance remains pending.
 
 The [October 21 PHP security advisory](https://www.php.net/archive/2026.php) confirms these fixed versions. The advisories are [CVE-2026-109618](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) and [CVE-2026-109619](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp). The owner authorized the input update and GitHub candidate build on October 22 and will report workflow progress; no automatic monitoring is scheduled.
 
@@ -44,7 +44,7 @@ Local preparation checks completed on macOS arm64, 2026-10-21:
 
 Socket/process-dependent Rust checks passed with the required local access after sandbox restrictions blocked their initial run. Browser checks use the test backend and do not claim native visual acceptance or actual external browser launches.
 
-The October 21 local app still contains the previous runtime pins. The patched app/installer build is delegated to GitHub; no new local native build is claimed. Final cross-platform candidate results, signed distribution artifacts and device acceptance remain pending. No publication or feed promotion is recorded by this preparation.
+The October 21 local app still contains the previous runtime pins; no new local native build is claimed. The local results above are historical preparation evidence. Final patched distribution checks and owner-reported pre-publication device acceptance are recorded in the release status at the top of this document.
 
 ## Patched-input preparation — October 22
 
@@ -52,4 +52,4 @@ The October 21 local app still contains the previous runtime pins. The patched a
 - Updated only PHP entries in the desktop/Linux download locks. The default stays 8.5 and 8.0/8.1 remain excluded. A static check of the shipped Mac CLI/CGI/FPM binaries and extension libraries found all 28 unique non-system library references covered by 20 existing pinned dependency bottles; no unrelated Mac dependency pin changed.
 - The new corresponding-source plan validates 212 inputs. Four PHP source archives and 16 new/revised Windows dependency-source archives were checksum-verified; unchanged source checksums were retained. The selected Windows SBOMs determine the required dependency revisions, rather than historical PHP-version labels.
 - Local Python packaging/release/SQLite checks passed (79 tests), along with actionlint, version consistency and diff whitespace. The local SQLite checks exercised the previous staged runtime; the GitHub platform jobs must stage and test the patched runtimes.
-- The GitHub candidate must complete the existing runtime, native browser, service/restore, installer, signing/notarization, updater-signature and exact-artifact checks. The owner will provide run status. Publication and feed promotion are separate actions.
+- Candidate run 42 completed the runtime, native browser, service/restore, installer, signing/notarization, updater-signature and exact-artifact checks. The owner confirmed device acceptance and authorized publication with feed promotion. See the [acceptance record](release-acceptance/0.1.0-rc.3.json); actual desktop update/restart checks remain pending.

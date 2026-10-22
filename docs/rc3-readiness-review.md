@@ -2,7 +2,11 @@
 
 Reviewed `ef1deb6` on `codex/rc-polishing`, compared with released application tag `v0.1.0-rc.2` (`3ace851`). The comparison contains 46 changed files. Dependency locks and runtime inputs are unchanged.
 
-**Current recommendation: the original source findings below are resolved. The October 21 PHP security releases are now pinned for a fresh distribution candidate. Publication still requires cross-platform signed artifacts and exact-installer acceptance.** The original review found no P0/P1 issue. Its checkpoint findings and reproductions are retained below as historical evidence; the subsequent owner-authorized remediation changes application code and stages `0.1.0-rc.3`.
+**Release status: candidate 42 passed all automated distribution checks and the owner confirmed pre-publication device acceptance. RC 3 is published with the preview update feed enabled; human subsequent-version update/restart checks remain pending.** The original review found no P0/P1 issue. Its checkpoint findings and reproductions are retained below as historical evidence; the subsequent owner-authorized remediation changes application code and stages `0.1.0-rc.3`.
+
+## Final candidate and release — 2026-10-22
+
+[Candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813) passed at `809547ab1b71143faedc39ca6c0492aa46be3a13`, including the corrected Windows recovery checks and Mac ticket validation. All platform/browser/native checks, five Linux portable-runtime jobs, Mac signing/notarization, desktop signed updater drills and exact-installer lifecycles passed. The release owner confirmed Mac/Windows/Linux device checks and authorized publication and feed promotion. [The acceptance record](release-acceptance/0.1.0-rc.3.json) binds that report to the exact installer hashes, with both post-publication human update checks still false. [RC 3](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3) reuses these artifacts without rebuilding. Historical preparation and failures remain below.
 
 ## Additional preparation — 2026-10-21
 
