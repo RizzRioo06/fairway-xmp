@@ -2,6 +2,12 @@
 
 The owner accepted the Windows MySQL CLI non-ASCII identifier limitation on 2026-10-19. It is disclosed for this RC: on non-UTF-8 system locales, unsupported backup/export names fail explicitly and updates cannot proceed without a completed backup. Broader Unicode CLI backup support remains open; normal Unicode row/query handling is retained. See [database limitations](data-browser.md#windows-backupexport-identifiers).
 
+## Current release: RC 3 — 2026-10-22
+
+[RC 3](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3) is published and offered through the preview update feed. All candidate/platform/signing/installer checks passed, and the owner confirmed pre-publication device acceptance. The current remaining release checks are actual in-app update/restart on macOS and Windows, including protected Mac authorization behavior. Their booleans remain false in the [RC 3 acceptance record](release-acceptance/0.1.0-rc.3.json). See the [release record](rc-preparation.md#rc-3-release--2026-10-22).
+
+The older publication and prototype notes below are historical. They do not describe current release blockers; published files and their original acceptance records stay unchanged.
+
 ## RC 1 publication — 2026-10-19
 
 The owner authorized merging PR #7 and publishing [v0.1.0-rc.1](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.1). PR #7 merged as `959a0d77bd0fc8d9b523502bbe727fa55ad6fff1`; [publication run 39179960227](https://github.com/eimg/fairway-xmp/actions/runs/39179960227) reused the exact accepted files from candidate run [39173368612](https://github.com/eimg/fairway-xmp/actions/runs/39173368612), tested source `24e5c053b30eb7cca280f6ad9f5de47d8e90b489`, without rebuilding. The version tag identifies that tested source, while subsequent documentation records publication.
@@ -46,7 +52,7 @@ Closed on 2026-10-21 by removing PHP 8.0 and 8.1 from the Windows, macOS, and Li
 
 - [x] Remove PHP 8.0 and 8.1 instead of reconstructing unverifiable Windows dependency provenance.
 
-## Finish the release owner's Mac visual test
+## Historical beta 1 Mac visual record
 
 - [ ] Confirm PHP selection is hidden in collapsed Advanced settings by default and uses one dropdown.
 - [ ] Confirm Save changes the PHP card and selected web/CLI/Composer runtime, and the selection persists after Quit and reopen.

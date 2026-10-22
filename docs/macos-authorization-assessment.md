@@ -1,14 +1,18 @@
 # macOS authorization assessment — 2026-10-19
 
+## Current status — 2026-10-22
+
+This is the historical assessment and experiment record. The native permission work is integrated in released RC 3, whose signed/notarized candidate checks and standard owner-reported device acceptance passed. Earlier local prototype bundles are retired. Use the current [release record](rc-preparation.md#rc-3-release--2026-10-22) and [diagnostic test guide](permission-test-builds.md); the original findings below describe their dated checkpoints. Protected in-app update prompt/restart acceptance remains pending.
+
 ## RC 2 integration update — 2026-10-20
 
 PR #8 is merged, and the owner has authorized RC 2 with the welcome, site-form and native permission changes. The normal Mac candidate workflow now explicitly enables both native features, builds and copies the helper before distribution signing, verifies the packaged feature flags/fixed payload/Developer ID identity, and exercises fresh registration/cleanup on the exact notarized app. Certificate removal uses the in-process Security API. Development Cargo defaults still leave the native features opt-in.
 
-The historical experiment/checkpoint notes below describe their state at that time; statements that normal packaging omits the helper or that no focus fix exists are superseded by this update. RC 2 remains unpublished. Fresh exact-installer approval/cancellation, password fallback, last-site cleanup, supported macOS 15 behavior, approved-helper upgrade/replacement and uninstall/reinstall still need device acceptance. No current user's hosts, keychain or service registration is mutated by local build verification.
+The historical experiment/checkpoint notes below describe their state at that time; statements that normal packaging omits the helper or that no focus fix exists are superseded by this update. RC 2 was published on October 20, followed by RC 3 on October 22. Standard pre-publication device acceptance is recorded for RC 3; individual prompt combinations require their own results when investigated. No current user's hosts, keychain or service registration is mutated by local build verification.
 
 Status: assessment plus opt-in native HTTPS-trust and hosts-helper prototypes, prepared after RC 1 at the owner's request for a local Mac comparison build. Standard builds keep the existing authorization behavior. The owner will decide separately whether the proposed work warrants another RC.
 
-## Findings in the current source
+## Original source findings
 
 | Operation | Current implementation | Meaning for the prompts |
 | --- | --- | --- |
@@ -28,7 +32,7 @@ Apple's [Authorization Services](https://developer.apple.com/documentation/secur
 
 Apple documents a separate authentication interaction for [per-user certificate trust changes](https://developer.apple.com/documentation/security/sectrustsettingssettrustsettings%28_%3A_%3A_%3A%29). Replacing the `security` subprocess with Security framework calls may improve integration and control of the sequence, but fewer prompts or Touch ID availability must be demonstrated on the supported OS versions. User trust must remain user trust; moving the CA to system-wide trust would unnecessarily broaden its scope.
 
-## Recommended next experiment
+## Original HTTPS experiment
 
 Investigate **native per-user HTTPS trust setup first**, independently of hosts elevation. The opt-in `native-macos-trust` Cargo feature now adds the same public CA certificate to the login keychain with `SecItemAdd`, then applies SSL-server-only trust in the user domain with `SecTrustSettingsSetTrustSettings`. It decodes the actual PEM used by verification rather than relying on a potentially stale DER sidecar. Existing trust verification and compatible certificate/trust removal are retained. It adds no preliminary Local Authentication dialog, stored-password keychain unlock, administrator helper or authorization-policy changes. A duplicate public certificate left after cancellation is accepted for retry; other insertion errors stop before requesting trust. The trusted marker is written only after the existing verification succeeds. Cancellation and other errors retain the failed operation's context.
 

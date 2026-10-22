@@ -1,21 +1,27 @@
-# Audit remediation TODO
+# Audit remediation status
 
-Source: audit of `a3984df` and targeted code inspection. Work proceeds one pass at a time, with focused regression checks and a reviewable diff before moving on. Passes are grouped by shared behavior, not release milestones. Future groups are provisional: split them further when a migration or platform-specific validation needs its own pass.
+## Current status — 2026-10-22
+
+The implemented audit fixes shipped in [RC 3](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3). [Candidate 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813) passed the native platform, browser, service/recovery, installer, signing and updater checks. The owner confirmed the standard pre-publication device checks; see [exact-installer acceptance](release-acceptance/0.1.0-rc.3.json).
+
+The October 21 verification paragraphs below are historical checkpoints. Their then-pending hosted checks and terminal failures are superseded by candidate 42. Actual subsequent-version Mac/Windows update and restart, including protected Mac authorization prompts, remain pending. Detailed privileged Linux trust/browser-verifier cases and individually unreported native prompt combinations remain verification follow-ups; the general device report does not establish those specific cases. Pass 11 stays deferred.
+
+Source: audit of `a3984df` and targeted code inspection. The implemented passes were grouped by shared behavior, with focused regression checks and reviewable diffs. Deferred work below is separate from the completed RC 3 implementation.
 
 Preserve coursework, databases, credentials, supported workflows, and user choices. Do not silently reset settings, change PHP versions, force-kill MySQL, or add database naming restrictions. Reproduce uncertain findings before changing behavior. Update this checklist with changes, evidence, and remaining limitations after each pass.
 
-## Pass 1 — Linux installation and uninstall safety (implemented; native verification pending)
+## Pass 1 — Linux installation and uninstall safety (implemented; candidate verified)
 
 - [x] Remove only managed installation files; retain other files within custom prefixes. Retain an installation marker when user files remain so safe prefixes can be reused on reinstall.
 - [x] Reject installation prefixes overlapping the document root or application data, including aliases through symlinks and parent traversal.
 - [x] Refuse uninstall when managed payload deletion would overlap protected user paths or the installation layout is invalid. Reject symlinked management paths during installation.
 - [x] Cover preservation, cleanup failures, extracted installs, unsafe paths, and reinstall with isolated shell fixtures; extend the real Linux lifecycle check.
 - [x] Record local verification and synchronize the product specification.
-- [ ] Run the extended installed-CLI lifecycle check on Linux with the real bundled runtime.
+- [x] Run the extended installed-CLI lifecycle check on Linux with the real bundled runtime (candidate 42).
 
 Verification on 2026-10-21: `python3 -m unittest discover -s tests -v` passed all 69 tests; `sh -n packaging/linux/install.sh packaging/linux/uninstall.sh` and `git diff --check` passed. Shell fixtures use isolated temporary homes and a stub Fairway executable; on macOS, adapters provide GNU `realpath -m` and `mv -Tf` behavior. On Linux the tests use native coreutils. No real services, shell profiles, hosts entries, or certificate trust were changed. The extended real Linux lifecycle check was not run locally: this host is macOS and its Docker daemon is unavailable.
 
-## Pass 2 — MySQL initialization and recovery (implemented; macOS verified)
+## Pass 2 — MySQL initialization and recovery (implemented; candidate verified)
 
 - [x] Use secure, non-listening initialization and a private one-shot SQL file to apply the saved root password before normal startup. Remove the SQL file on success/failure and redact the saved password from setup errors.
 - [x] Resume readiness/provisioning on Retry for tracked, unprovisioned instances without respawning them. Report an unprovisioned listener as Waiting, including after process recovery.
@@ -24,28 +30,29 @@ Verification on 2026-10-21: `python3 -m unittest discover -s tests -v` passed al
 - [x] Add eight Unix fixture regression tests for delayed readiness/timeouts, partial account setup before/after password assignment, secret cleanup/redaction, failed shutdown, retries, provisioned authentication failure, and Start-all rollback.
 - [x] Add a focused native MySQL recovery smoke example and include the same checks in the existing full service smoke suite used by platform CI.
 - [x] Verify real bundled MySQL and the complete service flow on macOS; synchronize the product specification.
-- [ ] Run the extended real-runtime smoke suite on Windows and Linux.
+- [x] Run the extended real-runtime smoke suite on Windows and Linux (candidate 42).
 
 Verification on 2026-10-21: all 64 Rust core/terminal tests passed with `cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked --offline`. Clippy passed for all targets/all features with warnings denied; formatting and `git diff --check` passed. Both `mysql_recovery_smoke` and the full `smoke` example passed against bundled MySQL 9.7.2 on macOS. Native checks verified passwordless authentication rejection, recovery/provisioning of the same PID, legacy passwordless graceful shutdown/restart, stored credential and coursework preservation, and refusal to apply the fallback to a provisioned database. The full smoke also verified PHP 8.0–8.5, PHP → MySQL → HTTP, phpMyAdmin, logical backup restoration, and graceful shutdown. Tests used temporary homes/data and loopback ports; installed Fairway data, system hosts, and certificate trust were not changed. Windows/Linux runtime results remain unverified locally.
 
-## Pass 3 — Process ownership and port checks (implemented; macOS verified)
+## Pass 3 — Process ownership and port checks (implemented; candidate verified)
 
 - [x] Revalidate adopted process identity on macOS using process start time and on Windows using a retained process handle; preserve Linux start-time checks. Fail closed when adopted identity cannot be established.
 - [x] Capture identity before executable/configuration validation and recheck it before adoption. Check liveness/identity again immediately before direct signals and web-process termination.
 - [x] Detect IPv4 wildcard and IPv6 dual-stack port listeners on macOS in both preflight and alternative-port suggestions. Preserve IPv6-only coexistence and normal port-reuse behavior; never reassign ports silently.
 - [x] Add regression coverage for stale/unverifiable identity, exit during adoption, safe signal rejection, retained Windows handles, wildcard listeners, and IPv6-only coexistence.
 - [x] Verify native macOS recovery of the same Nginx/PHP/MySQL processes and normal Stop/Start behavior; synchronize the product specification.
-- [ ] Run native Windows and Linux process/recovery checks.
+- [x] Run native Windows and Linux process/recovery checks (candidate 42).
 
 Verification on 2026-10-21: all 69 Rust core/terminal tests passed. Clippy passed for all targets/all features with warnings denied; formatting and `git diff --check` passed. `service_recovery_smoke` recovered the same Nginx/PHP masters after a controller crash, rejected foreign configuration/unrelated PIDs, and verified Stop/Start. `mysql_recovery_smoke` passed with the new adoption checks. The actual `process.rs` and its tests also typechecked for `x86_64-pc-windows-gnu` and `x86_64-unknown-linux-gnu` in a temporary harness with a minimal layout stub and the locked platform dependencies. Native Windows/Linux runtime validation remains pending. All running checks used disposable processes, temporary data, and random local ports.
 
-## Pass 4 — Shutdown reliability (implemented; macOS service recovery verified)
+## Pass 4 — Shutdown reliability (implemented; native recovery verified)
 
 - [x] Add an ownership-checked Nginx shutdown fallback: graceful SIGQUIT on Unix, existing web-process termination on Windows; retain the normal bounded wait/escalation and graceful-only MySQL shutdown.
 - [x] Offer Keep open / Quit anyway after failed graceful shutdown. Explicit exit preserves remaining services, closes embedded terminals, and permits recovery next launch. Normal successful Quit still stops services first.
 - [x] Preserve Windows web services through explicit exit using named per-installation/service jobs, PID markers, retained process handles and verified job membership for recovery.
 - [x] Add an Nginx control-failure regression and extend the full native smoke to verify recovery of every running service's same PID after leave-running.
-- [ ] Exercise both native shutdown-dialog choices on macOS and Windows, and run retained-job recovery on native Windows. Windows job code/tests typecheck; that is not native execution.
+- [x] Run retained-job recovery on native Windows (candidate 42).
+- [ ] Record both native shutdown-dialog choices on macOS and Windows individually; the standard device acceptance report does not describe each failure-dialog case.
 
 ## Pass 5 — Backup durability (implemented)
 
@@ -59,7 +66,8 @@ Verification on 2026-10-21: all 69 Rust core/terminal tests passed. Clippy passe
 - [x] Keep services, terminals and database controls usable during update download/signature verification. Prevent duplicate downloads and wait for existing guarded work before exclusive installation.
 - [x] Cancel pending download requests and verified-update waits on Quit; preserve atomic installation/shutdown ordering and retries after cancellation or installation/shutdown failures.
 - [x] Cover startup failures and external repair, download cancellation, guarded-work ordering, installation retry and frontend recovery/progress without disabling normal controls.
-- [ ] Run native update/quit prompts and signed installation acceptance on Windows/macOS; no installer replacement was performed in this batch.
+- [x] Complete signed installer/updater lifecycle acceptance on Windows/macOS (candidate 42).
+- [ ] Complete actual subsequent-version update/restart and native authorization/quit prompt checks after publication on Windows/macOS.
 
 Batch verification on 2026-10-21: all 90 Rust library tests passed with all features; all-target/all-feature Clippy passed with warnings denied. The full bundled-runtime macOS smoke passed, including same-PID leave-running recovery, PHP 8.0–8.5, PHP → MySQL → HTTP, phpMyAdmin, restoration of a logical export into a fresh database, and graceful shutdown. Process/durability modules and their tests typechecked for Windows and Linux in the focused temporary harness; native Windows/Linux runtime execution remains pending. Tests used disposable processes, fresh temporary data and loopback ports, without changing installed application data, system hosts or certificate trust.
 
@@ -79,9 +87,9 @@ Frontend verification: all 36 focused startup, update-failure/progress and opera
 
 Verification on 2026-10-21: all 91 Rust library tests and 10 TypeScript unit tests passed. All-target/all-feature Clippy passed with warnings denied; the expanded TypeScript/Vite build, formatting and diff checks passed. All 20 new browser failure-path checks passed across Chromium/WebKit at normal/minimum sizes, alongside all 16 workspace checks and 24 operation-notice checks. The complete affected UI run passed 194/204 checks, including all logs, MySQL/SQLite, startup/update and new recovery checks. Tests used controlled browser bridges and disposable local Rust fixtures; no installed application data, hosts entries, trust settings or real database contents were changed. Native Windows external-terminal behavior still needs platform acceptance; lexical parsing tests exercise Windows path cases on this host.
 
-Additional verification follow-ups (not regressions from this pass): ten failures remain across three existing terminal checks. The viewport-fit fixture includes development banners absent from the product; the new-terminal test uses a disabled matcher on a summary with aria-disabled; the failed-session test loses page scroll on Chromium. All three failures also reproduced when App, Terminal, Workspace, modal-focus and main were restored temporarily to their original `a3984df` sources; current sources were restored afterward. Keep these visible for a separate terminal/fixture follow-up rather than changing unrelated terminal behavior in this batch. The broader run is not reported as fully passing.
+The three terminal follow-ups from this checkpoint are resolved: fitting measures the actual available viewport, New terminal exposes its button role and disabled state, and popovers no longer trigger browser scroll anchoring. The 60 terminal/workspace regressions passed locally; candidate 42 passed browser review and native terminal checks on both desktop platforms. See the [RC 3 review](rc3-readiness-review.md).
 
-## Pass 8 — Database browsing and editing correctness (implemented; macOS verified)
+## Pass 8 — Database browsing and editing correctness (implemented; candidate verified)
 
 - [x] Reproduce/fix latin1 comparisons, BIT representation, and Unicode identifier lengths.
 - [x] Verify the DOUBLE precision finding before changing numeric handling.
@@ -90,7 +98,8 @@ Additional verification follow-ups (not regressions from this pass): ten failure
 - [x] Verify with real MySQL/PHP, including no-op saves, concurrent changes, and unrelated-row locking.
 
 - [x] Document limits, full-value/copy behavior, native staging and remaining platform acceptance.
-- [ ] Repeat the native runtime/staging checks on Windows and verify native WebView/clipboard behavior on both desktop platforms.
+- [x] Repeat the native runtime/staging checks on Windows (candidate 42).
+- [ ] Record platform-native WebView/clipboard edge cases separately when exercised; the standard device acceptance report does not enumerate these cases.
 
 Reproduced every reported finding against bundled MySQL/PHP before changing behavior: latin1 comparisons failed against UTF-8 parameters, BIT values produced odd-width hex, a DOUBLE displayed as `1.2345678901235` failed its own stale check, a 4 MiB original row exceeded the request cap, and 64-character Unicode identifiers were counted as bytes. Added a related reproduced FLOAT-key case: MySQL's six-digit text formatting failed to locate its own key and could hide nearby stored changes; exact widening now preserves numeric identity and fingerprints.
 
@@ -115,7 +124,7 @@ Verification on 2026-10-21: all 103 Rust library tests and 14 TypeScript unit te
 
 Modern OpenSSL rejected public DNS, IPv4/IPv6 and subordinate-CA chains while accepting `.test` leaves. Apple's bundled LibreSSL 3.3.6 rejected DNS/IP violations but accepted the subordinate chain despite root pathLen=0. This concrete verifier limitation is documented and retained in platform acceptance; encoded constraints are not reported as universal client enforcement.
 
-## Pass 10 — Signing safeguards and reproducible tooling (implemented; hosted execution pending)
+## Pass 10 — Signing safeguards and reproducible tooling (implemented; hosted execution verified)
 
 Scope reduced by the owner on 2026-10-21: finish the practical signing/build safeguards, then defer compatibility-sensitive isolation. These choices follow the local classroom use case and the value of protecting distributed app/update signatures; they are independent of release milestones.
 
@@ -142,7 +151,7 @@ The following are optional future work, not requirements for finishing this audi
 Earlier passes retain their unperformed native checks. They are verification follow-ups, not authorization to expand the isolation scope.
 
 - [ ] Verify optional HTTPS in supported Linux browsers using a disposable account, alongside pass 9's privileged trust/migration acceptance. Fix a demonstrated trust gap if one appears; do not introduce speculative trust-store changes.
-- [ ] Run the revised hosted signing/packaging workflows and their existing installer/updater drills after merging the reviewed changes. Preserve the recorded pending status until those runs pass.
+- [x] Run the revised hosted signing/packaging workflows and their existing installer/updater drills (candidate 42 and the successful RC 3 publication).
 
 ## Deferred maintenance
 
@@ -164,4 +173,4 @@ Verification on 2026-10-21: all 107 Rust library tests and 14 TypeScript unit te
 - [x] Explicitly refresh the app's helper registration before a manual recheck; preserve OS approval, existing registration and the prompt-free background monitor.
 - [x] Reproduce the native pending state through read-only system records: current copy pending/disallowed, older copy allowed, current launchd service absent. Record the separate unnotarized Gatekeeper rejection and avoid claiming a proven single cause.
 - [x] Verify manual recheck completion, still-pending feedback and dismissal, registration status changes and existing notices. All 109 Rust tests and 48 Chromium/WebKit checks passed; all-feature/all-target Clippy, production TypeScript/Vite build and diff checks passed.
-- [ ] Notarize the corrected app with explicit upload authorization, replace the test copy at its existing path after a normal Quit, and verify actual approval/recheck-to-hosts behavior interactively. Staged binaries are not an accepted native result.
+- [x] Ship the corrected app through the signed/notarized RC 3 candidate and retire the obsolete local unnotarized test copy. The owner confirmed standard Sites/HTTPS device acceptance; separately unreported prompt combinations remain follow-ups above.

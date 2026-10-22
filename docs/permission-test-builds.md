@@ -1,5 +1,7 @@
 # Standalone permission test builds
 
+RC 3 includes the native permission changes and passed signed candidate checks and owner-reported standard device acceptance. Use the current [release](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3) for normal testing. The instructions below remain for explicitly requested diagnostic comparison builds; earlier local prototype bundles have been removed. Their historical prompt observations do not indicate an open RC 3 build/signing failure.
+
 These are draft test apps, not a new release. They use your ordinary Fairway settings,
 sites, databases and document root. Quit the installed app completely from its tray/menu
 bar before opening a test copy. Quit the test copy the same way before returning to the
@@ -103,7 +105,7 @@ Existing `index.php` files are preserved; the smaller welcome page appears only 
 Fairway creates a missing default index.
 
 Record the OS, embedded commit from `--build-info`, prompt/console behavior and whether
-cancellation followed by retry works. Existing RC 1 remains the installed fallback.
+cancellation followed by retry works. Return to the current installed release afterward.
 
 ### Approval recheck follow-up
 
