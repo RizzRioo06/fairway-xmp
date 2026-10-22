@@ -1,0 +1,66 @@
+{
+  "version": "0.1.0-rc.3",
+  "commit": "809547ab1b71143faedc39ca6c0492aa46be3a13",
+  "postPublicationChecks": [
+    "in-app-update-and-restart"
+  ],
+  "platforms": {
+    "windows-x64": {
+      "tester": "Release owner (eimg)",
+      "os": "Release owner device; exact OS edition/version was not supplied",
+      "testedAt": "2026-10-22",
+      "installerSha256": "d673d8a5a0f1301e1793264b3fa9b172c088c2594fb4b562ff6328efc327020f",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "tray-and-quit": true,
+        "browser-visual-review": true,
+        "data-browser-and-sql-tools": true,
+        "terminal-sessions-and-cleanup": true,
+        "sites-domains-and-https": true,
+        "in-app-update-and-restart": false,
+        "mail-catcher-and-inbox": true,
+        "troubleshooting-logs": true
+      }
+    },
+    "macos-arm64": {
+      "tester": "Release owner (eimg)",
+      "os": "Release owner device; exact OS edition/version was not supplied",
+      "testedAt": "2026-10-22",
+      "installerSha256": "dff656206158d135085aa4cd333a076aa2d3b8cfcc1cc0c3850f6932b2f44808",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "menu-bar-and-quit": true,
+        "browser-visual-review": true,
+        "data-browser-and-sql-tools": true,
+        "terminal-sessions-and-cleanup": true,
+        "sites-domains-and-https": true,
+        "in-app-update-and-restart": false,
+        "mail-catcher-and-inbox": true,
+        "troubleshooting-logs": true
+      }
+    },
+    "linux-x86_64": {
+      "tester": "Release owner (eimg)",
+      "os": "Release owner device; exact OS edition/version was not supplied",
+      "testedAt": "2026-10-22",
+      "installerSha256": "e1949fa47cdf76c05d1d275eb77a9cff3a23335eee9a9a205479efd11eb6ff9f",
+      "checks": {
+        "install-and-first-project": true,
+        "upgrade-preserves-work": true,
+        "uninstall-reinstall-preserves-work": true,
+        "dashboard-detach-and-shutdown": true
+      }
+    }
+  },
+  "attestation": {
+    "by": "Release owner (eimg)",
+    "recordedAt": "2026-10-22",
+    "statement": "Yes, device checks passed too. Publish and enable in-app Updates.",
+    "basis": "Release owner explicitly confirmed RC3 device checks passed on Mac, Windows and Linux after candidate run 39710252813 succeeded. These are owner-reported results, not agent-observed device tests. Exact OS strings were not supplied.",
+    "scope": "Pre-publication checks for the exact candidate installer hashes. The human in-app update/restart checks remain false until tested after feed promotion."
+  }
+}
