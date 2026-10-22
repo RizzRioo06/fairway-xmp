@@ -168,7 +168,7 @@ export default function TerminalPage({ active, busy, macos, focusRequest = 0, la
           {tab.slot !== 0 && <button className="terminal-tab-close" aria-label={`Close terminal ${tab.slot + 1}`} disabled={statuses[tab.slot] === 'starting'} onClick={() => { setSelected(tab.slot); setFocusInput(false); closeBySlot.current[tab.slot]?.(); }}><X size={13} /></button>}
         </div>)}</div>
         <details className="terminal-new" ref={newTerminalMenu} onToggle={event => { if (event.currentTarget.open) void refreshContext(); }}>
-          <summary aria-label="New terminal" aria-disabled={cannotAdd} title={tabs.length >= 2 ? 'Close the extra tab to open another terminal.' : 'New terminal'} onClick={event => { if (cannotAdd) event.preventDefault(); }}><Plus size={16} /></summary>
+          <summary role="button" aria-label="New terminal" aria-disabled={cannotAdd} title={tabs.length >= 2 ? 'Close the extra tab to open another terminal.' : 'New terminal'} onClick={event => { if (cannotAdd) event.preventDefault(); }}><Plus size={16} /></summary>
           <div className="terminal-popover terminal-folder-menu">
             <div className="terminal-menu-label">New terminal in</div>
             <button className="terminal-default-folder" disabled={cannotAdd || !context.defaultDirectory} onClick={() => addTab()}><span>{context.defaultDirectory || 'Loading folder…'}<small>Default location</small></span></button>
@@ -275,6 +275,13 @@ function TerminalSession({ macos, active, focusInput, focusRequest, rememberHist
     // Fit both the display and native PTY to the same supported dimensions.
     const fitToHost = () => {
       if (disposed || !host.current?.clientWidth || !host.current.clientHeight) return;
+      const container = host.current.parentElement;
+      if (container && !container.closest('.workspace-maximized')) {
+        // Measure the actual header/toolbars, including wrapped headings. Use
+        // document coordinates so ordinary page scrolling never resizes a PTY.
+        const top = container.getBoundingClientRect().top + window.scrollY;
+        container.style.setProperty('--terminal-top', `${top}px`);
+      }
       const dimensions = addon.proposeDimensions();
       if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
       term.resize(Math.max(2, Math.min(500, dimensions.cols)), Math.max(1, Math.min(300, dimensions.rows)));

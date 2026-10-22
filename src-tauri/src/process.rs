@@ -62,10 +62,10 @@ pub fn available(port: u16) -> bool {
 }
 
 fn probe_port(port: u16) -> std::io::Result<()> {
-    // Drop our temporary listener before probing for an existing one. On macOS,
-    // SO_REUSEADDR can let this bind succeed alongside a wildcard listener.
+    // Drop our temporary listener before probing for an existing one. macOS
+    // and Windows can permit a loopback bind alongside a wildcard listener.
     drop(TcpListener::bind(("127.0.0.1", port))?);
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     if connected(port) {
         return Err(std::io::Error::from(std::io::ErrorKind::AddrInUse));
     }
@@ -168,6 +168,8 @@ pub struct OwnedProcess {
     adopted_handle: Option<std::os::windows::io::OwnedHandle>,
     #[cfg(windows)]
     job: isize,
+    #[cfg(windows)]
+    job_preserved: bool,
 }
 
 impl OwnedProcess {
@@ -215,6 +217,7 @@ impl OwnedProcess {
                 child: Some(child),
                 pid,
                 job,
+                job_preserved: false,
                 adopted_handle: None,
             })
         }
@@ -272,6 +275,8 @@ impl OwnedProcess {
             adopted_handle: open_process(pid),
             #[cfg(windows)]
             job: 0,
+            #[cfg(windows)]
+            job_preserved: false,
         }
     }
 
@@ -301,6 +306,7 @@ impl OwnedProcess {
             return None;
         }
         owned.job = job as isize;
+        owned.job_preserved = true;
         let mut member = 0;
         let handle = owned.adopted_handle.as_ref()?;
         if unsafe { IsProcessInJob(handle.as_raw_handle() as _, job, &mut member) } == 0
@@ -315,8 +321,11 @@ impl OwnedProcess {
     pub(crate) fn leave_running(&mut self) -> Result<()> {
         #[cfg(windows)]
         if self.job != 0 {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS};
             use windows_sys::Win32::System::JobObjects::*;
-            let info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+            use windows_sys::Win32::System::Threading::GetCurrentProcess;
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
             if unsafe {
                 SetInformationJobObject(
                     self.job as _,
@@ -330,6 +339,46 @@ impl OwnedProcess {
                     "Could not preserve a service job: {}",
                     std::io::Error::last_os_error()
                 ));
+            }
+            if !self.job_preserved {
+                let child = self
+                    .child
+                    .as_ref()
+                    .ok_or("The service process is unavailable.")?;
+                let mut remote = std::ptr::null_mut();
+                // A job's name disappears when its last handle closes, even
+                // while members remain alive. Let the explicitly retained
+                // service hold a handle until exit so a new controller can
+                // reopen the same job and verify process membership.
+                if unsafe {
+                    DuplicateHandle(
+                        GetCurrentProcess(),
+                        self.job as _,
+                        child.as_raw_handle() as _,
+                        &mut remote,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                } == 0
+                {
+                    let error = std::io::Error::last_os_error();
+                    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                    let restored = unsafe {
+                        SetInformationJobObject(
+                            self.job as _,
+                            JobObjectExtendedLimitInformation,
+                            (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                            std::mem::size_of_val(&info) as u32,
+                        )
+                    };
+                    return Err(if restored == 0 {
+                        format!("Could not preserve the service job ({error}) or restore its exit policy: {}", std::io::Error::last_os_error())
+                    } else {
+                        format!("Could not preserve the service job: {error}")
+                    });
+                }
+                self.job_preserved = true;
             }
         }
         Ok(())
@@ -858,10 +907,13 @@ mod tests {
         assert_ne!(owned.job, 0);
         let pid = owned.pid();
         owned.leave_running().unwrap();
+        assert!(owned.job_preserved);
+        owned.leave_running().unwrap();
         drop(owned);
         let mut recovered =
             OwnedProcess::adopt_job(pid, &log).expect("left-running service was not recovered");
         assert!(recovered.alive());
+        assert!(recovered.job_preserved);
         assert!(OwnedProcess::adopt_job(std::process::id(), &log).is_none());
         assert!(OwnedProcess::adopt_job(pid, &root.join("nginx-process.log")).is_none());
         recovered.terminate_web().unwrap();

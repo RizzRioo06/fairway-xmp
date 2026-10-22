@@ -66,7 +66,12 @@ for (const engine of ['mysql', 'sqlite'] as const) test(`${engine} native index 
     await expect(links).toContainText('Referenced by');
     await expect(links).toContainText('memberships.team_id → teams.id');
     if (engine === 'mysql') await expect(links).toContainText('schema_other.cross_memberships.team_id → teams.id');
-    await expect(links.getByRole('button')).toHaveCount(0);
+    await expect(links.getByRole('button')).toHaveCount(1);
+    await links.getByRole('button', { name: 'Foreign keys', exact: true }).click();
+    dialog = page.getByRole('dialog', { name: 'Foreign keys', exact: true });
+    await expect(dialog).toContainText(engine === 'sqlite' ? 'SQLite · SQL example' : 'MySQL · SQL examples');
+    await expect(dialog.locator('pre').first()).toContainText('FOREIGN KEY');
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     const screenshot = info.outputPath(`${engine}-schema-details.png`);
     await page.screenshot({ path: screenshot, fullPage: true });
     await info.attach(`${engine}-schema-details`, { path: screenshot, contentType: 'image/png' });

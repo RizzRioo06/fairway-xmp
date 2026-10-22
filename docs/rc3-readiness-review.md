@@ -14,6 +14,18 @@ Runtime verification now rejects a stale staged manifest and unexpected PHP dire
 
 Local preparation checks and remaining distribution gates are recorded in that checklist. Browser regression checks complement the owner's visual testing; neither establishes exact-installer acceptance.
 
+## Candidate corrections — 2026-10-22
+
+Candidate run [39695343589](https://github.com/eimg/fairway-xmp/actions/runs/39695343589) confirmed the earlier Windows borrow fix compiled, then exposed separate runtime/test failures. Corrections for the next candidate:
+
+- Windows port probes check for an existing listener after dropping the temporary bind, covering the platform’s wildcard/loopback binding behavior. The existing ownership-preserving wildcard regression stays enabled.
+- Explicit leave-running gives the retained service one job-object handle, keeping its name available after the controller closes its last handle. Reopening still pins process identity and verifies membership; normal managed processes retain kill-on-close. The Windows regression covers repeated preservation and retained-job recovery.
+- Linux build prerequisites now explicitly install `liblzma-dev`, aligning the copied liblzma binary with an available exact source version. The failed runner had an older preinstalled binary whose xz-utils source version was no longer in its enabled archive. Source collection continues to require the exact installed version; no source-version fallback is introduced.
+- Native schema inspection expects its approved Foreign keys SQL-example button, opens the engine-specific examples and closes them, while retaining the other index/relationship checks.
+- Terminal sizing measures the actual header/toolbars and responds to viewport height. Popovers are excluded from browser scroll anchoring so reopening options and reporting restart failure preserve page position. New terminal exposes an explicit button role with its existing disabled state and guards.
+
+Local verification passed: 60 terminal/workspace checks across Chromium/WebKit at normal/minimum sizes, both native MySQL/SQLite schema checks, 113 all-feature Mac Rust tests, 79 Python tests, 14 TypeScript unit tests, production TypeScript/Vite build, Clippy with warnings denied, formatting, actionlint and whitespace checks. The native schema checks used the existing local runtime; the replacement candidate must verify the patched runtime, native Windows execution, Linux staging and the exact signed installers. Local checks do not establish those distribution results.
+
 ## Remediation — 2026-10-20
 
 | Finding/gap | Resolution and evidence |
