@@ -30,6 +30,10 @@ Candidate [#39](https://github.com/eimg/fairway-xmp/actions/runs/39701024604) pa
 
 After these corrections, all nine native desktop browser checks passed locally against the existing staged Mac runtime, including both unreadable-view recovery cases. The production build, CLI-feature Clippy with warnings denied, formatting and whitespace checks also passed. Linux-specific compilation and Windows execution remain checks for the replacement candidate.
 
+Candidate [#40](https://github.com/eimg/fairway-xmp/actions/runs/39703395782) passed all nine native browser checks on Windows, the Mac build, Linux build and all five Linux portable-runtime jobs. Windows then failed its MySQL startup recovery smoke assertion: its initially tracked process is the MySQL monitor, while reopening adopts the server child identified by `mysql.pid`. The startup and full-service recovery smoke checks now capture the actual server PID before reopening and require that same PID afterward, including after provisioning retry. Monitor liveness and non-Windows PID equality remain checked in the focused recovery probe. This corrects test expectations without changing service ownership or shutdown behavior; Windows smoke, packaging and installer acceptance still require a fresh candidate.
+
+The corrected focused recovery and full service/backup smoke checks passed locally using the existing staged Mac runtime and disposable data. The full check exercised all four supported PHP branches, PHP/MySQL/HTTP, phpMyAdmin, backup restoration, retained service recovery, graceful shutdown, PATH cleanup and data preservation. Core Clippy for all targets with warnings denied, formatting and whitespace checks passed. Native Windows verification remains pending in the next candidate.
+
 ## Remediation — 2026-10-20
 
 | Finding/gap | Resolution and evidence |

@@ -39,6 +39,14 @@ fn status(manager: &mut Manager) -> ServiceStatus {
         .unwrap()
 }
 
+pub fn server_pid(layout: &Layout) -> Result<u32, String> {
+    fs::read_to_string(layout.data.join("mysql.pid"))
+        .map_err(|error| error.to_string())?
+        .trim()
+        .parse::<u32>()
+        .map_err(|error| error.to_string())
+}
+
 pub fn run(root: &Path, runtime: &Path) -> Result<(), String> {
     let layout = Layout::at(
         root.join("student's home မြန်မာ"),
@@ -77,7 +85,15 @@ pub fn run(root: &Path, runtime: &Path) -> Result<(), String> {
             );
             process::sql(mysql(&manager, "mysql", true),
             "CREATE DATABASE startup_recovery; CREATE TABLE startup_recovery.coursework (id INT PRIMARY KEY); INSERT INTO startup_recovery.coursework VALUES (42);")?;
-            let pid = status(&mut manager).pid;
+            let launched_pid = status(&mut manager).pid.ok_or("Missing MySQL process.")?;
+            // On Windows the launched mysqld is a monitor; mysql.pid identifies
+            // its server child, which a reopened manager adopts. Compare that
+            // server identity across recovery rather than the monitor's PID.
+            let pid = server_pid(&manager.layout)?;
+            assert!(process::pid_alive(launched_pid));
+            assert!(process::pid_alive(pid));
+            #[cfg(not(windows))]
+            assert_eq!(launched_pid, pid);
             manager.leave_services_running()?;
             fs::remove_file(manager.layout.data.join("database-ready"))
                 .map_err(|error| error.to_string())?;
@@ -87,13 +103,19 @@ pub fn run(root: &Path, runtime: &Path) -> Result<(), String> {
                 recovered.running && !recovered.ready,
                 "Recovered incomplete setup must remain pending"
             );
-            assert_eq!(recovered.pid, pid);
+            assert_eq!(recovered.pid, Some(pid));
+            assert!(process::pid_alive(launched_pid));
             manager.start("mysql")?;
             assert!(status(&mut manager).ready);
             assert_eq!(
                 status(&mut manager).pid,
-                pid,
+                Some(pid),
                 "Retry must provision the recovered process"
+            );
+            assert_eq!(
+                server_pid(&manager.layout)?,
+                pid,
+                "Recovery must preserve the original server"
             );
 
             // Model an old first run interrupted before root received its password.

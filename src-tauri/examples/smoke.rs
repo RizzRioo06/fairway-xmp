@@ -305,6 +305,9 @@ fn main() -> Result<(), String> {
             // Older runtimes (such as the alpha 1 upgrade fixture) have no Mailpit; the rest must still work.
             let mail_available = manager.mail_available();
             let before_leave = manager.snapshot();
+            // Windows launches a MySQL monitor, then recovers its server child.
+            let mysql_server_pid = mysql_recovery::server_pid(&manager.layout)?;
+            assert!(process::pid_alive(mysql_server_pid));
             manager.leave_services_running()?;
             manager = Manager::new(manager.layout.clone())?;
             let recovered = manager.snapshot();
@@ -320,11 +323,19 @@ fn main() -> Result<(), String> {
                         .find(|current| current.id == service.id)
                         .unwrap()
                         .pid,
-                    service.pid,
+                    if service.id == "mysql" {
+                        Some(mysql_server_pid)
+                    } else {
+                        service.pid
+                    },
                     "Leave-running recovery replaced {}",
                     service.id
                 );
             }
+            assert_eq!(
+                mysql_recovery::server_pid(&manager.layout)?,
+                mysql_server_pid
+            );
             assert!(manager
                 .snapshot()
                 .services
