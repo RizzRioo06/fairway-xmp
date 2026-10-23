@@ -2,9 +2,9 @@
 
 A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. Run your web server and database from one control panel, write code in your preferred editor, and manage your data with the built-in database browser or phpMyAdmin.
 
-![Fairway XMP RC 3 on macOS showing the Environment page with services stopped](docs/images/control-panel.png)
+![Fairway XMP on macOS showing the Environment page with services stopped](docs/images/control-panel.png)
 
-*Fairway XMP RC 3 on macOS.*
+*Fairway XMP on macOS.*
 
 ## Downloads
 
@@ -16,7 +16,7 @@ Current release: **[v0.1.0-rc.3](https://github.com/eimg/fairway-xmp/releases/ta
 | Mac | macOS 15 or later, Apple Silicon (M-series) | [Mac installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.3/fairway-xmp-0.1.0-rc.3-macos-arm64.pkg) |
 | Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.3/fairway-xmp-0.1.0-rc.3-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.3/fairway-xmp-0.1.0-rc.3-linux-x86_64.tar.gz) |
 
-RC 3 installs report `0.1.0-rc.3`. This is a prerelease; see the [release notes](releases/0.1.0-rc.3-notes.md) for changes and known limitations. Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
+See the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.3) for these downloads and [current limitations](docs/maintenance.md#current-limitations). Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
 
 ## Linux terminal edition
 
@@ -54,6 +54,12 @@ Re-running the installer backs up an existing student database and stops service
 - **Mailpit 1.31.6** for catching the emails your apps send.
 
 The control panel provides service controls, port settings, logs, and database backups.
+
+## PostgreSQL client support
+
+Builds prepared from this checkout include `pdo_pgsql` and `pgsql` in PHP 8.2–8.5 on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the Data browser still supports MySQL and SQLite only. It does not back up or upgrade external PostgreSQL databases. For downloaded builds, verify driver availability using the commands in the guide below.
+
+See [PostgreSQL connection examples and requirements](docs/postgres-client-support.md).
 
 ## Your first PHP project
 
@@ -93,15 +99,15 @@ composer --version
 
 Manage this integration under **Settings → Command-line tools**. You can also use **Open terminal** in the control panel.
 
-Beta 2 adds an embedded **Terminal** page on macOS and Windows. Press **Ctrl+backtick** to open or focus it. PHP and Composer are ready even when persistent command-line integration is disabled. Use **+** beside the attached tabs and choose a project or registered site folder to open a second terminal while a development server keeps running. The menu shows the actual path to `fairway/www` in your home folder. Both tabs stay open while switching pages or hiding the window; quitting Fairway ends them. Type `exit` to finish: the first terminal opens fresh in its starting folder, while the extra terminal closes its tab. The extra tab also has a close button. Find, text size, clipboard tools, starting-folder details and Restart terminal are in the options or right-click menu. On macOS, the embedded prompt shows `➜` and the current folder name. The terminal height adjusts automatically with the window. Extra space below the panel lets you scroll the terminal higher in the window. The visible **External terminal** button in the header opens a separate system terminal at the active shell’s current path. It uses your normal shell configuration, prompt, history and environment without startup scripts or tool-path injection. Fairway CLI tools are available there according to **Settings → Command-line tools**. The external terminal stays open independently of Fairway.
+An embedded **Terminal** page is available on macOS and Windows. Press **Ctrl+backtick** to open or focus it. PHP and Composer are ready even when persistent command-line integration is disabled. Use **+** beside the attached tabs and choose a project or registered site folder to open a second terminal while a development server keeps running. The menu shows the actual path to `fairway/www` in your home folder. Both tabs stay open while switching pages or hiding the window; quitting Fairway ends them. Type `exit` to finish: the first terminal opens fresh in its starting folder, while the extra terminal closes its tab. The extra tab also has a close button. Find, text size, clipboard tools, starting-folder details and Restart terminal are in the options or right-click menu. On macOS, the embedded prompt shows `➜` and the current folder name. The terminal height adjusts automatically with the window. Extra space below the panel lets you scroll the terminal higher in the window. The visible **External terminal** button in the header opens a separate system terminal at the active shell’s current path. It uses your normal shell configuration, prompt, history and environment without startup scripts or tool-path injection. Fairway CLI tools are available there according to **Settings → Command-line tools**. The external terminal stays open independently of Fairway.
 
-On macOS, Fairway remembers roughly 1,000 commands privately on your device, separately from your usual shell history. Start a command with a space to omit it, or turn off **Remember commands** in terminal options before creating or restarting a shell. Windows keeps its normal Command Prompt history within each session. macOS and Windows also add a **Data browser** beside phpMyAdmin, with `fairway db` commands for SQL import/export. Both features ship in beta 2.
+On macOS, Fairway remembers roughly 1,000 commands privately on your device, separately from your usual shell history. Start a command with a space to omit it, or turn off **Remember commands** in terminal options before creating or restarting a shell. Windows keeps its normal Command Prompt history within each session. macOS and Windows also add a **Data browser** beside phpMyAdmin, with `fairway db` commands for SQL import/export.
 
 Choose **Browse Data → Open SQLite file…** to browse and edit a project's SQLite file directly, without a VS Code extension or running services. SQLite appears in the Data browser, with recent files and backups, rather than as another service. See [Data browser](docs/data-browser.md) for supported operations and limits.
 
 The **Structure** tab supports ordinary/unique index management and foreign-key inspection for MySQL and SQLite, including composite indexes and incoming relationships. Filtering and advanced schema changes remain available through SQL.
 
-Fairway includes PHP 8.2 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.2` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing-php-versions.md). PHP 8.5 is the default. A saved PHP 8.0 or 8.1 selection is left in place and blocks startup until you choose PHP 8.2 or later.
+Fairway includes PHP 8.2 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.2` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing.md#isolated-development-profiles). PHP 8.5 is the default. A saved PHP 8.0 or 8.1 selection is left in place and blocks startup until you choose PHP 8.2 or later.
 
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.
 
@@ -152,9 +158,9 @@ If a port is already in use, Fairway XMP shows the conflict. Stop all services, 
 
 ## Updates and removal
 
-From beta 3 onward, macOS and Windows users can choose **Updates → Check for updates → Install update**. Fairway verifies the signed download before backing up databases, stopping services, and installing the update.
+macOS and Windows users can choose **Updates → Check for updates → Install update**. Fairway verifies the signed download before backing up databases, stopping services, and installing the update.
 
-On macOS and Windows, **Updates → Check for updates** offers RC 3 to installed beta and earlier RC copies. Stop services and quit Fairway before it installs. Projects, databases, settings, and saved sites are kept. Beta 2 and earlier still need one manual installation before later in-app updates apply.
+Projects, databases, settings and saved sites are kept during updates. For a manual installation, back up databases, stop services and quit Fairway first. If an older installation has no Updates page, install the current download once to enable subsequent in-app updates.
 
 Linux updates remain manual: download and run the newer `.run` installer over the existing installation, using the same `--prefix` if you chose a custom directory. It backs up databases and stops services before switching versions; projects and data are preserved.
 
@@ -167,6 +173,8 @@ To uninstall:
 The uninstaller removes the app and its command-line integration. Your projects and database data are kept unless you choose to delete them.
 
 ## Help and license
+
+See the [documentation index](docs/README.md) for development, testing, releases and maintenance.
 
 For problems or suggestions, [open an issue](https://github.com/eimg/fairway-xmp/issues). Include your operating system, what you tried, and any error shown in Fairway XMP.
 

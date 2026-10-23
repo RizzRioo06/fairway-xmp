@@ -1,5 +1,15 @@
 # Changelog
 
+Past entries record released changes; they are not current development or release restrictions. See [Build and release](docs/build-and-release.md) for the current process.
+
+## Unreleased
+
+- Consolidate current development, testing, release and maintenance guidance. Remove completed prerelease investigations, device acceptance tooling and one-off release workflows; retain installed-client update channels and automated upgrade fixtures.
+
+- Successful automated candidates are ready for owner-authorized publication. Remove mandatory human device acceptance from publishing; device checks are optional guidance rather than release tooling. Publication still checks exact candidate identity, artifacts and updater signatures, and feed promotion remains explicit.
+
+- Enable PostgreSQL client support (`pdo_pgsql` and `pgsql`) in every bundled PHP version on Windows, macOS and Linux. Applications can connect to a PostgreSQL server supplied by the user. This pass includes client support; PostgreSQL server packaging, service controls and Data browser integration remain future work. Runtime verification requires both extensions; candidate builds exercise CLI and Nginx/PHP connections against disposable PostgreSQL servers.
+
 ## 0.1.0-rc.3 — 2026-10-22
 
 - View row is a dedicated reader with full wrapped text, field metadata, distinct NULL/empty values, per-field copy and exact JSON copying.
@@ -18,7 +28,7 @@
 
 - Update bundled PHP to 8.2.35, 8.3.36, 8.4.27 and 8.5.12, fixing CVE-2026-109618 and CVE-2026-109619 across Windows, macOS and Linux. PHP 8.5 remains the default.
 
-Published from [candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813), source `809547ab1b71143faedc39ca6c0492aa46be3a13`, using the exact accepted artifacts without rebuilding. The preview update feed offers RC 3 to installed macOS and Windows beta and RC clients; Linux updates remain manual. The owner confirmed pre-publication device checks. Actual in-app update/restart checks remain pending. See the [PHP update record](docs/rc3-php-security-update.md), [preparation](docs/rc-preparation.md) and [source review](docs/rc3-readiness-review.md).
+Published from [candidate run 42](https://github.com/eimg/fairway-xmp/actions/runs/39710252813), source `809547ab1b71143faedc39ca6c0492aa46be3a13`, using the exact accepted artifacts without rebuilding. The preview update feed offers RC 3 to installed macOS and Windows beta and RC clients; Linux updates remain manual. The owner confirmed pre-publication device checks. Actual in-app update/restart checks remain pending.
 
 ## 0.1.0-rc.2 — 2026-10-20
 
@@ -54,7 +64,7 @@ Installed macOS and Windows clients receive this release through the preview upd
 - Explicit Windows MySQL backup/export errors for unsupported non-ASCII identifiers; updates stop when their database backup cannot complete. Nginx supports Unicode and short-alias Windows data paths.
 - RC/stable-aware release publication, exact-installer human acceptance gates, and separate stable/preview update endpoints.
 
-Feature scope locked on 2026-10-18. Per-site PHP is deferred; all sites use the selected global PHP version. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations. See [RC preparation](docs/rc-preparation.md).
+Feature scope locked on 2026-10-18. Per-site PHP is deferred; all sites use the selected global PHP version. Windows PHP 8.0/8.1 dependency provenance remains unverified and the Windows installer remains without Authenticode, accepted as disclosed RC limitations.
 
 ## 0.1.0-beta.3 — 2026-10-17
 
@@ -63,7 +73,7 @@ Feature scope locked on 2026-10-18. Per-site PHP is deferred; all sites use the 
 - A fixed beta feed promoted after verified versioned assets are published; native updater rejection/reinstall drills and exact artifact hashes gate candidate recording.
 - Saved Sites with optional local domains and HTTPS, clearer readiness/recovery, folder and terminal actions, and project workflow improvements.
 
-Beta 2 and earlier require one manual installation of beta 3. Windows Authenticode is deferred; Linux keeps manual updates. See [signed beta releases](docs/signed-beta-releases.md) for release preparation and remaining human acceptance.
+Beta 2 and earlier require one manual installation of beta 3. Windows Authenticode is deferred; Linux keeps manual updates. Current release guidance is in [Build and release](docs/build-and-release.md).
 
 ## 0.1.0-beta.2 — 2026-10-16
 

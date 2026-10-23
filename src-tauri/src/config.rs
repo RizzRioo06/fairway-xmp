@@ -730,7 +730,7 @@ pub(crate) fn unavailable_php_message(version: &str) -> String {
 }
 
 fn windows_php_extensions(php_root: &Path) -> String {
-    let mut extensions = String::from("extension=curl\nextension=fileinfo\nextension=gd\nextension=intl\nextension=mbstring\nextension=mysqli\nextension=openssl\nextension=pdo_mysql\nextension=pdo_sqlite\nextension=sodium\nextension=sqlite3\n");
+    let mut extensions = String::from("extension=curl\nextension=fileinfo\nextension=gd\nextension=intl\nextension=mbstring\nextension=mysqli\nextension=openssl\nextension=pdo_mysql\nextension=pdo_pgsql\nextension=pdo_sqlite\nextension=pgsql\nextension=sodium\nextension=sqlite3\n");
     // Load ZIP only when this PHP build ships php_zip.dll.
     if php_root.join("ext/php_zip.dll").is_file() {
         extensions.push_str("extension=zip\n");
@@ -1007,6 +1007,8 @@ mod tests {
             rand::random::<u64>()
         ));
         fs::create_dir_all(root.join("ext")).unwrap();
+        assert!(windows_php_extensions(&root).contains("extension=pdo_pgsql\n"));
+        assert!(windows_php_extensions(&root).contains("extension=pgsql\n"));
         assert!(!windows_php_extensions(&root).contains("extension=zip"));
         fs::write(root.join("ext/php_zip.dll"), b"").unwrap();
         assert!(windows_php_extensions(&root).contains("extension=zip\n"));

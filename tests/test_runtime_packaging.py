@@ -15,6 +15,22 @@ SPEC.loader.exec_module(runtime)
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_verification_rejects_missing_postgresql_driver_on_each_php_version(self):
+        for folder in ('php', 'php-8.2', 'php-8.3', 'php-8.4'):
+            for extension in ('pdo_pgsql', 'pgsql'):
+                def output(command, **kwargs):
+                    php_folder = Path(command[0]).parts[-3]
+                    version = runtime.MANIFEST['php'] if php_folder == 'php' else runtime.MANIFEST['phpVersions'][php_folder[4:]]
+                    missing = extension if php_folder == folder else None
+                    return json.dumps({'version': version, 'extensions': [name for name in runtime.MANIFEST['extensions'] if name != missing]})
+                with self.subTest(folder=folder, extension=extension), tempfile.TemporaryDirectory() as temporary, \
+                        patch.object(runtime.platform, 'system', return_value='Darwin'), \
+                        patch.object(runtime.subprocess, 'check_output', side_effect=output):
+                    target = Path(temporary)
+                    (target / 'manifest.json').write_text(json.dumps(runtime.MANIFEST))
+                    with self.assertRaisesRegex(RuntimeError, extension):
+                        runtime.verify(target)
+
     def test_runtime_verification_is_offline_and_still_rejects_wrong_mailpit_version(self):
         manifest = {'php': '8.5.11', 'extensions': [], 'composer': '2.10.3',
                     'nginx': '1.30.5', 'mysql': '9.7.2', 'mailpit': '1.31.6'}

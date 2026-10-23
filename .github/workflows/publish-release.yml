@@ -19,12 +19,8 @@ on:
         description: Reviewed release-notes path in this checkout
         required: true
         type: string
-      acceptance_file:
-        description: Pre-publication acceptance JSON path (RC/stable required; human update check follows publication)
-        required: false
-        type: string
       promote_updates:
-        description: Offer this release in-app; then record the human update/restart check
+        description: Offer this release in-app after publication
         required: true
         default: false
         type: boolean
@@ -85,7 +81,6 @@ jobs:
           FAIRWAY_TAG: ${{ inputs.tag }}
           FAIRWAY_SHA: ${{ inputs.candidate_commit }}
           FAIRWAY_NOTES: ${{ inputs.notes_file }}
-          FAIRWAY_ACCEPTANCE: ${{ inputs.acceptance_file }}
         run: python scripts/publish_release.py
       - name: Promote update feed after publishing versioned assets
         if: inputs.promote_updates

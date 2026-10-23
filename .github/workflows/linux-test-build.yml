@@ -37,6 +37,10 @@ jobs:
       - name: Packaging tests
         run: python -m unittest discover -s tests -v
       - uses: ./.github/actions/prepare-linux-runtime
+      - name: Verify PHP clients with an external PostgreSQL test server
+        run: |
+          sudo apt-get install -y postgresql
+          python scripts/check_postgres_clients.py
       - name: Rust format, tests and lint
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

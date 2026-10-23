@@ -10,7 +10,7 @@ runs:
         sudo apt-get update
         # Refresh liblzma with its development package so bundled libraries and
         # their exact source versions are both available in the enabled archive.
-        sudo apt-get install -y build-essential autoconf bison re2c pkg-config patchelf libxml2-dev libssl-dev libcurl4-openssl-dev libsqlite3-dev libonig-dev libzip-dev libsodium-dev libicu-dev libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libpcre2-dev liblzma-dev zlib1g-dev libaio1 libnuma1 libncurses5
+        sudo apt-get install -y build-essential autoconf bison re2c pkg-config patchelf libxml2-dev libssl-dev libcurl4-openssl-dev libsqlite3-dev libpq-dev libonig-dev libzip-dev libsodium-dev libicu-dev libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libpcre2-dev liblzma-dev zlib1g-dev libaio1 libnuma1 libncurses5
     - uses: actions/cache/restore@v5
       id: runtime
       with:

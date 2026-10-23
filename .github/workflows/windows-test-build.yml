@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       signed_release:
-        description: Enable signed beta updates (without Authenticode)
+        description: Enable signed updates (without Authenticode)
         type: boolean
         default: false
       record_runtime_checksums:
@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       signed_release:
-        description: Enable signed beta updates (without Authenticode)
+        description: Enable signed updates (without Authenticode)
         type: boolean
         default: false
       record_runtime_checksums:
@@ -92,6 +92,8 @@ jobs:
           } else {
             python scripts/prepare_runtime.py
           }
+      - name: Verify PHP clients with the runner's external PostgreSQL test server
+        run: python scripts/check_postgres_clients.py
       - name: Build native terminal test bridge
         run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
       - run: npx playwright install --only-shell chromium
@@ -267,7 +269,7 @@ jobs:
             checks = @('frontend build', 'packaging tests', 'Rust tests and clippy', 'fresh runtime smoke', 'MySQL 8.4 to 9.7 upgrade, backup and restart')
             purpose = 'Release candidate installer; reuse this exact file after testing'
           } | ConvertTo-Json -Depth 8 | Set-Content "$output/build-info.json" -Encoding utf8
-      - name: Verify the real installed alpha upgrade and reinstall lifecycle
+      - name: Verify installed upgrade and reinstall lifecycle
         if: inputs.record_runtime_checksums != true
         run: |
           $installer = (Get-ChildItem 'artifacts/windows-installer/*-setup.exe').FullName

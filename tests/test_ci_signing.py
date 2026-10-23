@@ -223,7 +223,7 @@ class WorkflowSigningBoundaryTests(unittest.TestCase):
         self.assertLess(source.index('verify_signing_source.py --source'), source.index('ref: ${{ steps.source.outputs.commit }}'))
 
     def test_publication_builds_the_verifier_with_read_only_permissions(self):
-        jobs = self.jobs('publish-beta-release.yml')
+        jobs = self.jobs('publish-release.yml')
         self.assertNotIn('contents: write', jobs['prepare-verifier'])
         self.assertIn('cargo build', jobs['prepare-verifier'])
         self.assertIn('contents: write', jobs['publish'])

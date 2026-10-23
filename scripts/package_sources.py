@@ -343,7 +343,7 @@ macOS libraries are dynamically linked under the app's `Contents/Resources/runti
 You may replace a library with a compatible build. Apply the same relative load
 paths and ad-hoc signing described by the relocation script before running it.
 ''')
-    assets = ROOT / 'artifacts' / f'alpha-{version}'
+    assets = ROOT / 'artifacts' / f'sources-{version}'
     assets.mkdir(parents=True, exist_ok=True)
     output = assets / f'fairway-xmp-{version}-bundled-tool-sources.tar.gz'
     with tarfile.open(output, 'w:gz', compresslevel=1) as bundle:

@@ -1,0 +1,72 @@
+# Testing
+
+Choose checks for the behavior being changed. Device checks help investigate platform behavior; they are not release approval requirements. Record observed results without carrying old release checklists into new work.
+
+## Automated checks
+
+```sh
+npm run build
+npm run test:unit
+python3 -m unittest discover -s tests -v
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+```
+
+Use `python` on Windows. Desktop/all-feature tests additionally need the platform's Tauri prerequisites. Network-listener, process-ownership and PostgreSQL checks need normal local socket/process access; sandbox permission failures are not evidence of an application defect.
+
+After staging the runtime, use a fresh isolated directory:
+
+```sh
+python3 scripts/prepare_runtime.py --verify-only
+cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- /path/to/fresh-smoke
+python3 scripts/check_postgres_clients.py
+```
+
+The service smoke checks real PHP/Composer, Nginx, MySQL, mail, backup restoration, process recovery and every bundled PHP version. The PostgreSQL check starts its own disposable cluster using external server binaries and checks both PHP APIs through CLI and web requests. Set `PGBIN` or pass `--postgres-bin` when needed. It does not stop or modify an existing PostgreSQL service. See [PostgreSQL clients](postgres-client-support.md).
+
+Database engine upgrade fixtures and installed-lifecycle baselines remain automated compatibility tests. Their old version names identify test inputs, not current development restrictions. Installer lifecycle scripts modify profiles only in disposable GitHub-hosted accounts; do not run them against a personal account.
+
+## Browser and native bridge
+
+`npm run dev` is a disabled browser preview. `npm run dev:ui` enables an explicitly labeled in-memory backend for service/error/update scenarios; no native files, services or settings are changed.
+
+```sh
+npx playwright install chromium webkit
+npm run test:ui
+npm run test:ui:report
+```
+
+The browser suite covers Chromium/WebKit at normal and minimum desktop sizes and attaches screenshots, traces and failure recordings. Assertions establish behavior; screenshots remain available for optional visual review. Browser engines do not reproduce native tray menus, dialogs or Windows ConPTY.
+
+For real packaged tools and database operations, build `terminal_bridge` and use `FAIRWAY_TEST_RUNTIME` with the `*-native.spec.ts` suites. Candidate workflows use `FAIRWAY_NATIVE_ONLY=1` with the built production frontend. The bridge uses isolated data, communicates over stdio, and opens no database HTTP endpoint.
+
+## Isolated development profiles
+
+For a debug desktop build on macOS:
+
+```sh
+export FAIRWAY_DEV_HOME="$PWD/.runtime-work/test-home"
+export FAIRWAY_DEV_DATA="$PWD/.runtime-work/test-data"
+export ZDOTDIR="$FAIRWAY_DEV_HOME"
+mkdir -p "$FAIRWAY_DEV_HOME" "$FAIRWAY_DEV_DATA"
+npm run tauri -- dev
+```
+
+On Windows PowerShell, set `$env:FAIRWAY_DEV_HOME` and `$env:FAIRWAY_DEV_DATA` to fresh local directories before launching. These overrides are debug-only. Standalone installed/signature test apps can use the normal profile: quit the installed app first and use a disposable OS account when changing hosts or trust.
+
+To verify PHP switching, stop services, select each bundled version in Settings, and compare a served `<?php echo PHP_VERSION;` page with the app-owned PHP/Composer launcher. Reopen the app and verify the selection persists. Linux uses `fairway stop all`, `fairway php-version VERSION`, `fairway php --version` and `fairway start all`. Read expected patch versions from `runtime-manifest.json`.
+
+## Optional platform checks
+
+Use these when the changed behavior warrants them, without treating unperformed cases as release blockers:
+
+- Install/update/uninstall/reinstall while preserving projects, rows, sites, ports, selected PHP, backups and CLI integration. Verify unrelated services and shell settings remain untouched.
+- Exercise tray/menu-bar controls, window hiding/reopening, Quit during work, and both choices after failed shutdown. Use real PTYs/ConPTY for terminal interruption, resize, clipboard and cleanup behavior.
+- Check Data browser native pickers, Unicode paths, large values, clipboard failures and MySQL/SQLite source switching. Detailed database scenarios are in [Data browser](data-browser.md).
+- Verify registered `.test` addresses through the OS resolver and a normal browser, not only `curl --resolve`, `--cacert` or `-k`. Check direct files, front controllers, custom ports, removal and preserved unrelated hosts entries. Malformed saved site lists should surface errors without replacing them.
+- On macOS, test fresh background-helper approval in System Settings, explicit recheck/continuation, cancellation, password fallback, focus return and helper reuse. Hosts authorization and user-keychain HTTPS trust are separate operations; a biometric check alone does not grant hosts-write permission. Prompt count and available authentication methods depend on macOS/account state.
+- For HTTPS, enable a first site, reuse trust for another, disable the last site, cancel trust removal and retry. Test root replacement cancellation/recovery and actual DNS/IP/subordinate-chain rejection in the platform verifier. See [Security boundaries](security-boundaries.md).
+- Check a subsequent-version signed update and restart when investigating updater behavior. The automated same-version reinstall drill has a narrower scope; neither result implies the other was performed.
+
+Before moving/deleting a standalone Mac helper test app, quit it and run its own executable with `--remove-native-hosts-helper`. This unregisters that helper without deleting projects or rewriting sites. Avoid running multiple app copies against the same data/helper registration while diagnosing approval state.

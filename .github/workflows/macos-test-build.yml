@@ -12,7 +12,7 @@ on:
         type: string
         default: ''
       signed_release:
-        description: Sign, notarize, and enable beta updates
+        description: Sign, notarize, and enable signed updates
         type: boolean
         default: false
   workflow_call:
@@ -99,6 +99,12 @@ jobs:
         with:
           path: .runtime-cache
           key: ${{ steps.downloads.outputs.key }}
+      - name: Verify PHP clients with an external PostgreSQL test server
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          brew install postgresql@17
+          python3 scripts/check_postgres_clients.py --postgres-bin "$(brew --prefix postgresql@17)/bin"
       - name: Build native terminal test bridge
         run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
       - run: npx playwright install --only-shell chromium
@@ -159,7 +165,7 @@ jobs:
           if [ '${{ inputs.signed_release }}' = true ]; then
             extra=(src-tauri/target/release/examples/updater_probe)
           fi
-          tar -czf artifacts/macos-build-inputs.tar.gz 'src-tauri/target/release/bundle/macos/Fairway XMP.app' src-tauri/target/release/examples/installer_probe .runtime-work/baseline-macos.pkg artifacts/alpha-*/fairway-xmp-*-bundled-tool-sources.tar.gz "${extra[@]}"
+          tar -czf artifacts/macos-build-inputs.tar.gz 'src-tauri/target/release/bundle/macos/Fairway XMP.app' src-tauri/target/release/examples/installer_probe .runtime-work/baseline-macos.pkg artifacts/sources-*/fairway-xmp-*-bundled-tool-sources.tar.gz "${extra[@]}"
       - uses: actions/upload-artifact@v6
         with:
           name: macos-build-inputs
@@ -269,7 +275,7 @@ jobs:
           python tests/installer_lifecycle.py "${extra[@]}" --installer "artifacts/macos-installer/${{ steps.installer.outputs.name }}" --baseline .runtime-work/baseline-macos.pkg --probe src-tauri/target/release/examples/installer_probe --output .runtime-work/macos-lifecycle --allow-user-profile-changes
       - name: Collect exact application and bundled-tool sources
         run: |
-          cp "artifacts/alpha-${{ needs.build.outputs.version }}/fairway-xmp-${{ needs.build.outputs.version }}-bundled-tool-sources.tar.gz" artifacts/macos-installer/
+          cp "artifacts/sources-${{ needs.build.outputs.version }}/fairway-xmp-${{ needs.build.outputs.version }}-bundled-tool-sources.tar.gz" artifacts/macos-installer/
           git archive --format=tar.gz --output="artifacts/macos-installer/fairway-xmp-${{ needs.build.outputs.version }}-build-source.tar.gz" HEAD
           cp LICENSE THIRD_PARTY_NOTICES.md runtime-manifest.json runtime-downloads.lock.json artifacts/macos-installer/
           python scripts/release_candidate.py record --target macos-arm64 --signing ${{ steps.installer.outputs.signing }} --directory artifacts/macos-installer --artifact fairway-xmp-macos-arm64-${{ needs.build.outputs.version }} --lifecycle .runtime-work/macos-lifecycle/lifecycle.json --output artifacts/candidate-metadata/candidate-macos-arm64.json
@@ -461,7 +467,7 @@ jobs:
           with archive.open('rb') as source:
               digest = hashlib.file_digest(source, 'sha256').hexdigest()
           (output / 'SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n')
-          (output / 'TESTING.md').write_bytes(Path('docs/permission-test-builds.md').read_bytes())
+          (output / 'TESTING.md').write_bytes(Path('docs/testing.md').read_bytes())
           with open(os.environ['GITHUB_OUTPUT'], 'a') as env:
               env.write(f'commit={commit}\n')
           PY

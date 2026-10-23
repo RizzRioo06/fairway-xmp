@@ -28,7 +28,7 @@ def main():
     shutil.copytree(ROOT / 'src-tauri/resources/runtime', stage / 'runtime')
     for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'runtime-manifest.json', 'runtime-downloads.lock.json']:
         shutil.copy2(ROOT / name, stage / name)
-    shutil.copy2(ROOT / 'docs/permission-test-builds.md', stage / 'TESTING.md')
+    shutil.copy2(ROOT / 'docs/testing.md', stage / 'TESTING.md')
     identity = json.loads(subprocess.check_output(
         [str(stage / 'fairway.exe'), '--build-info'], creationflags=subprocess.CREATE_NO_WINDOW))
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()

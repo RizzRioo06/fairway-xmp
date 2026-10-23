@@ -1,6 +1,6 @@
 # Desktop data browser
 
-**Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The MySQL browser shipped in beta 2. SQLite file browsing, index management and foreign-key inspection ship in 0.1.0-rc.2. The existing Linux terminal edition does not include the desktop data browser.
+**Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The existing Linux terminal edition does not include the desktop data browser.
 
 ## Reading a row
 
@@ -134,7 +134,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --example row_edit_smoke \
 
 This example checks latin1/BIT/FLOAT/DOUBLE representations, character-counted identifiers, complete large-value reads, multi-megabyte changed values and temporary-file cleanup, stale tail/binary/NULL/schema changes, cancellation cleanup, composite keys, views/keyless reads, no-op saves and competing row locks. It repeats numeric/no-op/chunk checks across all bundled PHP versions. `row-values.spec.ts` checks preview safety, full copies, paging, failure/cancellation and edit preservation through the production React components. The expanded `data-browser-native.spec.ts` also crosses the production UI → Rust → PHP → MySQL path for multi-megabyte edits and stale-write rejection. Platform-native WebView/clipboard and Windows staging acceptance remain separate from browser-engine tests on macOS.
 
-Both desktop candidate workflows run this real-database example and browser input through the native stdio test bridge. The latter starts isolated bundled MySQL and checks database/table creation, Unicode row insertion/editing, and exact SQL results. The bridge is test-only and opens no HTTP database endpoint. Native WebView and installer acceptance still require the checks in [beta acceptance](beta-acceptance.md).
+Both desktop candidate workflows run this real-database example and browser input through the native stdio test bridge. The latter starts isolated bundled MySQL and checks database/table creation, Unicode row insertion/editing, and exact SQL results. The bridge is test-only and opens no HTTP database endpoint. Optional [platform checks](testing.md#optional-platform-checks) cover native WebViews, dialogs and installer behavior.
 
 ## Windows filesystem paths
 

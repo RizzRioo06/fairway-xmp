@@ -10,52 +10,22 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import release_candidate
 
 
 spec = importlib.util.spec_from_file_location(
-    'publish_unsigned_release', Path(__file__).resolve().parents[1] / 'scripts/publish_unsigned_release.py',
+    'publish_release', Path(__file__).resolve().parents[1] / 'scripts/publish_release.py',
 )
 publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
 
 
 class ReleaseTagTests(unittest.TestCase):
-    def test_rc_and_stable_require_completed_evidence_for_exact_installer_hashes(self):
-        for version in ['0.1.0-rc.1', '0.1.0']:
-            manifest = {'version': version, 'commit': 'a' * 40, 'candidates': {target: {
-                'installer': 'installer', 'files': {'installer': {'sha256': 'b' * 64}}}
-                for target in release_candidate.TARGETS}}
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
-                with self.assertRaisesRegex(RuntimeError, 'human acceptance'):
-                    publisher.human_acceptance(manifest, None)
-                evidence = {'version': version, 'commit': manifest['commit'], 'platforms': {target: {
-                    'installerSha256': 'b' * 64, 'tester': 'Test fixture', 'os': 'Test OS', 'testedAt': '2026-10-17',
-                    'checks': {check: True for check in release_candidate.MANUAL_CHECKS[target]}}
-                    for target in release_candidate.TARGETS}}
-                path = Path(temporary) / 'acceptance.json'
-                path.write_text(json.dumps(evidence))
-                self.assertEqual(publisher.human_acceptance(manifest, path), evidence)
-                for target in ('macos-arm64', 'windows-x64'):
-                    evidence['platforms'][target]['checks']['in-app-update-and-restart'] = False
-                path.write_text(json.dumps(evidence))
-                self.assertEqual(publisher.human_acceptance(manifest, path), evidence)
-                with self.assertRaises(ValueError): release_candidate.acceptance(manifest, evidence)
-                evidence['platforms']['windows-x64']['checks']['mail-catcher-and-inbox'] = False
-                path.write_text(json.dumps(evidence))
-                with self.assertRaisesRegex(ValueError, 'Unfinished human checks'):
-                    publisher.human_acceptance(manifest, path)
-                evidence['platforms']['windows-x64']['installerSha256'] = 'c' * 64
-                path.write_text(json.dumps(evidence))
-                with self.assertRaisesRegex(ValueError, 'exact-installer'):
-                    publisher.human_acceptance(manifest, path)
-
-    def test_signed_publisher_uses_prerelease_flags_for_rc_and_latest_for_stable(self):
-        for version, prerelease, prebuilt in [('0.1.0-rc.1', True, False), ('0.1.0', False, False), ('0.1.0-rc.1', True, True), ('0.1.0', False, True)]:
+    def test_owner_dispatched_publication_needs_no_device_acceptance_and_keeps_release_checks(self):
+        for version, prerelease, prebuilt in [(version, prerelease, prebuilt) for version, prerelease in [('0.1.0-beta.3', True), ('0.1.0-rc.1', True), ('0.1.0', False)] for prebuilt in (False, True)]:
             with self.subTest(version=version, prebuilt=prebuilt), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary); fixture = root / 'fixture'; fixture.mkdir()
                 sha = 'a' * 40
-                manifest = {'version': version, 'commit': sha, 'signing': {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}, 'candidates': {}}
+                manifest = {'version': version, 'commit': sha, 'status': 'awaiting-human-acceptance', 'signing': {'macos-arm64': 'apple-notarized', 'windows-x64': 'updater-only', 'linux-x86_64': 'unsigned'}, 'candidates': {}}
                 for target, suffix in [('macos-arm64', 'macos-arm64.app.tar.gz'), ('windows-x64', 'windows-x64-setup.exe'), ('linux-x86_64', 'linux-x86_64.run')]:
                     directory = fixture / f'fairway-xmp-{target}-{version}'; directory.mkdir()
                     installer = f'fairway-xmp-{version}-{suffix}'
@@ -73,13 +43,6 @@ class ReleaseTagTests(unittest.TestCase):
                     (macos / name).write_text('{}')
                 metadata = fixture / f'candidate-acceptance-{sha}'; metadata.mkdir()
                 (metadata / 'candidate-manifest.json').write_text(json.dumps(manifest))
-                evidence = {'version': version, 'commit': sha, 'platforms': {target: {
-                    'installerSha256': data['files'][data['installer']]['sha256'], 'tester': 'Test fixture', 'os': 'Test OS', 'testedAt': '2026-10-17',
-                    'checks': {check: True for check in release_candidate.MANUAL_CHECKS[target]}}
-                    for target, data in manifest['candidates'].items()}}
-                for target in ('macos-arm64', 'windows-x64'):
-                    evidence['platforms'][target]['checks']['in-app-update-and-restart'] = False
-                accepted = root / 'acceptance.json'; accepted.write_text(json.dumps(evidence))
                 notes = root / 'notes.md'; notes.write_text('Reviewed release notes')
                 uploaded = {}; commands = []; build = {}; fail_signature = False
                 def run_json(*args):
@@ -94,10 +57,10 @@ class ReleaseTagTests(unittest.TestCase):
                     if args[:3] == ['gh', 'release', 'create']:
                         paths = [arg for arg in args if isinstance(arg, Path)]
                         build.update(json.loads(next(p for p in paths if p.name == 'BUILD-INFO.json').read_text()))
-                        self.assertTrue(any(p.name == 'acceptance.json' for p in paths))
+                        self.assertFalse(any(p.name == 'acceptance.json' for p in paths))
                         uploaded.update({'id': 42, 'tag_name': 'v' + version, 'draft': True, 'assets': [
                             {'name': p.name, 'digest': 'sha256:' + publisher.sha256(p), 'size': p.stat().st_size} for p in paths]})
-                with mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                with mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': ''}), \
                      mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
                      mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), mock.patch('builtins.print'):
                     publisher.main(signed=True)
@@ -108,14 +71,13 @@ class ReleaseTagTests(unittest.TestCase):
                 self.assertIn('prerelease=' + str(prerelease).lower(), patch)
                 self.assertIn('make_latest=' + str(not prerelease).lower(), patch)
                 self.assertEqual(build['prerelease'], prerelease)
-                self.assertTrue(build['prePublicationHumanAccepted'])
-                self.assertFalse(build['humanAccepted'])
-                self.assertEqual(build['humanAcceptance']['status'], 'awaiting-post-publication')
-                self.assertEqual(set(build['humanAcceptance']['pendingChecks']), {'macos-arm64', 'windows-x64'})
+                self.assertFalse(build['humanAcceptanceRequired'])
+                self.assertNotIn('humanAccepted', build)
+                self.assertEqual(build['publication']['method'], 'workflow-dispatch' if prebuilt else 'explicit-invocation')
                 self.assertEqual(len([args for args in commands if args[0] == ('cargo' if not prebuilt else str(root / 'verify_update'))]), 2)
                 if prebuilt:
                     self.assertFalse(any(args[0] == 'cargo' for args in commands))
-                # Deferring the human check must not bypass the automated drill or signature verifier.
+                # Owner-authorized publication still verifies the automated drill and signatures.
                 for failure in ('native-drill', 'signature'):
                     uploaded.clear(); commands.clear()
                     fail_signature = failure == 'signature'
@@ -124,7 +86,7 @@ class ReleaseTagTests(unittest.TestCase):
                     else:
                         manifest['candidates']['windows-x64']['lifecycle']['updater']['status'] = 'passed'
                     (metadata / 'candidate-manifest.json').write_text(json.dumps(manifest))
-                    with self.subTest(failure=failure), mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': str(accepted)}), \
+                    with self.subTest(failure=failure), mock.patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if prebuilt else 'false', 'FAIRWAY_UPDATE_VERIFIER': str(root / 'verify_update') if prebuilt else '', 'GH_REPO': 'eimg/fairway-xmp', 'FAIRWAY_RUN_ID': '123', 'FAIRWAY_TAG': 'v' + version, 'FAIRWAY_SHA': sha, 'FAIRWAY_NOTES': str(notes), 'FAIRWAY_ACCEPTANCE': ''}), \
                          mock.patch.object(publisher, 'run_json', side_effect=run_json), mock.patch.object(publisher, 'verify_tag'), \
                          mock.patch.object(publisher.subprocess, 'check_call', side_effect=execute), mock.patch.object(publisher.subprocess, 'check_output', return_value=b'{}'), \
                          self.assertRaises((ValueError, subprocess.CalledProcessError)):

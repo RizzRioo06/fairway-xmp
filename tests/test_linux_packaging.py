@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -6,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
@@ -15,6 +17,22 @@ SPEC.loader.exec_module(runtime)
 
 
 class LinuxCompatibilityTests(unittest.TestCase):
+    def test_reused_php_must_have_current_version_and_all_required_extensions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            prefix = Path(folder)
+            (prefix / 'sbin').mkdir()
+            (prefix / 'sbin/php-fpm').touch()
+            for version, missing, expected in [(runtime.MANIFEST['php'], None, True),
+                                                (runtime.MANIFEST['php'], 'pdo_pgsql', False),
+                                                (runtime.MANIFEST['php'], 'pgsql', False),
+                                                ('0.0.0', None, False)]:
+                output = json.dumps({'version': version, 'extensions': [name for name in runtime.MANIFEST['extensions'] if name != missing]})
+                with self.subTest(version=version, missing=missing), \
+                        patch.object(runtime.subprocess, 'check_output', return_value=output):
+                    self.assertEqual(runtime.reusable_php(prefix, runtime.MANIFEST['php']), expected)
+            with patch.object(runtime.subprocess, 'check_output', side_effect=OSError):
+                self.assertFalse(runtime.reusable_php(prefix, runtime.MANIFEST['php']))
+
     def test_newer_glibc_requirement_is_rejected(self):
         runtime.validate_glibc('Name: GLIBC_2.28 Name: GLIBC_2.35')
         with self.assertRaises(RuntimeError):

@@ -6,6 +6,7 @@ Fairway XMP bundles independently licensed software. The Fairway XMP application
 |---|---|
 | PHP | PHP License 3.01 and Zend Engine license; https://www.php.net/license/ |
 | MySQL Community Server | GPL v2 with Universal FOSS Exception; https://github.com/mysql/mysql-server |
+| PostgreSQL libpq client library | PostgreSQL License; https://www.postgresql.org/about/licence/ |
 | Nginx | BSD 2-Clause; https://nginx.org/LICENSE |
 | phpMyAdmin | GPL v2 or later; https://github.com/phpmyadmin/phpmyadmin |
 | Composer | MIT; https://github.com/composer/composer |
@@ -17,6 +18,8 @@ Fairway XMP bundles independently licensed software. The Fairway XMP application
 | portable-pty | MIT; https://github.com/wezterm/wezterm/tree/main/pty |
 
 Runtime staging retains upstream license, notice, and copying files under `runtime/licenses` and within component directories. Microsoft Visual C++ and WebView2 are separately licensed prerequisites and remain on uninstall if shared with other applications.
+
+PostgreSQL support consists of PHP's `pdo_pgsql` and `pgsql` extensions and their client-library dependencies. The PostgreSQL server and its service/administration tools are not included. PostgreSQL source archives in corresponding sources also contain server code because libpq is distributed from the same upstream source tree; server binaries are not shipped.
 
 Source code for bundled tools is available alongside the installers on the [Releases page](https://github.com/eimg/fairway-xmp/releases). The source archive includes version-matched sources, build recipes and patches, and component licenses. The application source is available in this repository. For build and redistribution instructions, see [Contributing](CONTRIBUTING.md).
 

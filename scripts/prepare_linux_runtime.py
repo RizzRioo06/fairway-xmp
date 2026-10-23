@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Linux x86_64 on Ubuntu 22.04 and relocate its native library closure."""
+"""Build the Linux runtime on Ubuntu 22.04 and relocate its native library closure."""
 from __future__ import annotations
 import hashlib
 import json
@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from prepare_runtime import ROOT, MANIFEST, copy, lock_download, safe_extract
 
-GLIBC_LIBS = {'libc.so.6', 'libm.so.6', 'libpthread.so.0', 'libdl.so.2', 'librt.so.1', 'libresolv.so.2', 'libutil.so.1', 'ld-linux-x86-64.so.2'}
+GLIBC_LIBS = {'libc.so.6', 'libm.so.6', 'libpthread.so.0', 'libdl.so.2', 'librt.so.1', 'libresolv.so.2', 'libutil.so.1', 'ld-linux-x86-64.so.2', 'ld-linux-aarch64.so.1'}
 
 
 def run(args, **kwargs):
@@ -93,13 +93,36 @@ def bundle_libraries(target):
     return sources
 
 
+def linux_arch():
+    machine = platform.machine()
+    if machine in ('x86_64', 'AMD64'): return 'x86_64'
+    if machine in ('aarch64', 'arm64'): return 'aarch64'
+    raise RuntimeError(f'Linux bundles currently support x86_64 and aarch64, not {machine}')
+
+
+def reusable_php(prefix, version):
+    """Do not reuse an older build that lacks newly required PHP extensions."""
+    if not (prefix / 'sbin/php-fpm').is_file():
+        return False
+    try:
+        output = subprocess.check_output(
+            [str(prefix / 'bin/php'), '-n', '-r',
+             'echo json_encode(["version"=>PHP_VERSION,"extensions"=>get_loaded_extensions()]);'],
+            env={**os.environ, 'PHP_INI_SCAN_DIR': '', 'MIBS': ''}, text=True,
+            stderr=subprocess.PIPE, timeout=15)
+        info = json.loads(output)
+        return info['version'] == version and set(MANIFEST['extensions']).issubset(
+            name.lower() for name in info['extensions'])
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return False
+
+
 def linux(target, lock, refresh):
-    if platform.machine() not in ('x86_64', 'AMD64'):
-        raise RuntimeError('Linux bundles currently support x86_64 only')
+    arch = linux_arch()
     version = os.confstr('CS_GNU_LIBC_VERSION')
     if version != 'glibc 2.35':
         raise RuntimeError(f'Build the Linux runtime on Ubuntu 22.04 / glibc 2.35, not {version}')
-    jobs = str(min(os.cpu_count() or 2, 4))
+    jobs = str(min(len(os.sched_getaffinity(0)), 4))
     work = ROOT / '.runtime-work/linux-build'
     work.mkdir(parents=True, exist_ok=True)
     source_output = ROOT / '.runtime-work/linux-sources'
@@ -117,22 +140,34 @@ def linux(target, lock, refresh):
         source, = [path for path in source.iterdir() if path.is_dir()]
         if name.startswith('php'):
             prefix = work / f'{name}-install'
-            run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-sqlite', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
-            run(['make', '-j' + jobs], cwd=source)
-            run(['make', 'install'], cwd=source)
+            if not reusable_php(prefix, version):
+                run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-pgsql', '--with-pdo-sqlite', '--with-pgsql', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
+                run(['make', '-j' + jobs], cwd=source)
+                run(['make', 'install'], cwd=source)
+            else:
+                print(f'Reusing {prefix / "bin/php"}', flush=True)
             copy(prefix / 'bin/php', target / name / 'bin/php')
             copy(prefix / 'sbin/php-fpm', target / name / 'bin/php-fpm')
             (target / name / 'ext').mkdir(parents=True, exist_ok=True)
             for notice in ('LICENSE', 'NEWS'): copy(source / notice, target / 'licenses' / name / notice)
         else:
             prefix = target / 'nginx'
-            run(['./configure', '--prefix=/', '--sbin-path=bin/nginx', '--conf-path=conf/nginx.conf', '--pid-path=nginx.pid', '--error-log-path=logs/nginx.log', '--http-log-path=logs/access.log', '--with-http_ssl_module', '--with-http_gzip_static_module', '--with-http_realip_module', '--with-http_stub_status_module'], cwd=source)
-            run(['make', '-j' + jobs], cwd=source)
-            run(['make', 'install', f'DESTDIR={prefix}'], cwd=source)
+            if not (prefix / 'bin/nginx').is_file():
+                run(['./configure', '--prefix=/', '--sbin-path=bin/nginx', '--conf-path=conf/nginx.conf', '--pid-path=nginx.pid', '--error-log-path=logs/nginx.log', '--http-log-path=logs/access.log', '--with-http_ssl_module', '--with-http_gzip_static_module', '--with-http_realip_module', '--with-http_stub_status_module'], cwd=source)
+                run(['make', '-j' + jobs], cwd=source)
+                run(['make', 'install', f'DESTDIR={prefix}'], cwd=source)
+            else:
+                print(f'Reusing {prefix / "bin/nginx"}', flush=True)
             copy(source / 'LICENSE', target / 'licenses/nginx/LICENSE')
     series = '.'.join(MANIFEST['mysql'].split('.')[:2])
-    url = f'https://cdn.mysql.com/Downloads/MySQL-{series}/mysql-{MANIFEST["mysql"]}-linux-glibc2.28-x86_64-minimal.tar.xz'
-    archive = lock_download('mysql-linux-x86_64', url, refresh=refresh, lock=lock)
+    # Oracle ships an x86_64 minimal archive. The aarch64 release only has the full generic build.
+    if arch == 'x86_64':
+        url = f'https://cdn.mysql.com/Downloads/MySQL-{series}/mysql-{MANIFEST["mysql"]}-linux-glibc2.28-x86_64-minimal.tar.xz'
+        mysql_key = 'mysql-linux-x86_64'
+    else:
+        url = f'https://cdn.mysql.com/Downloads/MySQL-{series}/mysql-{MANIFEST["mysql"]}-linux-glibc2.28-aarch64.tar.xz'
+        mysql_key = 'mysql-linux-aarch64'
+    archive = lock_download(mysql_key, url, refresh=refresh, lock=lock)
     with tempfile.TemporaryDirectory() as folder:
         safe_extract(archive, Path(folder), 'tar')
         source, = [path for path in Path(folder).iterdir() if path.is_dir()]

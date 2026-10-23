@@ -19,9 +19,17 @@
     "sha256": "10fa12ccc610f653d4ed4df848c1817f9935dcf4e9a6a458a19ab0fa02093f91",
     "url": "https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-linux-amd64.tar.gz"
   },
+  "mailpit-linux-arm64": {
+    "sha256": "de07955b783236d9129da76da9a5970f1777834a18b2c07611de957be784dafe",
+    "url": "https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-linux-arm64.tar.gz"
+  },
   "mailpit-linux-source": {
     "sha256": "85889973cedc04644e71cabdcdaf5d77cf428c785928936cc5ab554c0d6f0a66",
     "url": "https://codeload.github.com/axllent/mailpit/tar.gz/refs/tags/v1.31.6"
+  },
+  "mysql-linux-aarch64": {
+    "sha256": "1a9c8da6c0de200390c0aa38f456b975b6a54a88bd3ece9c6f71573ac391f991",
+    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2-linux-glibc2.28-aarch64.tar.xz"
   },
   "mysql-linux-source": {
     "sha256": "e5a676c7cb73738dc6ea33db2093806ebd512b629a139b897fcab68fcd81aaa4",

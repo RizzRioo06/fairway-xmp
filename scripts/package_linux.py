@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import tarfile
@@ -35,7 +36,10 @@ def package():
     (stage / 'BUILD').write_text(build + '\n')
     output = ROOT / 'artifacts/linux-installer'
     output.mkdir(parents=True, exist_ok=True)
-    stem = f'fairway-xmp-{app_version}-linux-x86_64'
+    if platform.system() != 'Linux':
+        raise RuntimeError('Linux packages are built on Linux')
+    arch, triple = {'x86_64': ('x86_64', 'x86_64-unknown-linux-gnu'), 'aarch64': ('aarch64', 'aarch64-unknown-linux-gnu')}[platform.machine()]
+    stem = f'fairway-xmp-{app_version}-linux-{arch}'
     archive = output / (stem + '.tar.gz')
     with tarfile.open(archive, 'w:gz', compresslevel=6) as bundle:
         bundle.add(stage, arcname='fairway-xmp')
@@ -69,7 +73,7 @@ __FAIRWAY_ARCHIVE_BELOW__
         bundle.add(source_stage, arcname='fairway-xmp-sources')
     hashes = {file.name: hashlib.file_digest(file.open('rb'), 'sha256').hexdigest() for file in (installer, archive, source)}
     (output / 'SHA256SUMS.txt').write_text(''.join(f'{sha}  {name}\n' for name, sha in hashes.items()))
-    (output / 'build-info.json').write_text(json.dumps({'version': app_version, 'commit': commit, 'target': 'x86_64-unknown-linux-gnu', 'minimumGlibc': '2.35', 'runtime': version, 'sha256': hashes, 'run': os.environ.get('GITHUB_SERVER_URL', '') + '/' + os.environ.get('GITHUB_REPOSITORY', '') + '/actions/runs/' + os.environ.get('GITHUB_RUN_ID', '')}, indent=2) + '\n')
+    (output / 'build-info.json').write_text(json.dumps({'version': app_version, 'commit': commit, 'target': triple, 'minimumGlibc': '2.35', 'runtime': version, 'sha256': hashes, 'run': os.environ.get('GITHUB_SERVER_URL', '') + '/' + os.environ.get('GITHUB_REPOSITORY', '') + '/actions/runs/' + os.environ.get('GITHUB_RUN_ID', '')}, indent=2) + '\n')
     print(output)
 
 

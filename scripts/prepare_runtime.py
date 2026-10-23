@@ -172,7 +172,7 @@ def mailpit(target, lock, refresh):
     asset, key = {
         'Darwin': ('darwin-arm64.tar.gz', 'mailpit-macos'),
         'Windows': ('windows-amd64.zip', 'mailpit-windows'),
-        'Linux': ('linux-amd64.tar.gz', 'mailpit-linux'),
+        'Linux': ('linux-arm64.tar.gz', 'mailpit-linux-arm64') if platform.machine() in ('aarch64', 'arm64') else ('linux-amd64.tar.gz', 'mailpit-linux'),
     }[platform.system()]
     url = f'https://github.com/axllent/mailpit/releases/download/v{version}/mailpit-{asset}'
     expected = None
@@ -444,7 +444,7 @@ def verify(target):
         if suffix:
             ext = (target / folder / 'ext').as_posix()
             extensions = ('curl', 'fileinfo', 'gd', 'intl', 'mbstring', 'mysqli', 'openssl',
-                          'pdo_mysql', 'pdo_sqlite', 'sodium', 'sqlite3', 'zip')
+                          'pdo_mysql', 'pdo_pgsql', 'pdo_sqlite', 'pgsql', 'sodium', 'sqlite3', 'zip')
             ini.write_text(f'extension_dir="{ext}"\n' + '\n'.join(
                 f'extension={name}' for name in extensions
                 if (target / folder / 'ext' / f'php_{name}.dll').is_file()))

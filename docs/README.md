@@ -1,0 +1,16 @@
+# Documentation
+
+Start with the [user guide](../README.md) or [development setup](../CONTRIBUTING.md). [PROJECT_SPEC.md](../PROJECT_SPEC.md) describes the current behavior and architecture.
+
+| Guide | Use it for |
+| --- | --- |
+| [Build and release](build-and-release.md) | Packaging, signing, candidate CI, publication and update feeds |
+| [Testing](testing.md) | Automated checks, isolated development profiles and optional device checks |
+| [Maintenance](maintenance.md) | Updating runtime dependencies, current limitations and future improvements |
+| [CI performance](ci-build-performance.md) | Cache reuse, build retries and artifact cleanup |
+| [Data browser](data-browser.md) | MySQL/SQLite operations, limits and CLI commands |
+| [PostgreSQL clients](postgres-client-support.md) | Connecting PHP applications to a user-supplied server |
+| [Backup and restore](backup-and-restore.md) | Creating and restoring database backups |
+| [Security boundaries](security-boundaries.md) | Process, HTTP, certificate, trust and renderer boundaries |
+
+Development follows the current product requirements, without a prerelease feature freeze or a mandatory device-acceptance checklist. Build workflows verify artifacts; the owner decides when to publish. Older investigations and release records remain available in Git history and published GitHub releases. They are not current development instructions.
