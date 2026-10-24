@@ -4,6 +4,10 @@ Past entries record released changes; they are not current development or releas
 
 ## Unreleased
 
+- Update bundled Nginx to 1.30.6, MySQL 9.7 LTS to 9.7.4 and Mailpit to 1.32.0, including their available security fixes. Refresh platform download pins and corresponding source inputs. PHP remains on 8.2.35, 8.3.36, 8.4.27 and 8.5.12; session upload-progress configuration is unchanged.
+
+- Enable sockets, SOAP and LDAP across bundled PHP versions on Windows, macOS and Linux, and require PCNTL/POSIX for Unix CLI workers. Add platform-aware runtime verification and CLI/web extension smoke checks. Redis projects use project-installed Predis and a user-supplied server.
+
 - Consolidate current development, testing, release and maintenance guidance. Remove completed prerelease investigations, device acceptance tooling and one-off release workflows; retain installed-client update channels and automated upgrade fixtures.
 
 - Successful automated candidates are ready for owner-authorized publication. Remove mandatory human device acceptance from publishing; device checks are optional guidance rather than release tooling. Publication still checks exact candidate identity, artifacts and updater signatures, and feed promotion remains explicit.

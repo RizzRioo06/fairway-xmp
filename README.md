@@ -48,10 +48,10 @@ Re-running the installer backs up an existing student database and stops service
 
 - **PHP 8.5.12** with common extensions for PHP projects and Laravel.
 - **Composer 2.10.3** for installing PHP packages.
-- **Nginx 1.30.5** for serving your projects.
-- **MySQL 9.7.2 LTS** for local databases.
+- **Nginx 1.30.6** for serving your projects.
+- **MySQL 9.7.4 LTS** for local databases.
 - **phpMyAdmin 5.2.3** for managing tables and data in your browser.
-- **Mailpit 1.31.6** for catching the emails your apps send.
+- **Mailpit 1.32.0** for catching the emails your apps send.
 
 The control panel provides service controls, port settings, logs, and database backups.
 
@@ -60,6 +60,8 @@ The control panel provides service controls, port settings, logs, and database b
 Builds prepared from this checkout include `pdo_pgsql` and `pgsql` in PHP 8.2–8.5 on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the Data browser still supports MySQL and SQLite only. It does not back up or upgrade external PostgreSQL databases. For downloaded builds, verify driver availability using the commands in the guide below.
 
 See [PostgreSQL connection examples and requirements](docs/postgres-client-support.md).
+
+Source builds also enable `sockets`, SOAP and LDAP across all bundled PHP versions and platforms, plus `pcntl`/`posix` on macOS and Linux for CLI workers. Redis projects can install Predis through Composer and connect to a server they provide. See [PHP clients and worker support](docs/php-client-support.md) for project setup and platform differences.
 
 ## Your first PHP project
 

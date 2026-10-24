@@ -637,6 +637,7 @@ fn main() -> Result<(), String> {
                 let credentials =
                     fs::read(manager.layout.data.join("credentials")).map_err(|e| e.to_string())?;
                 let previous = manager.layout.clone();
+                let previous_family = fairway_core::database::runtime_family(&previous)?;
                 manager = Manager::new(Layout::at(previous.home, previous.data, runtime))?;
                 manager.start_all()?;
                 assert!(http(chosen.website, "/upgrade-check.php").contains("classroom works"));
@@ -649,14 +650,16 @@ fn main() -> Result<(), String> {
                         .map_err(|e| e.to_string())?,
                     "9.7"
                 );
-                let journal: serde_json::Value = serde_json::from_slice(
-                    &fs::read(manager.layout.data.join("database-upgrade.json"))
-                        .map_err(|e| e.to_string())?,
-                )
-                .map_err(|e| e.to_string())?;
-                assert!(PathBuf::from(journal["backup"].as_str().unwrap())
-                    .join("mysql/mysql")
-                    .is_dir());
+                if previous_family != fairway_core::database::runtime_family(&manager.layout)? {
+                    let journal: serde_json::Value = serde_json::from_slice(
+                        &fs::read(manager.layout.data.join("database-upgrade.json"))
+                            .map_err(|e| e.to_string())?,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    assert!(PathBuf::from(journal["backup"].as_str().unwrap())
+                        .join("mysql/mysql")
+                        .is_dir());
+                }
                 assert!(fs::read_to_string(manager.backup()?)
                     .map_err(|e| e.to_string())?
                     .contains("classroom works"));
@@ -664,7 +667,7 @@ fn main() -> Result<(), String> {
                 manager.start_all()?;
                 assert!(http(chosen.website, "/upgrade-check.php").contains("classroom works"));
                 manager.stop_all()?;
-                println!("PASS: MySQL 8.4 → 9.7 upgrade, original database backup, preserved credentials/data, logical backup, and restart.");
+                println!("PASS: MySQL runtime upgrade, preserved credentials/data, logical backup and restart; cross-family upgrades also retain the original database copy.");
             }
             let php_versions = manager.layout.php_versions()?;
             if php_versions.len() > 1 {

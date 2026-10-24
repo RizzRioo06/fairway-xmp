@@ -84,6 +84,16 @@
     "url": "https://ghcr.io/v2/homebrew/core/libavif/blobs/sha256:0d1a9ce6320d9ddacb3e7ca31bb2ef3216529755ab1df24eac833fec27b25c95",
     "version": "1.4.2"
   },
+  "brew-libcbor-arm64-sequoia": {
+    "sha256": "90ad93678b0065b521b482896d8c4f07e8274c80ee0fdcd8bc7334506e578ec6",
+    "url": "https://ghcr.io/v2/homebrew/core/libcbor/blobs/sha256:90ad93678b0065b521b482896d8c4f07e8274c80ee0fdcd8bc7334506e578ec6",
+    "version": "0.14.0"
+  },
+  "brew-libfido2-arm64-sequoia": {
+    "sha256": "b404a7b93781536080839a6c16c23b757f540e1a0895ea8344bc39c34cea5edb",
+    "url": "https://ghcr.io/v2/homebrew/core/libfido2/blobs/sha256:b404a7b93781536080839a6c16c23b757f540e1a0895ea8344bc39c34cea5edb",
+    "version": "1.17.0"
+  },
   "brew-libnghttp2-arm64-sequoia": {
     "sha256": "2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
     "url": "https://ghcr.io/v2/homebrew/core/libnghttp2/blobs/sha256:2d1fba5839f4ed59e57791f9e06b84eb2203b5db274933865a68b50e66452a79",
@@ -150,9 +160,9 @@
     "version": "1.10.0"
   },
   "brew-mysql@9.7-arm64-sequoia": {
-    "sha256": "02e79d71225ee0e3459936a754d2274b23291a38bdb06930ac44d62329380c73",
-    "url": "https://ghcr.io/v2/homebrew/core/mysql/9.7/blobs/sha256:02e79d71225ee0e3459936a754d2274b23291a38bdb06930ac44d62329380c73",
-    "version": "9.7.2"
+    "sha256": "ec5b069ad92df500c804fa1d6f210d64b2ed80731a4c82f54eae15bb79b0bc0b",
+    "url": "https://ghcr.io/v2/homebrew/core/mysql/9.7/blobs/sha256:ec5b069ad92df500c804fa1d6f210d64b2ed80731a4c82f54eae15bb79b0bc0b",
+    "version": "9.7.4"
   },
   "brew-net-snmp-arm64-sequoia": {
     "sha256": "d3fe01e57a8647bde0f85fb29e6584dd2bb5468e732583317e69532990844918",
@@ -253,24 +263,24 @@
     "url": "https://getcomposer.org/download/2.10.3/composer.phar"
   },
   "mailpit-macos": {
-    "sha256": "1411270aa8fd7f4fb0cc358318754d7bb7c2c30bfd70572dd12d05a53e956373",
-    "url": "https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-darwin-arm64.tar.gz"
+    "sha256": "23709bd727f20da2290de6a2a40c4685c48a3127586d77370efd1a3a595f9ef6",
+    "url": "https://github.com/axllent/mailpit/releases/download/v1.32.0/mailpit-darwin-arm64.tar.gz"
   },
   "mailpit-windows": {
-    "sha256": "5d5ad094bfb3bac9004f9d1105d2335fea9f8952c09951df73ae0a280e34d3b1",
-    "url": "https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-windows-amd64.zip"
+    "sha256": "16915767a6c95dca569336e8f561f91cf355e9a33c57b91deedcc10a4bba7fd4",
+    "url": "https://github.com/axllent/mailpit/releases/download/v1.32.0/mailpit-windows-amd64.zip"
   },
   "mysql-windows": {
-    "sha256": "5592ea38e53edd67f5baa68303e7fcf2f0a40fc08978fdb4a7b0c38d12baea17",
-    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.2-winx64.zip"
+    "sha256": "641bdaf01004927194c561b956f14f915a3166c9b0f9b1b5464ae63152bf4b96",
+    "url": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-winx64.zip"
   },
   "nginx-macos-source": {
-    "sha256": "6c20565aa2325cb82216ae804f4a4ff1875179014759a381c42ddc8e11c4906d",
-    "url": "https://nginx.org/download/nginx-1.30.5.tar.gz"
+    "sha256": "3cf46f5ed7504d460125866b7bea99fb357f31d887e2e63b35503310e9b8b6c8",
+    "url": "https://nginx.org/download/nginx-1.30.6.tar.gz"
   },
   "nginx-windows": {
-    "sha256": "e5afe28b6a50bec92c478bfe1a4d3758206b80fb77159277bc5c4e88955c2a35",
-    "url": "https://nginx.org/download/nginx-1.30.5.zip"
+    "sha256": "c6ee35edb0a861063323f709192ae50d1eefaf2ea7d00678bd2b22d8542dc61e",
+    "url": "https://nginx.org/download/nginx-1.30.6.zip"
   },
   "php-8.2-windows": {
     "sha256": "798ffa4b9ce22a820d57048e9695df7245bf917ed067917f256942a10918a8cc",

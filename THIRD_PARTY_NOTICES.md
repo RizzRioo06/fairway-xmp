@@ -7,6 +7,7 @@ Fairway XMP bundles independently licensed software. The Fairway XMP application
 | PHP | PHP License 3.01 and Zend Engine license; https://www.php.net/license/ |
 | MySQL Community Server | GPL v2 with Universal FOSS Exception; https://github.com/mysql/mysql-server |
 | PostgreSQL libpq client library | PostgreSQL License; https://www.postgresql.org/about/licence/ |
+| OpenLDAP client libraries | OpenLDAP Public License; https://www.openldap.org/software/release/license.html |
 | Nginx | BSD 2-Clause; https://nginx.org/LICENSE |
 | phpMyAdmin | GPL v2 or later; https://github.com/phpmyadmin/phpmyadmin |
 | Composer | MIT; https://github.com/composer/composer |

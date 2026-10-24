@@ -15,14 +15,14 @@ SPEC.loader.exec_module(runtime)
 
 
 class ArchiveTests(unittest.TestCase):
-    def test_verification_rejects_missing_postgresql_driver_on_each_php_version(self):
+    def test_verification_rejects_missing_client_or_worker_extension_on_each_php_version(self):
         for folder in ('php', 'php-8.2', 'php-8.3', 'php-8.4'):
-            for extension in ('pdo_pgsql', 'pgsql'):
+            for extension in ('pdo_pgsql', 'pgsql', 'sockets', 'soap', 'ldap', 'pcntl', 'posix'):
                 def output(command, **kwargs):
                     php_folder = Path(command[0]).parts[-3]
                     version = runtime.MANIFEST['php'] if php_folder == 'php' else runtime.MANIFEST['phpVersions'][php_folder[4:]]
                     missing = extension if php_folder == folder else None
-                    return json.dumps({'version': version, 'extensions': [name for name in runtime.MANIFEST['extensions'] if name != missing]})
+                    return json.dumps({'version': version, 'extensions': [name for name in runtime.required_php_extensions(runtime.MANIFEST, 'Darwin') if name != missing]})
                 with self.subTest(folder=folder, extension=extension), tempfile.TemporaryDirectory() as temporary, \
                         patch.object(runtime.platform, 'system', return_value='Darwin'), \
                         patch.object(runtime.subprocess, 'check_output', side_effect=output):
@@ -30,6 +30,44 @@ class ArchiveTests(unittest.TestCase):
                     (target / 'manifest.json').write_text(json.dumps(runtime.MANIFEST))
                     with self.assertRaisesRegex(RuntimeError, extension):
                         runtime.verify(target)
+
+    def test_worker_extensions_are_required_only_on_unix(self):
+        for system in ('Darwin', 'Linux', 'Windows'):
+            with self.subTest(system=system):
+                required = runtime.required_php_extensions(runtime.MANIFEST, system)
+                self.assertTrue({'sockets', 'soap', 'ldap'}.issubset(required))
+                self.assertEqual({'pcntl', 'posix'} & required,
+                                 set() if system == 'Windows' else {'pcntl', 'posix'})
+
+    def test_windows_verifier_loads_shipped_clients_without_unix_extensions(self):
+        def output(command, **kwargs):
+            php_folder = Path(command[0]).parts[-3]
+            if '-r' in command:
+                ini = Path(command[command.index('-c') + 1]).read_text()
+                for extension in ('sockets', 'soap', 'ldap'):
+                    self.assertIn(f'extension={extension}', ini)
+                self.assertNotIn('extension=pcntl', ini)
+                self.assertNotIn('extension=posix', ini)
+                version = runtime.MANIFEST['php'] if php_folder == 'php' else runtime.MANIFEST['phpVersions'][php_folder[4:]]
+                return json.dumps({'version': version, 'extensions': runtime.MANIFEST['extensions']})
+            if any('composer.phar' in str(part) for part in command):
+                return f'Composer version {runtime.MANIFEST["composer"]} bundled'
+            if '-v' in command: return f'nginx/{runtime.MANIFEST["nginx"]}'
+            if 'version' in command: return f'Mailpit v{runtime.MANIFEST["mailpit"]} bundled'
+            return f'mysqld Ver {runtime.MANIFEST["mysql"]} bundled'
+
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(runtime.platform, 'system', return_value='Windows'), \
+                patch.object(runtime.subprocess, 'check_output', side_effect=output), \
+                patch('sys.stdout', new=io.StringIO()):
+            target = Path(temporary)
+            (target / 'manifest.json').write_text(json.dumps(runtime.MANIFEST))
+            for folder in ('php', 'php-8.2', 'php-8.3', 'php-8.4'):
+                ext = target / folder / 'ext'
+                ext.mkdir(parents=True)
+                for name in ('sockets', 'soap', 'ldap'):
+                    (ext / f'php_{name}.dll').touch()
+            runtime.verify(target)
 
     def test_runtime_verification_is_offline_and_still_rejects_wrong_mailpit_version(self):
         manifest = {'php': '8.5.11', 'extensions': [], 'composer': '2.10.3',

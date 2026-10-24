@@ -92,6 +92,8 @@ jobs:
           } else {
             python scripts/prepare_runtime.py
           }
+      - name: Verify PHP client extensions and Unix worker support
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example php_extension_smoke --no-default-features --locked -- .runtime-work/php-extension-smoke
       - name: Verify PHP clients with the runner's external PostgreSQL test server
         run: python scripts/check_postgres_clients.py
       - name: Build native terminal test bridge

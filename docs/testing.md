@@ -21,9 +21,12 @@ After staging the runtime, use a fresh isolated directory:
 python3 scripts/prepare_runtime.py --verify-only
 cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- /path/to/fresh-smoke
 python3 scripts/check_postgres_clients.py
+cargo run --manifest-path src-tauri/Cargo.toml --example php_extension_smoke --no-default-features --locked -- /path/to/fresh-extension-smoke
 ```
 
 The service smoke checks real PHP/Composer, Nginx, MySQL, mail, backup restoration, process recovery and every bundled PHP version. The PostgreSQL check starts its own disposable cluster using external server binaries and checks both PHP APIs through CLI and web requests. Set `PGBIN` or pass `--postgres-bin` when needed. It does not stop or modify an existing PostgreSQL service. See [PostgreSQL clients](postgres-client-support.md).
+
+The extension smoke checks `sockets`, SOAP and LDAP initialization/options/escaping through generated CLI/web configuration on every PHP branch, plus Unix CLI signals and child exit status using `pcntl`/`posix`. It requires local socket/process access but no external service. It does not authenticate against an LDAP directory. See [PHP clients and workers](php-client-support.md).
 
 Database engine upgrade fixtures and installed-lifecycle baselines remain automated compatibility tests. Their old version names identify test inputs, not current development restrictions. Installer lifecycle scripts modify profiles only in disposable GitHub-hosted accounts; do not run them against a personal account.
 

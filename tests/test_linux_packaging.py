@@ -25,8 +25,13 @@ class LinuxCompatibilityTests(unittest.TestCase):
             for version, missing, expected in [(runtime.MANIFEST['php'], None, True),
                                                 (runtime.MANIFEST['php'], 'pdo_pgsql', False),
                                                 (runtime.MANIFEST['php'], 'pgsql', False),
+                                                (runtime.MANIFEST['php'], 'sockets', False),
+                                                (runtime.MANIFEST['php'], 'soap', False),
+                                                (runtime.MANIFEST['php'], 'ldap', False),
+                                                (runtime.MANIFEST['php'], 'pcntl', False),
+                                                (runtime.MANIFEST['php'], 'posix', False),
                                                 ('0.0.0', None, False)]:
-                output = json.dumps({'version': version, 'extensions': [name for name in runtime.MANIFEST['extensions'] if name != missing]})
+                output = json.dumps({'version': version, 'extensions': [name for name in runtime.required_php_extensions(runtime.MANIFEST, 'Linux') if name != missing]})
                 with self.subTest(version=version, missing=missing), \
                         patch.object(runtime.subprocess, 'check_output', return_value=output):
                     self.assertEqual(runtime.reusable_php(prefix, runtime.MANIFEST['php']), expected)

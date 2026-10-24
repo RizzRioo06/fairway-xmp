@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from prepare_runtime import ROOT, MANIFEST, copy, lock_download, safe_extract
+from prepare_runtime import ROOT, MANIFEST, copy, lock_download, required_php_extensions, safe_extract
 
 GLIBC_LIBS = {'libc.so.6', 'libm.so.6', 'libpthread.so.0', 'libdl.so.2', 'librt.so.1', 'libresolv.so.2', 'libutil.so.1', 'ld-linux-x86-64.so.2', 'ld-linux-aarch64.so.1'}
 
@@ -111,7 +111,7 @@ def reusable_php(prefix, version):
             env={**os.environ, 'PHP_INI_SCAN_DIR': '', 'MIBS': ''}, text=True,
             stderr=subprocess.PIPE, timeout=15)
         info = json.loads(output)
-        return info['version'] == version and set(MANIFEST['extensions']).issubset(
+        return info['version'] == version and required_php_extensions(MANIFEST, 'Linux').issubset(
             name.lower() for name in info['extensions'])
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return False
@@ -141,7 +141,7 @@ def linux(target, lock, refresh):
         if name.startswith('php'):
             prefix = work / f'{name}-install'
             if not reusable_php(prefix, version):
-                run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-pgsql', '--with-pdo-sqlite', '--with-pgsql', '--enable-session', '--enable-simplexml', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
+                run(['./configure', f'--prefix={prefix}', '--disable-all', '--enable-cli', '--enable-phar', '--with-iconv', '--enable-fpm', '--disable-cgi', '--enable-bcmath', '--enable-ctype', '--with-curl', '--enable-dom', '--enable-fileinfo', '--enable-filter', '--with-libxml', '--enable-gd', '--with-jpeg', '--with-webp', '--with-freetype', '--enable-intl', '--with-ldap', '--enable-mbstring', '--enable-mysqlnd', '--with-mysqli=mysqlnd', '--with-openssl', '--enable-pcntl', '--enable-posix', '--enable-pdo', '--with-pdo-mysql=mysqlnd', '--with-pdo-pgsql', '--with-pdo-sqlite', '--with-pgsql', '--enable-session', '--enable-simplexml', '--enable-soap', '--enable-sockets', '--with-sodium', '--with-sqlite3', '--enable-tokenizer', '--enable-xml', '--enable-xmlreader', '--enable-xmlwriter', '--with-zip', '--with-zlib', '--without-pear'], cwd=source)
                 run(['make', '-j' + jobs], cwd=source)
                 run(['make', 'install'], cwd=source)
             else:

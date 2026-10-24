@@ -99,6 +99,8 @@ jobs:
         with:
           path: .runtime-cache
           key: ${{ steps.downloads.outputs.key }}
+      - name: Verify PHP client extensions and Unix worker support
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example php_extension_smoke --no-default-features --locked -- .runtime-work/php-extension-smoke
       - name: Verify PHP clients with an external PostgreSQL test server
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'

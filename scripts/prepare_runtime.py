@@ -422,6 +422,12 @@ def build_nginx(target, bottles, lock, refresh):
         }, indent=2) + '\n')
 
 
+def required_php_extensions(manifest, system=None):
+    system = system or platform.system()
+    target = {'Darwin': 'macos', 'Linux': 'linux', 'Windows': 'windows'}[system]
+    return set(manifest['extensions']) | set(manifest.get('platformExtensions', {}).get(target, []))
+
+
 def verify(target):
     try:
         staged_manifest = json.loads((target / 'manifest.json').read_text())
@@ -443,15 +449,15 @@ def verify(target):
         ini = target / f'verify-{folder}.ini'
         if suffix:
             ext = (target / folder / 'ext').as_posix()
-            extensions = ('curl', 'fileinfo', 'gd', 'intl', 'mbstring', 'mysqli', 'openssl',
-                          'pdo_mysql', 'pdo_pgsql', 'pdo_sqlite', 'pgsql', 'sodium', 'sqlite3', 'zip')
+            extensions = ('curl', 'fileinfo', 'gd', 'intl', 'ldap', 'mbstring', 'mysqli', 'openssl',
+                          'pdo_mysql', 'pdo_pgsql', 'pdo_sqlite', 'pgsql', 'soap', 'sockets', 'sodium', 'sqlite3', 'zip')
             ini.write_text(f'extension_dir="{ext}"\n' + '\n'.join(
                 f'extension={name}' for name in extensions
                 if (target / folder / 'ext' / f'php_{name}.dll').is_file()))
         else: ini.write_text('')
         output = subprocess.check_output([str(php), '-c', str(ini), '-r', code], env=env, text=True)
         info = json.loads(output)
-        missing = set(MANIFEST['extensions']) - {item.lower() for item in info['extensions']}
+        missing = required_php_extensions(MANIFEST) - {item.lower() for item in info['extensions']}
         if info['version'] != version or missing:
             raise RuntimeError(f'PHP validation failed for {folder}: version={info["version"]}, missing={sorted(missing)}')
         ini.unlink()
