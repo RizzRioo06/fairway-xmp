@@ -137,7 +137,7 @@ For complete database recovery, including routines and triggers, follow the [bac
 
 ## Test emails
 
-Fairway XMP catches every email your PHP apps send, so nothing reaches real inboxes. **Start all** also starts Mail. Open **View Mail** in the sidebar to read, search, and delete caught emails, and to save attachments. Remote images are blocked initially. Use **Load image** on an individual placeholder or check **Load remote images** beside HTML/Text to load that message’s images. The choice resets whenever you open an email. Loading images contacts their servers and may reveal your IP address. Use **Open in browser** for Mailpit’s full inbox at [http://127.0.0.1:8802/](http://127.0.0.1:8802/).
+Fairway XMP catches every email your PHP apps send, so nothing reaches real inboxes. **Start all** also starts Mail. Open **View Mail** in the sidebar to read, search, and delete caught emails, and to save attachments. Supported remote images load automatically in the preview. If an image fails to load, use **Retry image** on its placeholder. Use **Open in browser** for Mailpit’s full inbox at [http://127.0.0.1:8802/](http://127.0.0.1:8802/).
 
 PHP’s `mail()` works without any setup. For Laravel and other frameworks that send through SMTP, copy the settings from the Mail page:
 

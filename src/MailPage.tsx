@@ -201,11 +201,9 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
 function MailPreview({ email, tab, setTab, onOpenLink }: { email: MailMessage; tab: 'html' | 'text'; setTab: (tab: 'html' | 'text') => void; onOpenLink: (url: string) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const preview = useMemo(() => prepareMailPreview(email.HTML, email.InlineImages), [email.HTML, email.InlineImages]);
-  const [loadAll, setLoadAll] = useState(false);
   const [images, setImages] = useState<Record<string, ImageState>>({});
   const currentImages = useRef(images);
   const generation = useRef(0);
-  useEffect(() => () => { generation.current++; }, []);
   function updateImage(id: string, state: ImageState) {
     currentImages.current = { ...currentImages.current, [id]: state };
     setImages(currentImages.current);
@@ -227,6 +225,15 @@ function MailPreview({ email, tab, setTab, onOpenLink }: { email: MailMessage; t
       }
     }
   }
+  useEffect(() => {
+    const request = generation.current;
+    // Defer until effect setup settles so Strict Mode's discarded mount cannot
+    // start downloads. Each opened message owns its queue and results.
+    void Promise.resolve().then(() => {
+      if (generation.current === request) void loadImages(preview.images.map(image => image.id));
+    });
+    return () => { generation.current++; };
+  }, [preview]);
   function syncImages() {
     frame.current?.contentWindow?.postMessage({ type: 'fairway-mail-images', images: currentImages.current }, '*');
   }
@@ -238,7 +245,7 @@ function MailPreview({ email, tab, setTab, onOpenLink }: { email: MailMessage; t
       if (!message || message.type !== 'fairway-mail-preview') return;
       if (message.action === 'ready') {
         syncImages();
-      } else if (message.action === 'image' && typeof message.id === 'string') {
+      } else if (message.action === 'image' && typeof message.id === 'string' && currentImages.current[message.id]?.status === 'error') {
         void loadImages([message.id]);
       } else if (message.action === 'image-error' && typeof message.id === 'string' && currentImages.current[message.id]?.status === 'loaded') {
         updateImage(message.id, { status: 'error', error: 'This image could not be displayed. Retry or open in browser.' });
@@ -259,14 +266,6 @@ function MailPreview({ email, tab, setTab, onOpenLink }: { email: MailMessage; t
   return <>
     <div className="mail-preview-controls">
       <div className="mail-tabs" role="tablist" aria-label="Email format">{email.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
-      {preview.images.length > 0 && <label className="mail-load-images" title="Loading remote images contacts their servers and may reveal your IP address. Unchecking cannot undo requests already sent.">
-        <input type="checkbox" checked={loadAll} disabled={tab !== 'html'} onChange={event => {
-          const checked = event.target.checked;
-          setLoadAll(checked);
-          if (checked) void loadImages(preview.images.map(image => image.id));
-          else { generation.current++; currentImages.current = {}; setImages({}); }
-        }} />Load remote images
-      </label>}
     </div>
     {tab === 'html' && email.HTML ? <iframe ref={frame} className="mail-body" title="Email content" sandbox="allow-scripts" srcDoc={preview.source} /> : <pre className="mail-body mail-text">{email.Text || 'This email has no text version.'}</pre>}
   </>;

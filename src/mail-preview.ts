@@ -1,10 +1,10 @@
 import bridge from './mail-preview-bridge.js?raw';
 
 // Keep this hash and the app CSP synchronized with mail-preview-bridge.js.
-const bridgeHash = 'fICz093+jdO2OQO/C9nvit6WrgbBQ/mZcBpfhpjDOK8=';
+const bridgeHash = 'Y4q6/xoql2VmzUaEE9z7JuerBa8NW7IWzsw57HShfTs=';
 const policy = `default-src 'none'; script-src 'sha256-${bridgeHash}'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'`;
 const emailStyle = 'body{margin:16px 20px;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#22342a;overflow-wrap:anywhere}img{max-width:100%;height:auto}';
-const placeholderStyle = '.fairway-image-placeholder[hidden]{display:none!important}.fairway-image-placeholder{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;box-sizing:border-box;padding:10px;border:1px dashed #a8b8ad;border-radius:5px;background:#f3f6f4;color:#53685b;font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}.fairway-image-placeholder button{padding:4px 8px;border:1px solid #a8b8ad;border-radius:4px;background:white;color:#24664f;font:inherit;cursor:pointer}.fairway-image-placeholder button:focus-visible{outline:2px solid #24664f;outline-offset:2px}.fairway-image-placeholder button:disabled{cursor:default;opacity:.6}';
+const placeholderStyle = '.fairway-image-placeholder[hidden],.fairway-image-placeholder button[hidden]{display:none!important}.fairway-image-placeholder{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;box-sizing:border-box;padding:10px;border:1px dashed #a8b8ad;border-radius:5px;background:#f3f6f4;color:#53685b;font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}.fairway-image-placeholder button{padding:4px 8px;border:1px solid #a8b8ad;border-radius:4px;background:white;color:#24664f;font:inherit;cursor:pointer}.fairway-image-placeholder button:focus-visible{outline:2px solid #24664f;outline-offset:2px}.fairway-image-placeholder button:disabled{cursor:default;opacity:.6}';
 
 export type RemoteImage = { id: string; url: string };
 export type ImageState = { status: 'loading' | 'loaded' | 'error'; data?: string; error?: string };
@@ -51,8 +51,10 @@ export function prepareMailPreview(html: string, inlineImages?: Record<string, s
       label.textContent = image.alt || 'Remote image';
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = 'Load image';
-      button.title = `Loads from ${new URL(remote).host}. This contacts the server and may reveal your IP address.`;
+      button.textContent = 'Retry image';
+      button.title = `Retry loading from ${new URL(remote).host}.`;
+      button.hidden = true;
+      button.disabled = true;
       const id = String(remoteImages.length);
       if (remoteImages.length < remoteImageLimit) {
         remoteImages.push({ id, url: remote });

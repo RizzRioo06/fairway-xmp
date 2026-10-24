@@ -32,8 +32,8 @@
           img.focus({ preventScroll: true });
         }
       }
-      button.disabled = state?.status === 'loading';
-      button.textContent = state?.status === 'loading' ? 'Loading…' : state?.status === 'error' ? 'Retry image' : 'Load image';
+      button.hidden = state?.status !== 'error';
+      button.disabled = state?.status !== 'error';
       if (!button.dataset.originalTitle) button.dataset.originalTitle = button.title;
       button.title = state?.error || button.dataset.originalTitle;
     }

@@ -1,4 +1,4 @@
-//! Explicitly requested mail images. The renderer keeps its data-only image CSP.
+//! Remote mail images. The renderer keeps its data-only image CSP.
 use crate::config::Result;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use reqwest::{header, redirect, Client, Url};
@@ -44,7 +44,7 @@ pub async fn load(value: &str) -> Result<String> {
     }
     // Separate cookie-free client: no browser credentials, Referer, automatic
     // redirects, retries, proxies or response decompression. Local development
-    // addresses are intentionally supported, but only after an explicit click.
+    // addresses are intentionally supported for local outgoing-mail debugging.
     let client = Client::builder()
         .redirect(redirect::Policy::none())
         .retry(reqwest::retry::never())

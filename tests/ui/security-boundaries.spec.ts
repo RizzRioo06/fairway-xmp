@@ -157,77 +157,69 @@ test('production CSP blocks object loads, base changes and unhandled form naviga
   await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('h1')].find(heading => heading.getClientRects().length > 0)?.textContent)).toBe('Your sites');
 });
 
-test('remote images require individual or message-wide opt-in under production CSP', async ({ page }) => {
+test('remote images load automatically under production CSP and survive HTML/Text switches', async ({ page }) => {
   await page.getByRole('button', { name: 'View Mail', exact: true }).click();
   const emails = page.getByRole('list', { name: 'Emails', exact: true });
   await emails.getByRole('button', { name: /Boundary email/ }).click();
   const frame = page.frameLocator('iframe[title="Email content"]');
-  const checkbox = page.getByRole('checkbox', { name: 'Load remote images', exact: true });
-  await expect(checkbox).not.toBeChecked();
-  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(3);
-  expect(await page.locator('html').getAttribute('data-image-requests')).toBeNull();
-  await page.screenshot({ path: test.info().outputPath('mail-remote-images-blocked.png') });
-  await expect(frame.locator('[data-fairway-image="999"]')).toHaveCount(0);
-  // A forged message from the main renderer is not a request from this frame.
-  await page.evaluate(() => window.postMessage({ type: 'fairway-mail-preview', action: 'image', id: '0' }, '*'));
-  await frame.locator('[data-fairway-image="0"] button').focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('html')).toHaveAttribute('data-image-requests', JSON.stringify(['https://blocked.invalid/tracker']));
-  await expect(frame.locator('img[data-fairway-loaded="0"]')).toHaveJSProperty('naturalWidth', 1);
-  await expect(checkbox).not.toBeChecked();
-  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(2);
-  await checkbox.check();
   const expected = ['https://blocked.invalid/tracker', 'http://project.test:8800/logo.png', 'https://blocked.invalid/responsive'];
   await expect(page.locator('html')).toHaveAttribute('data-image-requests', JSON.stringify(expected));
   await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
   await expect(frame.getByAltText('Second remote image')).toHaveJSProperty('naturalWidth', 1);
-  await page.screenshot({ path: test.info().outputPath('mail-remote-images-loaded.png') });
+  await expect(page.getByRole('checkbox', { name: 'Load remote images', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('button', { name: /^(Load|Retry) image$/ })).toHaveCount(0);
+  await expect(frame.locator('[data-fairway-image="999"]')).toHaveCount(0);
+  // A forged request from outside the current frame cannot retry an image.
+  await page.evaluate(() => window.postMessage({ type: 'fairway-mail-preview', action: 'image', id: '0' }, '*'));
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
+  await expect(page.locator('.mail-text')).toHaveText('Readable text version');
+  await page.getByRole('tab', { name: 'HTML', exact: true }).click();
+  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
+  await expect(page.locator('html')).toHaveAttribute('data-image-requests', JSON.stringify(expected));
   expect(externalRequests.get(page)).toEqual([]);
   expect(await page.locator('html').getAttribute('data-email-script')).toBeNull();
   expect(await page.locator('html').getAttribute('data-mail-links')).toBeNull();
-  await checkbox.uncheck();
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(0);
-  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(3);
-  await checkbox.check();
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
-  // Text/HTML switches keep this message's choice; opening any message resets it.
-  await page.getByRole('tab', { name: 'Text', exact: true }).click();
-  await page.getByRole('tab', { name: 'HTML', exact: true }).click();
-  await expect(checkbox).toBeChecked();
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
   await emails.getByRole('button', { name: /Other email/ }).click();
-  await expect(checkbox).not.toBeChecked();
-  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(3);
-  await emails.getByRole('button', { name: /Boundary email/ }).click();
-  await expect(checkbox).not.toBeChecked();
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-image-requests', JSON.stringify([...expected, ...expected]));
+  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
 });
 
-test('failed images can retry and late downloads cannot repopulate a cleared or different email', async ({ page }) => {
+test('failed automatic downloads offer keyboard-accessible retries only after failure', async ({ page }) => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 200, fail: true } })));
+  await page.getByRole('button', { name: 'View Mail', exact: true }).click();
+  await page.getByRole('list', { name: 'Emails', exact: true }).getByRole('button', { name: /Boundary email/ }).click();
+  const frame = page.frameLocator('iframe[title="Email content"]');
+  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('button', { name: 'Retry image', exact: true })).toHaveCount(3);
+  const retry = frame.locator('[data-fairway-image="0"] button');
+  await expect(retry).toHaveAttribute('title', 'Image server returned HTTP 404.');
+  // Failed URLs do not automatically loop or retry when a different control is used.
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
+  await page.getByRole('tab', { name: 'HTML', exact: true }).click();
+  await expect(frame.getByRole('button', { name: 'Retry image', exact: true })).toHaveCount(3);
+  expect(JSON.parse((await page.locator('html').getAttribute('data-image-requests'))!)).toHaveLength(3);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 0, fail: false } })));
+  await retry.focus();
+  await page.keyboard.press('Enter');
+  await expect(frame.locator('img[data-fairway-loaded="0"]')).toHaveJSProperty('naturalWidth', 1);
+  await expect(frame.getByRole('button', { name: 'Retry image', exact: true })).toHaveCount(2);
+  expect(JSON.parse((await page.locator('html').getAttribute('data-image-requests'))!)).toHaveLength(4);
+  expect(externalRequests.get(page)).toEqual([]);
+});
+
+test('late automatic downloads cannot overwrite another email or continue its discarded queue', async ({ page }) => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 400, fail: true } })));
   await page.getByRole('button', { name: 'View Mail', exact: true }).click();
   const emails = page.getByRole('list', { name: 'Emails', exact: true });
   await emails.getByRole('button', { name: /Boundary email/ }).click();
-  const frame = page.frameLocator('iframe[title="Email content"]');
-  const checkbox = page.getByRole('checkbox', { name: 'Load remote images', exact: true });
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 0, fail: true } })));
-  await frame.locator('[data-fairway-image="0"] button').click();
-  const retry = frame.getByRole('button', { name: 'Retry image', exact: true });
-  await expect(retry).toHaveAttribute('title', 'Image server returned HTTP 404.');
+  await expect(page.locator('html')).toHaveAttribute('data-image-requests', JSON.stringify(['https://blocked.invalid/tracker']));
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 0, fail: false } })));
-  await retry.click();
-  await expect(frame.locator('img[data-fairway-loaded="0"]')).toHaveJSProperty('naturalWidth', 1);
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-mail-image-options', { detail: { delay: 400, fail: false } })));
-  await checkbox.check();
-  await expect(frame.getByRole('button', { name: 'Loading…', exact: true })).toHaveCount(1);
-  await checkbox.uncheck();
-  await page.waitForTimeout(500);
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(0);
-  await expect(frame.getByRole('button', { name: 'Load image', exact: true })).toHaveCount(3);
-  await checkbox.check();
-  await expect(frame.getByRole('button', { name: 'Loading…', exact: true })).toHaveCount(1);
   await emails.getByRole('button', { name: /Other email/ }).click();
+  const frame = page.frameLocator('iframe[title="Email content"]');
+  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
   await page.waitForTimeout(500);
-  await expect(checkbox).not.toBeChecked();
-  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(0);
+  await expect(frame.getByRole('button', { name: 'Retry image', exact: true })).toHaveCount(0);
+  await expect(frame.locator('img[data-fairway-loaded]')).toHaveCount(3);
+  expect(JSON.parse((await page.locator('html').getAttribute('data-image-requests'))!)).toHaveLength(4);
   expect(externalRequests.get(page)).toEqual([]);
 });
