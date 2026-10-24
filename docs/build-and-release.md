@@ -6,6 +6,8 @@ Builds and publication are separate actions. A successful automated candidate is
 
 Run **Release candidate** (`release-candidate.yml`) from the intended commit, or push a `candidate-*` tag. It combines browser checks and the Windows, Apple Silicon macOS and Linux installer workflows at the same source commit. Individual platform workflows can also produce development installers or standalone test applications without publishing a release.
 
+The macOS candidate uses `build` followed by `package`; signing, notarization and updater signing happen in `package`. The separate `standalone` and `sign-standalone` jobs run only when manually selecting `standalone_only` to produce a permissions-test app ZIP. Their skipped status in a normal candidate is expected.
+
 The candidate records application/runtime versions, source identity, installer/updater hashes, automated lifecycle results and signing status in `candidate-manifest.json`. It does not generate a device checklist or publish anything. The metadata artifact retains its existing internal name for compatibility with previously built candidates.
 
 Application versions must agree in `package.json`, both root entries in `package-lock.json`, the package in `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. Check them with:

@@ -2,7 +2,7 @@
 
 Past entries record released changes; they are not current development or release restrictions. See [Build and release](docs/build-and-release.md) for the current process.
 
-## 0.1.0-rc.4 — pending release
+## 0.1.0-rc.4 — 2026-10-24
 
 - Add per-version PHP settings for memory, execution time, upload size, timezone, displayed errors and session upload progress. Keep overrides across app/runtime updates, coordinate PHP/Nginx upload limits and response timeouts, and provide Reset to defaults. Upload progress remains enabled by default.
 
@@ -15,6 +15,8 @@ Past entries record released changes; they are not current development or releas
 - Successful automated candidates are ready for owner-authorized publication. Remove mandatory human device acceptance from publishing; device checks are optional guidance rather than release tooling. Publication still checks exact candidate identity, artifacts and updater signatures, and feed promotion remains explicit.
 
 - Enable PostgreSQL client support (`pdo_pgsql` and `pgsql`) in every bundled PHP version on Windows, macOS and Linux. Applications can connect to a PostgreSQL server supplied by the user. This pass includes client support; PostgreSQL server packaging, service controls and Data browser integration remain future work. Runtime verification requires both extensions; candidate builds exercise CLI and Nginx/PHP connections against disposable PostgreSQL servers.
+
+Published from [candidate run 40053605436](https://github.com/eimg/fairway-xmp/actions/runs/40053605436), commit `f547bcff4683f06b56e1a6d2749656a99e6db8c2`, using the tested installers and updater payloads without rebuilding. Installed macOS and Windows clients receive RC 4 through the preview update feed; Linux updates remain manual.
 
 ## 0.1.0-rc.3 — 2026-10-22
 
