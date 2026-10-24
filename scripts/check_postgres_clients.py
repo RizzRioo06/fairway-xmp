@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Check PHP clients against an isolated external PostgreSQL server, never bundled."""
 import argparse
+import csv
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import socket
@@ -10,6 +12,20 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def grant_windows_fixture_access(root):
+    # initdb drops Administrators/Power Users from its Windows token. Python's
+    # private temporary directory can otherwise be accessible only via those
+    # groups. Give the actual user access, inherited by the password and cluster.
+    identity = subprocess.check_output(['whoami', '/user', '/fo', 'csv', '/nh'],
+                                       text=True, encoding='utf-8', errors='replace', timeout=15)
+    records = list(csv.reader(identity.splitlines()))
+    if len(records) != 1 or len(records[0]) != 2 or not re.fullmatch(r'S-\d+(?:-\d+)+', records[0][1]):
+        raise RuntimeError('Cannot determine the Windows user SID for the PostgreSQL test directory.')
+    sid = records[0][1]
+    subprocess.run(['icacls', str(root), '/inheritance:r', '/grant:r', f'*{sid}:(OI)(CI)F'],
+                   check=True, stdout=subprocess.DEVNULL, timeout=30)
 
 
 def postgres_bin():
@@ -35,6 +51,8 @@ def main():
     suffix = '.exe' if os.name == 'nt' else ''
     with tempfile.TemporaryDirectory(prefix='fairway-postgres-') as temporary:
         root = Path(temporary)
+        if os.name == 'nt':
+            grant_windows_fixture_access(root)
         password = secrets.token_hex(24)
         password_file = root / 'password'
         password_file.write_text(password, encoding='utf-8')
