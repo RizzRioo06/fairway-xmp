@@ -10,7 +10,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -57,9 +57,31 @@ fn request_with_wait(
     Ok((status, body.into()))
 }
 
-fn check_config(body: &str, settings: &PhpSettings, cli: bool) -> Result<Value, String> {
+fn check_config(
+    body: &str,
+    settings: &PhpSettings,
+    cli: bool,
+    managed_ini: &Path,
+) -> Result<Value, String> {
     let result: Value =
         serde_json::from_str(body).map_err(|e| format!("Invalid PHP result: {e}: {body}"))?;
+    let loaded_ini = result["ini"].as_str().ok_or_else(|| {
+        format!(
+            "PHP did not load the managed configuration {}: {result}",
+            managed_ini.display()
+        )
+    })?;
+    // Resolve aliases before comparing: Windows PHP can report an NTFS short
+    // path, while the manager knows the ordinary application-data path.
+    if fs::canonicalize(loaded_ini)
+        .map_err(|e| format!("Cannot resolve loaded PHP configuration {loaded_ini}: {e}"))?
+        != fs::canonicalize(managed_ini).map_err(|e| e.to_string())?
+    {
+        return Err(format!(
+            "PHP loaded {loaded_ini} instead of {}",
+            managed_ini.display()
+        ));
+    }
     let memory = if settings.memory_limit_mb == -1 {
         "-1".into()
     } else {
@@ -91,9 +113,18 @@ fn main() -> Result<(), String> {
     }
     let layout = Layout::at(
         root.join("student home 日本"),
-        root.join("student data 日本"),
+        // PHP's Windows startup configuration needs an ANSI-compatible path
+        // or an existing NTFS short alias. The runner's workspace volume need
+        // not create short aliases, so keep this fixture's data path portable.
+        // The project root still exercises Unicode script and web paths.
+        root.join(if cfg!(windows) {
+            "student data"
+        } else {
+            "student data 日本"
+        }),
         runtime,
     );
+    let managed_ini = layout.data.join("config/php.ini");
     let mut manager = Manager::new(layout.clone())?;
     let listeners = (0..6)
         .map(|_| TcpListener::bind(("127.0.0.1", 0)))
@@ -116,6 +147,7 @@ fn main() -> Result<(), String> {
     fs::write(
         &script,
         r#"<?php sleep(min(65, max(0, (int)($_GET['wait'] ?? 0)))); echo json_encode([
+        'ini' => php_ini_loaded_file(),
         'memory' => ini_get('memory_limit'), 'upload' => ini_get('upload_max_filesize'),
         'post' => ini_get('post_max_size'), 'timezone' => date_default_timezone_get(),
         'execution' => (int)ini_get('max_execution_time'),
@@ -157,7 +189,12 @@ fn main() -> Result<(), String> {
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
-        check_config(&String::from_utf8_lossy(&output.stdout), &settings, true)?;
+        check_config(
+            &String::from_utf8_lossy(&output.stdout),
+            &settings,
+            true,
+            &managed_ini,
+        )?;
         let web = (|| -> Result<(), String> {
             manager.start("nginx")?;
             assert!(manager.save_php_settings(minor, None).is_err());
@@ -185,7 +222,7 @@ fn main() -> Result<(), String> {
             if status != 200 {
                 return Err(format!("Upload failed: {status}: {body}"));
             }
-            let result = check_config(&body, &settings, false)?;
+            let result = check_config(&body, &settings, false, &managed_ini)?;
             if result["file"]["error"] != 0 || result["file"]["size"] != 1536 * 1024 {
                 return Err(format!("Upload with progress disabled failed: {result}"));
             }
@@ -202,7 +239,9 @@ fn main() -> Result<(), String> {
         let web = (|| -> Result<(), String> {
             manager.start("nginx")?;
             let (status, body) = request(&manager, Some(&upload))?;
-            if status != 200 || check_config(&body, &smaller, false)?["file"]["error"] != 1 {
+            if status != 200
+                || check_config(&body, &smaller, false, &managed_ini)?["file"]["error"] != 1
+            {
                 return Err(format!("Upload limit not enforced: {status}: {body}"));
             }
             Ok(())
@@ -247,7 +286,7 @@ fn main() -> Result<(), String> {
             if status != 200 {
                 return Err(format!("Unlimited PHP request failed: {status}: {body}"));
             }
-            check_config(&body, &unlimited, false)?;
+            check_config(&body, &unlimited, false, &managed_ini)?;
             Ok(())
         })();
         manager.stop_all()?;
@@ -264,7 +303,7 @@ fn main() -> Result<(), String> {
         if status != 200 {
             return Err(format!("Long PHP request failed: {status}: {body}"));
         }
-        check_config(&body, &PhpSettings::default(), false)?;
+        check_config(&body, &PhpSettings::default(), false, &managed_ini)?;
         Ok(())
     })();
     manager.stop_all()?;

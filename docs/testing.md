@@ -31,6 +31,8 @@ The extension smoke checks `sockets`, SOAP and LDAP initialization/options/escap
 
 The PHP settings smoke checks each branch through generated CLI/web configuration, multipart uploads with session progress disabled, upload-size enforcement, restart persistence, inactive-version edits, failed-save rollback, reset, unlimited execution and a quiet 65-second response that exceeds Nginx’s former 60-second timeout. `php-settings-native.spec.ts` additionally drives the production settings UI against the real Rust backend; `php-settings.spec.ts` covers per-version forms and running-service behavior in Chromium/WebKit.
 
+The settings smoke verifies the identity of the loaded `php.ini` before checking values. Its Windows fixture uses an ASCII data-directory name because PHP startup requires an ANSI-compatible configuration path or existing NTFS short aliases; the runner's workspace volume need not provide those aliases. Project paths remain Unicode. Other platforms also exercise Unicode application-data paths.
+
 Database engine upgrade fixtures and installed-lifecycle baselines remain automated compatibility tests. Their old version names identify test inputs, not current development restrictions. Installer lifecycle scripts modify profiles only in disposable GitHub-hosted accounts; do not run them against a personal account.
 
 ## Browser and native bridge

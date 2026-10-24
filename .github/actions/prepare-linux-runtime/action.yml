@@ -7,10 +7,23 @@ runs:
       shell: bash
       run: |
         awk '$1 == "deb" { $1="deb-src"; print }' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/fairway-sources.list > /dev/null
+        # Hosted runners retain PGDG libpq packages but remove their repository
+        # and key. Enable only source indexes; do not change binary selection.
+        # The archive keeps the exact installed versions after live updates.
+        sudo install -d -m 0755 /etc/apt/keyrings
+        curl --fail --silent --show-error --location --retry 3 https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /etc/apt/keyrings/fairway-postgresql.asc > /dev/null
+        sudo chmod 0644 /etc/apt/keyrings/fairway-postgresql.asc
+        cat <<'EOF' | sudo tee /etc/apt/sources.list.d/fairway-postgresql.list > /dev/null
+        deb-src [signed-by=/etc/apt/keyrings/fairway-postgresql.asc] https://apt.postgresql.org/pub/repos/apt/ jammy-pgdg main
+        deb-src [signed-by=/etc/apt/keyrings/fairway-postgresql.asc] https://apt-archive.postgresql.org/pub/repos/apt/ jammy-pgdg-archive main
+        EOF
         sudo apt-get update
         # Refresh liblzma with its development package so bundled libraries and
         # their exact source versions are both available in the enabled archive.
         sudo apt-get install -y build-essential autoconf bison re2c pkg-config patchelf libxml2-dev libssl-dev libcurl4-openssl-dev libsqlite3-dev libpq-dev libldap2-dev libonig-dev libzip-dev libsodium-dev libicu-dev libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libpcre2-dev liblzma-dev zlib1g-dev libaio1 libnuma1 libncurses5
+        # Fail before compiling PHP if this image's exact libpq source is absent.
+        libpq_source=$(dpkg-query -W -f='${source:Package}=${source:Version}' libpq5)
+        apt-get source --print-uris --only-source "$libpq_source"
     - uses: actions/cache/restore@v5
       id: runtime
       with:
