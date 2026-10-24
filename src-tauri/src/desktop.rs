@@ -376,6 +376,11 @@ async fn mail_inbox(
 }
 
 #[tauri::command]
+async fn load_mail_image(url: String) -> Result<String> {
+    crate::mail_images::load(&url).await
+}
+
+#[tauri::command]
 async fn save_mail_attachment(
     app: tauri::AppHandle,
     state: State<'_, Shared>,
@@ -1180,6 +1185,7 @@ pub fn run() {
             data_browser,
             cancel_data_browser,
             mail_inbox,
+            load_mail_image,
             save_mail_attachment,
             service_action,
             save_settings,

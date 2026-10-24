@@ -1,6 +1,43 @@
 // This exact script is authorized by its CSP hash. Email scripts are not.
 (() => {
   const send = message => parent.postMessage({ type: 'fairway-mail-preview', ...message }, '*');
+  const placeholders = new Map([...document.querySelectorAll('[data-fairway-image]')].map(element => [element.getAttribute('data-fairway-image'), element]));
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('[data-fairway-image] button');
+    if (!button) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.isTrusted && !button.disabled) send({ action: 'image', id: button.closest('[data-fairway-image]').getAttribute('data-fairway-image') });
+  }, true);
+  window.addEventListener('message', event => {
+    if (event.source !== parent || event.data?.type !== 'fairway-mail-images') return;
+    for (const [id, placeholder] of placeholders) {
+      const state = event.data.images?.[id];
+      const button = placeholder.querySelector('button');
+      const image = placeholder.nextElementSibling;
+      if (state?.status === 'loaded' && image?.getAttribute('data-fairway-loaded') === id && image.getAttribute('src') === state.data) continue;
+      if (image?.getAttribute('data-fairway-loaded') === id) image.remove();
+      placeholder.hidden = false;
+      if (state?.status === 'loaded' && /^data:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon);base64,/i.test(state.data)) {
+        const img = placeholder.querySelector('template').content.firstElementChild.cloneNode(true);
+        img.removeAttribute('loading');
+        img.setAttribute('data-fairway-loaded', id);
+        img.addEventListener('error', () => send({ action: 'image-error', id }));
+        img.src = state.data;
+        placeholder.after(img);
+        const focused = document.activeElement === button;
+        placeholder.hidden = true;
+        if (focused) {
+          img.tabIndex = 0;
+          img.focus({ preventScroll: true });
+        }
+      }
+      button.disabled = state?.status === 'loading';
+      button.textContent = state?.status === 'loading' ? 'Loading…' : state?.status === 'error' ? 'Retry image' : 'Load image';
+      if (!button.dataset.originalTitle) button.dataset.originalTitle = button.title;
+      button.title = state?.error || button.dataset.originalTitle;
+    }
+  });
   const follow = event => {
     const link = event.target.closest?.('a[href], area[href], a[xlink\\:href]');
     if (!link) return;
@@ -27,4 +64,5 @@
       }
     }
   });
+  send({ action: 'ready' });
 })();

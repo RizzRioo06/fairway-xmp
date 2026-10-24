@@ -30,7 +30,7 @@ required-features = ["terminal"]
 [features]
 default = ["desktop"]
 cli = []
-desktop = ["terminal", "dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater", "dep:tauri-plugin-dialog", "dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+desktop = ["terminal", "dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater", "dep:tauri-plugin-dialog", "dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:reqwest", "dep:rustls"]
 terminal = ["dep:portable-pty"]
 native-macos-hosts = ["desktop"]
 native-hosts-writer = []
@@ -55,6 +55,8 @@ rcgen = { version = "0.14.10", features = ["x509-parser"] }
 time = "0.3"
 x509-parser = { version = "0.18.1", features = ["verify"] }
 ring = "0.17"
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = { version = "=0.10.1", optional = true }

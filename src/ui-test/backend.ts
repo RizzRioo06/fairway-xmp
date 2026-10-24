@@ -144,6 +144,10 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   if (command === 'get_php_settings') return phpSettings(String(args.version)) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'startup_status' || command === 'retry_startup') return { blocking: false, errors: [], dataDir: data.dataDir } as T;
+  if (command === 'load_mail_image') {
+    // UI scenarios never contact the image server.
+    return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' as T;
+  }
   if (command === 'save_mail_attachment') {
     const forced = (window as Window & { __fairwayMailSave?: { delay?: number; error?: string; path?: string } }).__fairwayMailSave;
     if (forced?.delay) await new Promise(resolve => setTimeout(resolve, forced.delay));

@@ -2,6 +2,10 @@
 
 Past entries record released changes; they are not current development or release restrictions. See [Build and release](docs/build-and-release.md) for the current process.
 
+## Unreleased
+
+- Add a per-message Load remote images checkbox and individual Load image placeholders to Mail. Keep remote images blocked initially, reset consent on every message open, and preserve the preview’s restrictive security policies through a bounded, cookie-free native image loader.
+
 ## 0.1.0-rc.4 — 2026-10-24
 
 - Add per-version PHP settings for memory, execution time, upload size, timezone, displayed errors and session upload progress. Keep overrides across app/runtime updates, coordinate PHP/Nginx upload limits and response timeouts, and provide Reset to defaults. Upload progress remains enabled by default.

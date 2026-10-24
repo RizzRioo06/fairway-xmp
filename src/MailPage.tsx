@@ -3,7 +3,7 @@ import { Download, ExternalLink, Inbox, Mail, Paperclip, Play, ScrollText, Searc
 import { canControl, invoke } from './bridge';
 import Workspace, { MaximizeWorkspace } from './Workspace';
 import { handleLayerKey, moveFocusFromFrame } from './modal-focus';
-import { mailPreview } from './mail-preview';
+import { prepareMailPreview, type ImageState } from './mail-preview';
 import type { MailAddress, MailAttachment, MailList, MailMessage, Snapshot } from './types';
 
 type Props = {
@@ -44,6 +44,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   const [list, setList] = useState<MailList | null>(null);
   const [selected, setSelected] = useState<MailMessage | null>(null);
   const [tab, setTab] = useState<'html' | 'text'>('html');
+  const [previewKey, setPreviewKey] = useState(0);
   const [confirmClear, setConfirmClear] = useState(false);
   const listRequest = useRef(0);
   const detailRequest = useRef(0);
@@ -110,7 +111,7 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
     try {
       const opened = await invoke<MailMessage>('mail_inbox', { request: { action: 'message', id } });
       if (request !== detailRequest.current) return;
-      setSelected(opened); setTab(opened.HTML ? 'html' : 'text'); setSaved(null);
+      setSelected(opened); setPreviewKey(request); setTab(opened.HTML ? 'html' : 'text'); setSaved(null);
       if (opened.InlineImagesIncomplete) setError('Some embedded images could not be loaded. Open in browser to view the complete email.');
       setList(current => current && { ...current, messages: current.messages.map(item => item.ID === id ? { ...item, Read: true } : item) });
     } catch (reason) { if (request === detailRequest.current) { setSaved(null); setError(message(reason)); } }
@@ -186,10 +187,9 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
             <div className="mail-preview-title"><h2>{selected.Subject || '(No subject)'}</h2><button className="icon-button" title="Delete email" aria-label="Delete email" onClick={() => { void remove({ action: 'delete', ids: [selected.ID] }); }}><Trash2 size={15} /></button></div>
             <dl className="mail-meta"><div><dt>From</dt><dd>{addresses(selected.From ? [selected.From] : null)}</dd></div><div><dt>To</dt><dd>{addresses(selected.To)}</dd></div>{selected.Cc?.length ? <div><dt>Cc</dt><dd>{addresses(selected.Cc)}</dd></div> : null}<div><dt>Date</dt><dd>{new Date(selected.Date).toLocaleString()}</dd></div></dl>
             {selected.Attachments?.length ? <ul className="mail-attachments" aria-label="Attachments">{selected.Attachments.map(item => <li key={item.PartID}><button title="Save attachment" disabled={!canControl} onClick={() => { void save(selected.ID, item); }}><Download size={12} />{item.FileName || 'Attachment'}<span>{size(item.Size)}</span></button></li>)}</ul> : null}
-            <div className="mail-tabs" role="tablist">{selected.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
           </div>
           {/* Opaque sandbox; CSP permits only our trusted link/keyboard bridge. */}
-          {tab === 'html' && selected.HTML ? <MailBody key={selected.ID} html={selected.HTML} inlineImages={selected.InlineImages} onOpenLink={url => { void openLink(url); }} /> : <pre className="mail-body mail-text">{selected.Text || 'This email has no text version.'}</pre>}
+          <MailPreview key={`${selected.ID}:${previewKey}`} email={selected} tab={tab} setTab={setTab} onOpenLink={url => { void openLink(url); }} />
         </> : <div className="mail-list-empty"><Mail size={22} /><p>Select an email to read it.</p></div>}</div>
       </section>}
     <div className="mail-footer">
@@ -198,15 +198,51 @@ export default function MailPage({ data, busy, start, stop, logs, open, settings
   </Workspace>;
 }
 
-function MailBody({ html, inlineImages, onOpenLink }: { html: string; inlineImages?: Record<string, string>; onOpenLink: (url: string) => void }) {
+function MailPreview({ email, tab, setTab, onOpenLink }: { email: MailMessage; tab: 'html' | 'text'; setTab: (tab: 'html' | 'text') => void; onOpenLink: (url: string) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
-  const source = useMemo(() => mailPreview(html, inlineImages), [html, inlineImages]);
+  const preview = useMemo(() => prepareMailPreview(email.HTML, email.InlineImages), [email.HTML, email.InlineImages]);
+  const [loadAll, setLoadAll] = useState(false);
+  const [images, setImages] = useState<Record<string, ImageState>>({});
+  const currentImages = useRef(images);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current++; }, []);
+  function updateImage(id: string, state: ImageState) {
+    currentImages.current = { ...currentImages.current, [id]: state };
+    setImages(currentImages.current);
+  }
+  async function loadImages(ids: string[]) {
+    const request = generation.current;
+    for (const id of ids) {
+      if (generation.current !== request) return;
+      const image = preview.images.find(image => image.id === id);
+      if (!image || ['loaded', 'loading'].includes(currentImages.current[id]?.status)) continue;
+      updateImage(id, { status: 'loading' });
+      try {
+        const data = await invoke<string>('load_mail_image', { url: image.url });
+        if (generation.current !== request) return;
+        updateImage(id, { status: 'loaded', data });
+      } catch (reason) {
+        if (generation.current !== request) return;
+        updateImage(id, { status: 'error', error: message(reason) });
+      }
+    }
+  }
+  function syncImages() {
+    frame.current?.contentWindow?.postMessage({ type: 'fairway-mail-images', images: currentImages.current }, '*');
+  }
+  useEffect(syncImages, [images]);
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return;
       const message = event.data;
       if (!message || message.type !== 'fairway-mail-preview') return;
-      if (message.action === 'open' && typeof message.url === 'string') {
+      if (message.action === 'ready') {
+        syncImages();
+      } else if (message.action === 'image' && typeof message.id === 'string') {
+        void loadImages([message.id]);
+      } else if (message.action === 'image-error' && typeof message.id === 'string' && currentImages.current[message.id]?.status === 'loaded') {
+        updateImage(message.id, { status: 'error', error: 'This image could not be displayed. Retry or open in browser.' });
+      } else if (message.action === 'open' && typeof message.url === 'string') {
         try {
           const url = new URL(message.url);
           if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) onOpenLink(url.href);
@@ -219,6 +255,19 @@ function MailBody({ html, inlineImages, onOpenLink }: { html: string; inlineImag
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
-  }, [onOpenLink]);
-  return <iframe ref={frame} className="mail-body" title="Email content" sandbox="allow-scripts" srcDoc={source} />;
+  });
+  return <>
+    <div className="mail-preview-controls">
+      <div className="mail-tabs" role="tablist" aria-label="Email format">{email.HTML && <button role="tab" aria-selected={tab === 'html'} onClick={() => setTab('html')}>HTML</button>}<button role="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button></div>
+      {preview.images.length > 0 && <label className="mail-load-images" title="Loading remote images contacts their servers and may reveal your IP address. Unchecking cannot undo requests already sent.">
+        <input type="checkbox" checked={loadAll} disabled={tab !== 'html'} onChange={event => {
+          const checked = event.target.checked;
+          setLoadAll(checked);
+          if (checked) void loadImages(preview.images.map(image => image.id));
+          else { generation.current++; currentImages.current = {}; setImages({}); }
+        }} />Load remote images
+      </label>}
+    </div>
+    {tab === 'html' && email.HTML ? <iframe ref={frame} className="mail-body" title="Email content" sandbox="allow-scripts" srcDoc={preview.source} /> : <pre className="mail-body mail-text">{email.Text || 'This email has no text version.'}</pre>}
+  </>;
 }
