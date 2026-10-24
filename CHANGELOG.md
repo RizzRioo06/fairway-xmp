@@ -2,9 +2,11 @@
 
 Past entries record released changes; they are not current development or release restrictions. See [Build and release](docs/build-and-release.md) for the current process.
 
-## Unreleased
+## 0.1.0-rc.4 — pending release
 
-- Update bundled Nginx to 1.30.6, MySQL 9.7 LTS to 9.7.4 and Mailpit to 1.32.0, including their available security fixes. Refresh platform download pins and corresponding source inputs. PHP remains on 8.2.35, 8.3.36, 8.4.27 and 8.5.12; session upload-progress configuration is unchanged.
+- Add per-version PHP settings for memory, execution time, upload size, timezone, displayed errors and session upload progress. Keep overrides across app/runtime updates, coordinate PHP/Nginx upload limits and response timeouts, and provide Reset to defaults. Upload progress remains enabled by default.
+
+- Update bundled Nginx to 1.30.6, MySQL 9.7 LTS to 9.7.4 and Mailpit to 1.32.0, including their available security fixes. Refresh platform download pins and corresponding source inputs. PHP remains on 8.2.35, 8.3.36, 8.4.27 and 8.5.12; session upload progress stays enabled by default.
 
 - Enable sockets, SOAP and LDAP across bundled PHP versions on Windows, macOS and Linux, and require PCNTL/POSIX for Unix CLI workers. Add platform-aware runtime verification and CLI/web extension smoke checks. Redis projects use project-installed Predis and a user-supplied server.
 

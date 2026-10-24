@@ -50,6 +50,8 @@ Signed commits must match the build and already be in fetched `origin/main` hist
 
 ## Publish
 
+The prepared release notes are in [release-notes.md](release-notes.md); use `docs/release-notes.md` as the publication workflow's notes path.
+
 When the owner authorizes release:
 
 1. Prepare release notes and create/push a version tag at the tested source commit.

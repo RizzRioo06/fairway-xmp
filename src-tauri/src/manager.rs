@@ -492,6 +492,95 @@ impl Manager {
         Ok(())
     }
 
+    pub fn php_settings(&self, version: &str) -> Result<crate::php_settings::PhpSettingsView> {
+        self.layout.php_root_for_version(version)?;
+        let saved = crate::php_settings::Overrides::load(&self.layout)?;
+        Ok(crate::php_settings::PhpSettingsView {
+            version: version.into(),
+            settings: saved.settings(version)?,
+            customized: saved.versions.contains_key(version),
+            timezones: crate::php_settings::timezones(&self.layout, version)?,
+        })
+    }
+
+    pub fn save_php_settings(
+        &mut self,
+        version: &str,
+        settings: Option<crate::php_settings::PhpSettings>,
+    ) -> Result<crate::php_settings::PhpSettingsView> {
+        self.layout.php_root_for_version(version)?;
+        let active = self.layout.php_selection()? == version;
+        if active
+            && ["php", "nginx"]
+                .iter()
+                .any(|id| self.processes.contains_key(*id))
+        {
+            return Err("Stop Nginx and PHP before changing the active PHP settings.".into());
+        }
+        let settings = settings.unwrap_or_default();
+        settings.validate()?;
+        let timezones = crate::php_settings::timezones(&self.layout, version)?;
+        if !timezones.contains(&settings.timezone) {
+            return Err(format!(
+                "{} is not a valid PHP timezone.",
+                settings.timezone
+            ));
+        }
+        let mut saved = crate::php_settings::Overrides::load(&self.layout)?;
+        saved.set(version, &settings)?;
+        let mut paths = vec![self.layout.data.join("php-settings.json")];
+        if active {
+            paths.extend(
+                [
+                    "php.ini",
+                    "php-fpm.conf",
+                    "nginx.conf",
+                    "mysql.cnf",
+                    "admin.cnf",
+                    "config.inc.php",
+                ]
+                .map(|name| self.layout.data.join("config").join(name)),
+            );
+        }
+        let recovery = paths
+            .into_iter()
+            .map(|path| {
+                let contents = match fs::read(&path) {
+                    Ok(bytes) => Some((
+                        bytes,
+                        fs::metadata(&path)
+                            .map_err(|e| e.to_string())?
+                            .permissions(),
+                    )),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(e) => return Err(e.to_string()),
+                };
+                Ok(SavedFile { path, contents })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let result = saved.save(&self.layout).and_then(|()| {
+            if active {
+                self.layout.write_configs(&self.ports)
+            } else {
+                Ok(())
+            }
+        });
+        if let Err(error) = result {
+            return match restore_files(&recovery) {
+                Ok(()) => Err(error),
+                Err(restore) => Err(format!(
+                    "{error} Previous PHP settings could not be fully restored: {restore}"
+                )),
+            };
+        }
+        Ok(crate::php_settings::PhpSettingsView {
+            version: version.into(),
+            settings,
+            customized: saved.versions.contains_key(version),
+            timezones,
+        })
+    }
+
     pub fn save_php_version(&mut self, version: String) -> Result<()> {
         if !self.processes.is_empty() {
             return Err("Stop all services before changing PHP versions.".into());

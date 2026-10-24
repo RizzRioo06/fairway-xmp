@@ -10,6 +10,7 @@ Start with the [user guide](../README.md) or [development setup](../CONTRIBUTING
 | [CI performance](ci-build-performance.md) | Cache reuse, build retries and artifact cleanup |
 | [Data browser](data-browser.md) | MySQL/SQLite operations, limits and CLI commands |
 | [PostgreSQL clients](postgres-client-support.md) | Connecting PHP applications to a user-supplied server |
+| [PHP settings](php-settings.md) | Per-version controls, persistent overrides and reset |
 | [PHP clients and workers](php-client-support.md) | Sockets, SOAP, LDAP, Redis/Predis and Unix worker support |
 | [Backup and restore](backup-and-restore.md) | Creating and restoring database backups |
 | [Security boundaries](security-boundaries.md) | Process, HTTP, certificate, trust and renderer boundaries |

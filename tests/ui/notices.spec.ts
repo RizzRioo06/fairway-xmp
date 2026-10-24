@@ -36,6 +36,7 @@ test.beforeEach(async ({ page }) => {
       async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
         if (command === 'plugin:event|listen') { listeners.set(String(args.event), Number(args.handler)); return next as T; }
         if (command === 'plugin:event|unlisten') return undefined as T;
+        if (command === 'get_php_settings') return { version: String(args.version), settings: { memoryLimitMb: 256, maxExecutionTime: 120, uploadMaxFilesizeMb: 64, timezone: 'UTC', displayErrors: true, sessionUploadProgress: true }, customized: false, timezones: ['UTC'] } as T;
         if (command === 'snapshot') return structuredClone(data) as T;
         await new Promise(resolve => setTimeout(resolve, 600));
         if (fail) { fail = false; throw new Error('Could not complete the operation. Try again.'); }

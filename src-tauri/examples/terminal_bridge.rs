@@ -103,6 +103,30 @@ fn respond(
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
         Ok(match request["command"].as_str().unwrap_or_default() {
+            "get_php_settings" => serde_json::to_value(
+                manager
+                    .lock()
+                    .unwrap()
+                    .php_settings(args["version"].as_str().ok_or("Missing version")?)?,
+            )
+            .unwrap(),
+            "save_php_settings" => {
+                let settings =
+                    serde_json::from_value(args["settings"].clone()).map_err(|e| e.to_string())?;
+                serde_json::to_value(manager.lock().unwrap().save_php_settings(
+                    args["version"].as_str().ok_or("Missing version")?,
+                    settings,
+                )?)
+                .unwrap()
+            }
+            "save_settings" => {
+                let mut manager = manager.lock().unwrap();
+                manager.save_settings(
+                    serde_json::from_value(args["ports"].clone()).map_err(|e| e.to_string())?,
+                    args["version"].as_str().ok_or("Missing version")?.into(),
+                )?;
+                serde_json::to_value(manager.snapshot()).unwrap()
+            }
             "pick_sql_file" => json!(manager
                 .lock()
                 .unwrap()

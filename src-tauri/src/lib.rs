@@ -8,6 +8,7 @@ pub mod integration;
 pub mod logs;
 pub mod mail;
 pub mod manager;
+pub mod php_settings;
 pub mod process;
 pub mod tls;
 pub mod updates;

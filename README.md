@@ -111,6 +111,8 @@ The **Structure** tab supports ordinary/unique index management and foreign-key 
 
 Fairway includes PHP 8.2 through 8.5. Switch under **Settings → Service Settings → Advanced settings** after stopping all services. Select the version and click **Save**. The selection controls websites, terminal PHP, and Composer, and is saved for the next launch. On Linux, use `fairway php-version 8.2` through `fairway php-version 8.5` after `fairway stop all`. See the [step by step test guide](docs/testing.md#isolated-development-profiles). PHP 8.5 is the default. A saved PHP 8.0 or 8.1 selection is left in place and blocks startup until you choose PHP 8.2 or later.
 
+Under **Settings → PHP settings**, adjust memory, execution time, upload size, timezone, displayed errors and session upload progress. The active PHP version is shown first; other versions are available under **Choose another PHP version**. Changes survive app updates. Stop Nginx/PHP before saving active settings; **Reset to defaults** restores that version only. See [PHP settings](docs/php-settings.md).
+
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.
 
 ## Your database

@@ -298,7 +298,13 @@ impl Layout {
     }
 
     pub fn php_root(&self) -> Result<PathBuf> {
-        let selected = self.php_version()?;
+        self.php_root_for_version(&self.php_version()?)
+    }
+
+    pub fn php_root_for_version(&self, selected: &str) -> Result<PathBuf> {
+        if !self.php_versions()?.contains_key(selected) {
+            return Err(unavailable_php_message(selected));
+        }
         let manifest = self.runtime_manifest()?;
         let default = manifest["php"]
             .as_str()
@@ -391,10 +397,12 @@ impl Layout {
 
     pub fn write_configs(&self, ports: &Ports) -> Result<()> {
         ports.validate()?;
+        let settings =
+            crate::php_settings::Overrides::load(self)?.settings(&self.php_version()?)?;
         let conf = self.data.join("config");
         let php = format!(
-            "[PHP]\nengine=On\nshort_open_tag=Off\nerror_reporting=E_ALL\ndisplay_errors=On\nlog_errors=On\nerror_log={}\ndate.timezone=UTC\nmemory_limit=256M\npost_max_size=64M\nupload_max_filesize=64M\nmax_execution_time=120\nsession.save_path={}\nupload_tmp_dir={}\nextension_dir={}\ncurl.cainfo={}\nopenssl.cafile={}\n{}{}",
-            ini(&self.data.join("logs/php.log")), ini(&self.data.join("sessions")),
+            "[PHP]\nengine=On\nshort_open_tag=Off\nerror_reporting=E_ALL\nlog_errors=On\nerror_log={}\n{}session.save_path={}\nupload_tmp_dir={}\nextension_dir={}\ncurl.cainfo={}\nopenssl.cafile={}\n{}{}",
+            ini(&self.data.join("logs/php.log")), settings.ini(), ini(&self.data.join("sessions")),
             ini(&self.data.join("tmp")), ini(&self.php_root()?.join("ext")),
             ini(&self.runtime.join("cacert.pem")), ini(&self.runtime.join("cacert.pem")),
             php_mail(self, ports),
@@ -417,7 +425,7 @@ impl Layout {
             }
             crate::tls::ensure_certificate(self)?;
         }
-        let nginx = nginx_config(self, ports, &projects);
+        let nginx = nginx_config(self, ports, &projects, &settings);
         atomic_write(&conf.join("nginx.conf"), nginx.as_bytes())?;
         let mysql = format!(
             "[mysqld]\nbasedir={}\ndatadir={}\nport={}\nbind-address=127.0.0.1\nlower_case_table_names=1\nmysqlx=OFF\nlocal-infile=OFF\ncharacter-set-server=utf8mb4\ncollation-server=utf8mb4_unicode_ci\nmax_connections=40\ninnodb_buffer_pool_size=64M\nlog-error={}\npid-file={}\nsocket={}\nsecure-file-priv={}\n",
@@ -670,7 +678,14 @@ pub fn private_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn nginx_config(layout: &Layout, ports: &Ports, projects: &[ProjectConfig]) -> String {
+fn nginx_config(
+    layout: &Layout,
+    ports: &Ports,
+    projects: &[ProjectConfig],
+    settings: &crate::php_settings::PhpSettings,
+) -> String {
+    let request_limit_mb = settings.request_limit_mb();
+    let read_timeout_seconds = settings.fastcgi_read_timeout_seconds();
     let fastcgi = format!(
         "fastcgi_pass 127.0.0.1:{};\nfastcgi_param QUERY_STRING $query_string;\nfastcgi_param REQUEST_METHOD $request_method;\nfastcgi_param CONTENT_TYPE $content_type;\nfastcgi_param CONTENT_LENGTH $content_length;\nfastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\nfastcgi_param SCRIPT_NAME $fastcgi_script_name;\nfastcgi_param REQUEST_URI $request_uri;\nfastcgi_param DOCUMENT_URI $document_uri;\nfastcgi_param DOCUMENT_ROOT $document_root;\nfastcgi_param SERVER_PROTOCOL $server_protocol;\nfastcgi_param REQUEST_SCHEME $scheme;\nfastcgi_param GATEWAY_INTERFACE CGI/1.1;\nfastcgi_param SERVER_SOFTWARE nginx;\nfastcgi_param REMOTE_ADDR $remote_addr;\nfastcgi_param REMOTE_PORT $remote_port;\nfastcgi_param SERVER_ADDR $server_addr;\nfastcgi_param SERVER_PORT $server_port;\nfastcgi_param SERVER_NAME $server_name;\nfastcgi_param REDIRECT_STATUS 200;\nfastcgi_param HTTP_PROXY \"\";\n", ports.php);
     // A missing web root stays configured (Nginx answers 404), so restoring the folder
@@ -693,7 +708,7 @@ fn nginx_config(layout: &Layout, ports: &Ports, projects: &[ProjectConfig]) -> S
         rejected.push_str(&format!("server {{ listen 127.0.0.1:{} ssl default_server; ssl_reject_handshake on; server_name _; return 444; }}\n", crate::tls::https_port()));
     }
     format!(
-        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\ngeo $fairway_dollar {{ default \"$\"; }}\nmap $request_uri $fairway_request_path {{ ~^([^?]*) $1; default $uri; }}\nlog_format fairway escape=json '{{\"time\":\"$time_iso8601\",\"method\":\"$request_method\",\"uri\":\"$fairway_request_path\",\"status\":\"$status\",\"host\":\"$host\",\"port\":\"$server_port\",\"scheme\":\"$scheme\",\"duration\":\"$request_time\"}}';\naccess_log {} fairway;\nclient_max_body_size 64m;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\n{rejected}server {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
+        "worker_processes 1;\npid {};\nerror_log {};\nevents {{ worker_connections 256; }}\nhttp {{\ninclude {};\ndefault_type application/octet-stream;\ngeo $fairway_dollar {{ default \"$\"; }}\nmap $request_uri $fairway_request_path {{ ~^([^?]*) $1; default $uri; }}\nlog_format fairway escape=json '{{\"time\":\"$time_iso8601\",\"method\":\"$request_method\",\"uri\":\"$fairway_request_path\",\"status\":\"$status\",\"host\":\"$host\",\"port\":\"$server_port\",\"scheme\":\"$scheme\",\"duration\":\"$request_time\"}}';\naccess_log {} fairway;\nclient_max_body_size {request_limit_mb}m;\nfastcgi_read_timeout {read_timeout_seconds}s;\nclient_body_temp_path {};\nfastcgi_temp_path {};\nproxy_temp_path {};\nuwsgi_temp_path {};\nscgi_temp_path {};\n{rejected}server {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php index.html;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\nserver {{ listen 127.0.0.1:{}; server_name localhost 127.0.0.1; root {}; index index.php;\nlocation = /__fairway_health {{ access_log off; default_type text/plain; return 200 'fairway'; }}\nlocation ~ /\\. {{ deny all; }}\nlocation = /config.inc.php {{ deny all; }}\nlocation ~ ^/(libraries|templates|vendor|setup)/ {{ deny all; }}\nlocation / {{ try_files $uri $uri/ =404; }}\nlocation ~ \\.php$ {{ try_files $uri =404; {} }}\n}}\n{}\n}}\n",
         nginx_path(&layout.data.join("nginx.pid")), nginx_path(&layout.data.join("logs/nginx.log")),
         nginx_path(&layout.runtime.join("nginx/conf/mime.types")), nginx_variable_path(&layout.data.join("logs/access.log")),
         nginx_path(&layout.data.join("tmp/client")), nginx_path(&layout.data.join("tmp/fastcgi")),
@@ -758,6 +773,40 @@ mod tests {
         .is_err());
     }
     #[test]
+    fn nginx_timeout_follows_php_and_is_inherited_by_every_site() {
+        let layout = Layout::at(
+            PathBuf::from("/tmp/home"),
+            PathBuf::from("/tmp/data"),
+            PathBuf::from("/tmp/runtime"),
+        );
+        let projects = [ProjectConfig {
+            name: "Shop".into(),
+            domain: "shop".into(),
+            root: layout.www.clone(),
+            https: true,
+            index_fallback: true,
+        }];
+        for (execution, expected_timeout) in [(120, 150), (1, 31), (86_400, 86_430), (0, 86_400)] {
+            let settings = crate::php_settings::PhpSettings {
+                max_execution_time: execution,
+                ..Default::default()
+            };
+            let config = nginx_config(&layout, &Ports::default(), &projects, &settings);
+            assert_eq!(config.matches("fastcgi_read_timeout ").count(), 1);
+            let directive = format!("fastcgi_read_timeout {expected_timeout}s;");
+            let position = config.find(&directive).expect("the aligned read timeout");
+            assert!(config.find("http {\n").unwrap() < position);
+            assert!(position < config.find("server { listen").unwrap());
+            // Each PHP location inherits the shared directive: localhost,
+            // phpMyAdmin and the registered site's HTTP and HTTPS servers.
+            assert_eq!(config.matches("fastcgi_pass ").count(), 4);
+            assert!(config.contains("listen 127.0.0.1:8801;"));
+            assert!(config.contains("server_name shop.test;"));
+            assert!(config.contains(" ssl;"));
+        }
+    }
+
+    #[test]
     fn configurations_escape_paths_and_keep_roots_separate() {
         let layout = Layout::at(
             PathBuf::from("/Users/A $name"),
@@ -765,7 +814,7 @@ mod tests {
             PathBuf::from("/tmp/runtime"),
         );
         assert_eq!(layout.www, PathBuf::from("/Users/A $name/fairway/www"));
-        let nginx = nginx_config(&layout, &Ports::default(), &[]);
+        let nginx = nginx_config(&layout, &Ports::default(), &[], &Default::default());
         assert!(nginx.contains("/Users/A ${fairway_dollar}name/fairway/www"));
         assert_eq!(nginx_path(Path::new("/tmp/A $name")), "\"/tmp/A $name\"");
         assert!(nginx.contains("listen 127.0.0.1:8801"));
@@ -931,7 +980,7 @@ mod tests {
         ];
         layout.save_projects(&projects).unwrap();
         assert_eq!(layout.registered_projects().unwrap(), projects);
-        let nginx = nginx_config(&layout, &Ports::default(), &projects);
+        let nginx = nginx_config(&layout, &Ports::default(), &projects, &Default::default());
         let localhost = format!(
             "server_name localhost 127.0.0.1; root {}",
             nginx_path(&layout.www)

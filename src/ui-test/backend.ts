@@ -1,6 +1,6 @@
 import { preview } from '../bridge';
 import { terminalRequest } from './terminal';
-import type { MailMessage, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
+import type { MailMessage, PhpSettings, PhpSettingsView, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
 import { cancelData, databaseRequest, resetData } from './data-browser';
 
 // Fixture modules own event subscriptions and state. Reload them together so
@@ -15,6 +15,12 @@ let scenario: Scenario = 'Stopped';
 export const defaultPlatform: Platform = navigator.platform.startsWith('Mac') ? 'macOS' : 'Windows';
 let platform: Platform = defaultPlatform;
 let data: Snapshot;
+const phpDefaults: PhpSettings = { memoryLimitMb: 256, maxExecutionTime: 120, uploadMaxFilesizeMb: 64, timezone: 'UTC', displayErrors: true, sessionUploadProgress: true };
+let phpOverrides: Record<string, PhpSettings> = {};
+function phpSettings(version: string): PhpSettingsView {
+  if (!data.phpVersions[version]) throw new Error('PHP version is unavailable.');
+  return { version, settings: structuredClone(phpOverrides[version] ?? phpDefaults), customized: !!phpOverrides[version], timezones: ['UTC', 'Asia/Yangon', 'America/New_York', 'Europe/London'] };
+}
 let mailbox: (MailMessage & { Read: boolean })[] = [];
 
 function seedMail() {
@@ -98,6 +104,7 @@ function running(id: ServiceId, value: boolean) {
 
 export function select(next: Scenario, os: Platform) {
   resetData();
+  phpOverrides = {};
   seedMail();
   scenario = next; platform = os;
   data = { ...structuredClone(preview), ...paths(), runtimeReady: next !== 'Missing runtime', mailAvailable: next !== 'Missing runtime' && next !== 'Mail unavailable', pathInstalled: true };
@@ -134,6 +141,7 @@ export function listen(event: string, callback: (payload: unknown) => void) {
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
+  if (command === 'get_php_settings') return phpSettings(String(args.version)) as T;
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'startup_status' || command === 'retry_startup') return { blocking: false, errors: [], dataDir: data.dataDir } as T;
   if (command === 'save_mail_attachment') {
@@ -173,6 +181,17 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
         running(args.service, action !== 'stop');
       } else throw new Error('Unsupported simulated service action.');
       result = structuredClone(data); break;
+    }
+    case 'save_php_settings': {
+      const version = String(args.version);
+      const current = phpSettings(version);
+      if (version === data.phpVersion && data.services.some(service => ['nginx', 'php'].includes(service.id) && service.running)) throw new Error('Stop Nginx and PHP before changing the active PHP settings.');
+      if (args.settings) {
+        const settings = args.settings as PhpSettings;
+        if (!current.timezones.includes(settings.timezone)) throw new Error(`${settings.timezone} is not a valid PHP timezone.`);
+        phpOverrides[version] = structuredClone(settings);
+      } else delete phpOverrides[version];
+      result = phpSettings(version); break;
     }
     case 'save_settings': {
       if (data.services.some(service => service.running)) throw new Error('Stop all services before changing settings.');

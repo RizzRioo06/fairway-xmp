@@ -23,3 +23,18 @@ export type MailAttachment = { PartID: string; FileName: string; ContentType: st
 export type MailMessage = { ID: string; From: MailAddress | null; To: MailAddress[] | null; Cc: MailAddress[] | null; Subject: string; Date: string; HTML: string; Text: string; Attachments: MailAttachment[] | null; InlineImages?: Record<string, string>; InlineImagesIncomplete?: boolean };
 export type LogEntry = { host?: string | null; id: string; source: string; file: string; severity: string; time: string | null; text: string };
 export type LogSnapshot = { revision?: string; entries: LogEntry[]; unavailable: string[]; limited: boolean };
+export interface PhpSettings {
+  memoryLimitMb: number;
+  maxExecutionTime: number;
+  uploadMaxFilesizeMb: number;
+  timezone: string;
+  displayErrors: boolean;
+  sessionUploadProgress: boolean;
+}
+
+export interface PhpSettingsView {
+  version: string;
+  settings: PhpSettings;
+  customized: boolean;
+  timezones: string[];
+}

@@ -92,6 +92,8 @@ jobs:
           } else {
             python scripts/prepare_runtime.py
           }
+      - name: Verify persistent PHP settings and real uploads
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example php_settings_smoke --no-default-features --locked -- .runtime-work/php-settings-smoke
       - name: Verify PHP client extensions and Unix worker support
         run: cargo run --manifest-path src-tauri/Cargo.toml --example php_extension_smoke --no-default-features --locked -- .runtime-work/php-extension-smoke
       - name: Verify PHP clients with the runner's external PostgreSQL test server
@@ -103,7 +105,7 @@ jobs:
         env:
           FAIRWAY_NATIVE_ONLY: '1'
           FAIRWAY_TEST_RUNTIME: ${{ github.workspace }}/src-tauri/resources/runtime
-        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/sqlite-browser-native.spec.ts tests/ui/schema-details-native.spec.ts tests/ui/logs-native.spec.ts --project chromium --workers=1
+        run: npx playwright test tests/ui/terminal-native.spec.ts tests/ui/data-browser-native.spec.ts tests/ui/sqlite-browser-native.spec.ts tests/ui/schema-details-native.spec.ts tests/ui/logs-native.spec.ts tests/ui/php-settings-native.spec.ts --project chromium --workers=1
       - name: Save native desktop browser report
         if: always()
         uses: actions/upload-artifact@v6

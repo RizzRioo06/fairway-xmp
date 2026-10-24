@@ -59,6 +59,7 @@ test('removed PHP selection can be replaced in Settings while service startup st
         if (command.startsWith('plugin:event|')) return 1 as T;
         if (command === 'startup_status' || command === 'retry_startup') return status() as T;
         if (command === 'snapshot') return structuredClone(snapshot) as T;
+        if (command === 'get_php_settings') return { version: String(args.version), settings: { memoryLimitMb: 256, maxExecutionTime: 120, uploadMaxFilesizeMb: 64, timezone: 'UTC', displayErrors: true, sessionUploadProgress: true }, customized: false, timezones: ['UTC'] } as T;
         if (command === 'save_settings') {
           if (!snapshot.phpVersions[String(args.version)]) throw new Error('Unavailable PHP');
           snapshot.phpVersion = String(args.version);
@@ -74,7 +75,7 @@ test('removed PHP selection can be replaced in Settings while service startup st
   await expect(page.getByRole('region', { name: 'Startup recovery' })).toContainText('PHP 8.1 is no longer included');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByText('Advanced settings', { exact: true }).click();
-  const version = page.getByLabel('PHP version');
+  const version = page.getByRole('combobox', { name: /^PHP version/ });
   await expect(version).toBeEnabled();
   await expect(version).toHaveValue('8.1');
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();

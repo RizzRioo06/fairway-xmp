@@ -481,6 +481,28 @@ async fn save_settings(
     .await
 }
 
+#[tauri::command]
+async fn get_php_settings(
+    state: State<'_, Shared>,
+    version: String,
+) -> Result<crate::php_settings::PhpSettingsView> {
+    access(state.inner().clone(), move |m| m.php_settings(&version)).await
+}
+
+#[tauri::command]
+async fn save_php_settings(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    version: String,
+    settings: Option<crate::php_settings::PhpSettings>,
+) -> Result<crate::php_settings::PhpSettingsView> {
+    let _operation = begin_operation(&app, "Saving PHP settings…")?;
+    access(state.inner().clone(), move |m| {
+        m.save_php_settings(&version, settings)
+    })
+    .await
+}
+
 /// Match the hosts file to the registered domains. Runs outside the manager lock
 /// because the OS approval prompt waits for the user.
 async fn sync_hosts(state: Shared) -> Result<()> {
@@ -1161,6 +1183,8 @@ pub fn run() {
             save_mail_attachment,
             service_action,
             save_settings,
+            get_php_settings,
+            save_php_settings,
             save_project,
             remove_project,
             sync_domains,

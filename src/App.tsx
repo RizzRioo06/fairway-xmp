@@ -5,8 +5,9 @@ import {
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
 import { canControl, invoke, isDesktop, isUiTest, listen, preview } from './bridge';
-import type { Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, StartupStatus, UpdateInfo, UpdateProgress } from './types';
+import type { PhpSettingsView, Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, StartupStatus, UpdateInfo, UpdateProgress } from './types';
 import HelpTip from './HelpTip';
+import PhpSettingsCard from './PhpSettings';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
 import MailPage from './MailPage';
@@ -415,6 +416,14 @@ function AppContent() {
               <button className="primary" disabled={!canControl || anyRunning || !!busy || !canSelectPhp || !data.phpVersions[phpVersion]} type="submit">Save</button>
             </form>
           </section>
+          <PhpSettingsCard data={data} busy={!!busy || !!backendBusy} save={async (version, settings) => {
+            let result: PhpSettingsView | undefined;
+            await run('Saving PHP settings…', async () => {
+              result = await invoke<PhpSettingsView>('save_php_settings', { version, settings });
+              setNotice({ kind: 'success', text: settings ? `PHP ${version} settings saved.` : `PHP ${version} defaults restored.` });
+            });
+            return result;
+          }} />
           <section className="settings-card cli-tools" aria-label="Command-line tools">
             <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. The embedded terminal uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
             <p>{data.pathInstalled ? 'Available in new terminals and restarted editors.' : 'Add these commands to your user PATH.'}</p>
