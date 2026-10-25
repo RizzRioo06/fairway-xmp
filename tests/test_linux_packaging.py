@@ -58,6 +58,9 @@ class LinuxInstallationSafetyTests(unittest.TestCase):
         self.commands.mkdir()
         self.calls = self.root / 'calls'
         self.env = {**os.environ, 'HOME': str(self.home),
+                    # Native lifetime locking is covered by the CLI tests; this
+                    # fixture substitutes a shell logger for the native binary.
+                    'FAIRWAY_UNINSTALL_LOCKED': '1',
                     'XDG_DATA_HOME': str(self.home / '.local/share'),
                     'PATH': str(self.commands) + os.pathsep + os.environ['PATH'],
                     'FAIRWAY_TEST_CALLS': str(self.calls)}
@@ -215,6 +218,24 @@ class LinuxInstallationSafetyTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('separate from your projects', result.stderr)
         self.assertFalse(prefix.parent.exists())
+
+    def test_install_and_uninstall_refuse_node_storage_and_browser_backup_overlaps(self):
+        stores = [self.home / '.local/share/fnm', self.home / '.fnm',
+                  self.home / '.data-browser', self.home / 'custom-node-store']
+        self.env['FNM_DIR'] = str(stores[-1])
+        for store in stores:
+            with self.subTest(store=store):
+                result = self.run_script(self.source / 'install.sh', '--prefix', store / 'tools')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.calls.exists())
+        prefix = self.home / 'installation'
+        release = self.installation(prefix)
+        self.env['FNM_DIR'] = str(release / 'student-node-versions')
+        result = self.run_script(release / 'uninstall.sh')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('overlap', result.stderr)
+        self.assertTrue(release.is_dir())
+        self.assertFalse(self.calls.exists())
 
     def test_installer_rejects_symlinked_management_paths(self):
         for name in ('.fairway-installation', 'releases'):

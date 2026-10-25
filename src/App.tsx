@@ -1,13 +1,14 @@
-import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   ArrowDownToLine, ArrowUpRight, Check, ChevronRight, CircleHelp, Clipboard, Code2, PanelLeftClose, PanelLeftOpen,
   AppWindow, Database, Download, ExternalLink, FolderOpen, Globe, Leaf, LoaderCircle, Mail, Play,
   RefreshCw, ScrollText, Settings2, Square, Terminal, X,
 } from 'lucide-react';
 import { canControl, invoke, isDesktop, isUiTest, listen, preview } from './bridge';
-import type { PhpSettingsView, Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, StartupStatus, UpdateInfo, UpdateProgress } from './types';
+import type { NodeStatus, PhpSettingsView, Ports, Project, ProjectConfig, ServiceId, ServiceStatus, Snapshot, StartupStatus, UpdateInfo, UpdateProgress } from './types';
 import HelpTip from './HelpTip';
 import PhpSettingsCard from './PhpSettings';
+import NodeTools from './NodeTools';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
 import MailPage from './MailPage';
@@ -109,6 +110,8 @@ function AppContent() {
     setNoticeState({ kind: 'error', text });
   }, []);
   const [report, setReport] = useState<string | null>(null);
+  const [nodeTools, setNodeTools] = useState<NodeStatus | null>(null);
+  const [nodePreviewRevision, setNodePreviewRevision] = useState(0);
   const [help, setHelp] = useState(false);
   const [sidebarFolded, setSidebarFolded] = useState(false);
   const [mailSettings, setMailSettings] = useState(false);
@@ -174,6 +177,7 @@ function AppContent() {
       ...(isUiTest ? [listen('ui-test-reset', payload => {
         const current = payload as Snapshot;
         setPorts(current.ports); setPhpVersion(current.phpVersion);
+        setNodeTools(null); setNodePreviewRevision(value => value + 1);
         setNoticeState(null); lastBackendError.current = null;
         setUpdate(null); setUpdateProgress(null); setUpdatePending(false); setStartup(null); setReport(null); setHelp(false); setCopied(null);
       })] : []),
@@ -424,10 +428,11 @@ function AppContent() {
             });
             return result;
           }} />
+          {(data.os === 'macos' || data.os === 'windows') && <NodeTools key={`${data.os}-${nodePreviewRevision}`} windows={data.os === 'windows'} disabled={!!busy} onChange={setNodeTools} run={run} />}
           <section className="settings-card cli-tools" aria-label="Command-line tools">
             <div className="card-title"><h2>Command-line tools</h2><div className="cli-title-actions"><HelpTip label="Command-line tools help"><p>Open a new terminal or restart VS Code after enabling these tools.</p><p>Check with <code>php --version</code>, <code>composer --version</code>{databaseCliAvailable && <>, and <code>fairway db --help</code></>}.</p>{databaseCliAvailable && <p>Database tools support SQL export/import. Start MySQL for database operations. If fairway is missing after an upgrade, disable and enable these tools once.</p>}<p>App detection can differ from your terminal. The embedded terminal uses Fairway XMP’s commands.</p></HelpTip><span className={`status-label ${data.pathInstalled ? 'ready' : ''}`}>{data.pathInstalled ? 'Added to PATH' : 'Not added to PATH'}</span></div></div>
             <p>{data.pathInstalled ? 'Available in new terminals and restarted editors.' : 'Add these commands to your user PATH.'}</p>
-            <div className="cli-commands" aria-label="Terminal commands"><code>php</code><code>composer</code>{databaseCliAvailable && <code>fairway db</code>}</div>
+            <div className="cli-commands" aria-label="Terminal commands"><code>php</code><code>composer</code>{databaseCliAvailable && <code>fairway db</code>}{(data.os === 'macos' || data.os === 'windows') && nodeTools?.fnmVersion && <code>fnm</code>}{(data.os === 'macos' || data.os === 'windows') && (nodeTools?.enabled && nodeTools.fnmVersion ? nodeTools.managed ?? nodeTools.detected : nodeTools?.detected) && <><code>node</code><code>npm</code><code>npx</code></>}</div>
             <button className="secondary" disabled={!canControl || !!busy || (!data.pathInstalled && !data.runtimeReady)} onClick={() => { void run('Updating user PATH…', async () => {
               const enabled = !data.pathInstalled;
               setData(await invoke<Snapshot>('cli_integration', { enabled }));
@@ -451,8 +456,14 @@ function AppContent() {
           }); }}><RefreshCw size={15} />Check for updates</button>
             <button className="secondary" disabled={!canControl || !!busy} onClick={() => open('releases')}>View downloads<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('source')}>Source code<ExternalLink size={15} /></button><button className="secondary" disabled={!canControl || !!busy} onClick={() => open('issues')}>Get help<ExternalLink size={15} /></button></div>
             {update && !update.configured && <p className="settings-hint">Visit the downloads page to see available releases.</p>}
-            {updateProgress && <div className="update-progress" role="status"><span>{updateProgress.phase === 'downloading' ? `Downloading update${updateProgress.total ? ` · ${Math.min(100, Math.floor((updateProgress.downloaded ?? 0) / updateProgress.total * 100))}%` : ''}…` : updateProgress.phase === 'verifying' ? 'Verifying update…' : updateProgress.phase === 'preparing' ? 'Backing up databases and stopping services…' : 'Installing update and restarting…'}</span>{updateProgress.phase === 'downloading' && <progress aria-label="Update download" value={updateProgress.total ? updateProgress.downloaded ?? 0 : undefined} max={updateProgress.total ?? undefined} />}</div>}
-            {update?.version && <div className="update-available"><h3>Version {update.version} is available</h3><p className="release-notes">{update.notes ?? 'A tested environment update is ready.'}</p><button className="primary" disabled={!!busy || updatePending} onClick={() => { void installUpdate(update.version!); }}>Install update</button></div>}
+            {update?.version && <div className="update-available" key={update.version}>
+              <h3>Version {update.version} is available</h3>
+              {update.notes?.trim() ? <UpdateReleaseNotes notes={update.notes} /> : <p>A tested environment update is ready.</p>}
+              <div className="update-install-actions">
+                <button className="primary" disabled={!!busy || updatePending} onClick={() => { void installUpdate(update.version!); }}>Install update</button>
+                {updateProgress && <div className="update-progress" role="status"><span>{updateProgress.phase === 'downloading' ? `Downloading update${updateProgress.total ? ` · ${Math.min(100, Math.floor((updateProgress.downloaded ?? 0) / updateProgress.total * 100))}%` : ''}…` : updateProgress.phase === 'verifying' ? 'Verifying update…' : updateProgress.phase === 'preparing' ? 'Backing up databases and stopping services…' : 'Installing update and restarting…'}</span>{updateProgress.phase === 'downloading' && <progress aria-label="Update download" value={updateProgress.total ? updateProgress.downloaded ?? 0 : undefined} max={updateProgress.total ?? undefined} />}</div>}
+              </div>
+            </div>}
           </section>
         </>}
         </>}
@@ -515,6 +526,33 @@ function ServiceCard({ service, version, unavailable, disabled, busy, onAction, 
     <div className="service-name"><h3>{item.name}</h3>{version && <span>{version}</span>}</div><p>{item.description}</p>
     {address}{error}{actions}
   </section>;
+}
+
+function UpdateReleaseNotes({ notes }: { notes: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const content = useRef<HTMLParagraphElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    const element = content.current;
+    if (!element) return;
+    const measure = () => {
+      const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+      setOverflows(element.scrollHeight > lineHeight * 4 + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [notes]);
+
+  return <div className="update-release-notes">
+    <div id={id} className={`release-notes-preview${expanded ? ' expanded' : ''}`}>
+      <p ref={content} className="release-notes">{notes}</p>
+    </div>
+    {overflows && <button className="text-link release-notes-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : 'Show more'}</button>}
+  </div>;
 }
 
 function Modal({ title, onClose, children, backdropCloses = true }: { title: string; onClose: () => void; children: React.ReactNode; backdropCloses?: boolean }) {

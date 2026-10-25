@@ -2,6 +2,7 @@
 """Build the Linux runtime on Ubuntu 22.04 and relocate its native library closure."""
 from __future__ import annotations
 import hashlib
+import concurrent.futures
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from prepare_runtime import ROOT, MANIFEST, copy, lock_download, required_php_extensions, safe_extract
+from prepare_runtime import ROOT, MANIFEST, copy, lock_download, required_php_extensions, safe_extract, fnm_runtime, download
 
 GLIBC_LIBS = {'libc.so.6', 'libm.so.6', 'libpthread.so.0', 'libdl.so.2', 'librt.so.1', 'libresolv.so.2', 'libutil.so.1', 'ld-linux-x86-64.so.2', 'ld-linux-aarch64.so.1'}
 
@@ -127,6 +128,29 @@ def linux(target, lock, refresh):
     work.mkdir(parents=True, exist_ok=True)
     source_output = ROOT / '.runtime-work/linux-sources'
     source_output.mkdir(parents=True, exist_ok=True)
+    if 'fnm' in MANIFEST:
+        if arch != 'x86_64':
+            raise RuntimeError('The pinned Linux fnm package currently supports x86_64 only')
+        fnm_runtime(target, lock, refresh, 'linux')
+        binary = target / 'fnm/bin/fnm'
+        validate_glibc(subprocess.check_output(['readelf', '--version-info', str(binary)], text=True))
+        # Keep upstream fnm unchanged. It must not need unbundled host libraries.
+        linked = subprocess.run(['ldd', str(binary)], text=True, capture_output=True)
+        if 'not found' in linked.stdout + linked.stderr:
+            raise RuntimeError('The upstream fnm binary has missing native dependencies')
+        from fnm_sources import source_plan
+        source = lock_download('fnm-source', lock['fnm-source']['url'], refresh=refresh, lock=lock)
+        plan = source_plan(source, lock['fnm-source'], MANIFEST['fnm'])
+        def collect(item):
+            archive, _ = download(item['url'], item['sha256'])
+            copy(archive, source_output / 'fnm' / item['file'])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as workers:
+            list(workers.map(collect, plan))
+        copy(ROOT / 'scripts/fnm_sources.py', source_output / 'fnm_sources.py')
+        (source_output / 'fnm-source-inputs.json').write_text(json.dumps(plan, indent=2) + '\n')
+    if 'dataBrowser' in MANIFEST:
+        from prepare_data_browser import prepare
+        prepare(target, source_output, lock, refresh)
     php_builds = [('php', MANIFEST['php'])]
     php_builds.extend((f'php-{minor}', version) for minor, version in MANIFEST.get('phpVersions', {}).items() if version != MANIFEST['php'])
     for name, version in [*php_builds, ('nginx', MANIFEST['nginx'])]:

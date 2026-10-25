@@ -20,6 +20,30 @@ use tauri_plugin_updater::UpdaterExt;
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
 
+#[cfg(any(target_os = "macos", windows))]
+use crate::node_tools as node_tools_view;
+#[cfg(not(any(target_os = "macos", windows)))]
+mod node_tools_view {
+    use crate::config::{Layout, Result};
+    pub type NodeStatus = serde_json::Value;
+    pub fn status(_: &Layout) -> Result<NodeStatus> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
+    pub fn remote(_: &Layout) -> Result<Vec<String>> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
+    pub fn activation(_: &Layout, _: &str) -> Result<()> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
+    pub fn prepare_uninstall(_: &Layout, _: &str) -> Result<()> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
+
+    pub fn change(_: &Layout, _: &str, _: &str, _: &dyn Fn() -> bool) -> Result<()> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
+}
+
 type Shared = Arc<Mutex<crate::startup::Startup>>;
 
 #[derive(Default)]
@@ -831,6 +855,53 @@ async fn backup_database(app: tauri::AppHandle, state: State<'_, Shared>) -> Res
     access(state.inner().clone(), |m| m.backup()).await
 }
 
+#[tauri::command]
+async fn node_status(state: State<'_, Shared>) -> Result<node_tools_view::NodeStatus> {
+    let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
+    tauri::async_runtime::spawn_blocking(move || node_tools_view::status(&layout))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn node_versions(state: State<'_, Shared>) -> Result<Vec<String>> {
+    let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
+    tauri::async_runtime::spawn_blocking(move || node_tools_view::remote(&layout))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn node_action(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    action: String,
+    version: String,
+) -> Result<()> {
+    let _operation = begin_operation(&app, "Updating Node tools…")?;
+    if ["enable", "disable"].contains(&action.as_str()) {
+        return access(state.inner().clone(), move |m| {
+            node_tools_view::activation(&m.layout, &action)
+        })
+        .await;
+    }
+    let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
+    if action == "uninstall" {
+        let check_version = version.clone();
+        access(state.inner().clone(), move |m| {
+            node_tools_view::prepare_uninstall(&m.layout, &check_version)
+        })
+        .await?;
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        node_tools_view::change(&layout, &action, &version, &|| {
+            app.state::<DesktopControl>().lifecycle.quitting()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateInfo {
@@ -1203,6 +1274,9 @@ pub fn run() {
             open_mail_link,
             read_logs,
             cli_integration,
+            node_status,
+            node_versions,
+            node_action,
             backup_database,
             check_update,
             install_update

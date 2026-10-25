@@ -8,7 +8,7 @@ A PHP development environment for Windows, Apple Silicon Macs and Linux x86_64. 
 
 ## Downloads
 
-Current release: **[v0.1.0-rc.4](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.4)**.
+Latest published release: **[v0.1.0-rc.4](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.4)**.
 
 | Computer | Requirements | Download |
 | --- | --- | --- |
@@ -17,6 +17,8 @@ Current release: **[v0.1.0-rc.4](https://github.com/eimg/fairway-xmp/releases/ta
 | Linux | x86_64, glibc 2.35 or newer | [Terminal installer](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.4/fairway-xmp-0.1.0-rc.4-linux-x86_64.run) · [Archive](https://github.com/eimg/fairway-xmp/releases/download/v0.1.0-rc.4/fairway-xmp-0.1.0-rc.4-linux-x86_64.tar.gz) |
 
 See the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.4) for these downloads and [current limitations](docs/maintenance.md#current-limitations). Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
+
+**RC 5 is in preparation.** Current source targets `0.1.0-rc.5`, including Node/fnm management and the standalone Linux `fairway data-browser` command described below. RC 5 has not been built or published; the RC 4 downloads above predate these additions. See the [prepared release notes](docs/release-notes.md).
 
 ## Linux terminal edition
 
@@ -33,16 +35,31 @@ fairway php --version
 fairway composer --version
 fairway mysql fairway         # connect with the local teaching account
 fairway backup               # requires running MySQL
+fairway data-browser         # RC 5 source: web data browser (Node 22+)
 fairway shutdown             # stop services and the supervisor
 ```
 
 In the dashboard, use ↑/↓ to select Nginx, MySQL or Mail, `s` to start, `x` to stop, `r` to restart, `a` to start all, `z` to stop all, `l` for logs, `f` for PHP logs, `p` for ports and `b` for a database backup. **`q` closes the dashboard and leaves services running; `Q` shuts everything down.** Run `fairway --help` for CLI commands. phpMyAdmin remains a browser interface at the displayed URL.
 
-The installer defaults to `~/.local/share/fairway-xmp`; use `--prefix /absolute/path` for another dedicated directory. It enables Fairway, PHP and Composer through managed Bash/Zsh profile blocks. `fairway remove-cli` removes that integration. `fairway shell` opens a shell with bundled PHP/Composer available without editing profiles. Fish users can invoke the displayed absolute Fairway path or add it to their shell’s PATH themselves.
+The installer defaults to `~/.local/share/fairway-xmp`; use `--prefix /absolute/path` for another dedicated directory. It enables Fairway, PHP, Composer and the native fnm CLI through managed Bash/Zsh profile blocks. `fairway remove-cli` removes that integration. `fairway shell` opens a shell with bundled PHP/Composer/fnm available without editing profiles. Fish users can invoke the displayed absolute Fairway path or add it to their shell’s PATH themselves.
 
 Alternatively, extract the `.tar.gz` and run `./fairway-xmp/bin/fairway`; `./fairway-xmp/install.sh` installs that extracted bundle. Programs use libraries bundled with their component. Projects remain in `~/fairway/www`; data and backups use `${XDG_DATA_HOME:-~/.local/share}/dev.fairway.environment`.
 
 Re-running the installer backs up an existing student database and stops services before switching versions. `fairway uninstall` removes the installed program and managed shell integration while preserving projects, databases and backups. The release’s Linux source archive includes corresponding runtime sources and distribution patches. This terminal edition uses manual installer updates.
+
+For Node on Linux, use your existing setup or the bundled fnm directly:
+
+```sh
+fnm install --lts
+# Bash; use --shell zsh for Zsh:
+eval "$(fnm env --shell bash)"
+fnm use lts-latest
+fairway data-browser
+```
+
+`fairway data-browser` runs the [standalone data browser](https://github.com/eimg/data-browser) on loopback port **8803**. Open the access URL printed by the command; it includes a temporary per-run token. Keep the command running; Ctrl+C stops it. It requires Node 22 or newer and npm. The production browser is bundled; first use downloads its locked runtime dependencies, then later runs work offline. Switching Node ABI or updating the browser prepares a separate dependency cache. `fairway data-browser --prepare` sets up that cache ahead of time; `--port 9000` selects another loopback port. Existing Node managers are respected; missing/older Node produces instructions for the bundled fnm.
+
+On a remote Linux host, run `ssh -L 8803:127.0.0.1:8803 user@host`, start `fairway data-browser` there, then open its printed access URL in your own browser. The server binds only to loopback. It does not start Fairway services: start MySQL separately when needed, or connect to your own PostgreSQL/MySQL server or an existing SQLite file. Credentials stay in the running browser server; backups use `~/.data-browser/backups`. See [Linux data browser](docs/linux-data-browser.md) for details.
 
 ## What’s included
 
@@ -57,7 +74,7 @@ The control panel provides service controls, port settings, logs, database backu
 
 ## PostgreSQL client support
 
-RC 4 includes `pdo_pgsql` and `pgsql` in every bundled PHP version (8.2–8.5) on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the Data browser still supports MySQL and SQLite only. It does not back up or upgrade external PostgreSQL databases.
+RC 4 includes `pdo_pgsql` and `pgsql` in every bundled PHP version (8.2–8.5) on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the desktop Data browser supports MySQL and SQLite only. The separate Linux browser also connects to PostgreSQL. Fairway’s environment backup/updater does not back up or upgrade external PostgreSQL databases; the standalone browser’s SQL snapshots are separate.
 
 See [PostgreSQL connection examples and requirements](docs/postgres-client-support.md).
 
@@ -101,7 +118,7 @@ composer --version
 
 Manage this integration under **Settings → Command-line tools**. You can also use **Open terminal** in the control panel.
 
-An embedded **Terminal** page is available on macOS and Windows. Press **Ctrl+backtick** to open or focus it. PHP and Composer are ready even when persistent command-line integration is disabled. Use **+** beside the attached tabs and choose a project or registered site folder to open a second terminal while a development server keeps running. The menu shows the actual path to `fairway/www` in your home folder. Both tabs stay open while switching pages or hiding the window; quitting Fairway ends them. Type `exit` to finish: the first terminal opens fresh in its starting folder, while the extra terminal closes its tab. The extra tab also has a close button. Find, text size, clipboard tools, starting-folder details and Restart terminal are in the options or right-click menu. On macOS, the embedded prompt shows `➜` and the current folder name. The terminal height adjusts automatically with the window. Extra space below the panel lets you scroll the terminal higher in the window. The visible **External terminal** button in the header opens a separate system terminal at the active shell’s current path. It uses your normal shell configuration, prompt, history and environment without startup scripts or tool-path injection. Fairway CLI tools are available there according to **Settings → Command-line tools**. The external terminal stays open independently of Fairway.
+An embedded **Terminal** page is available on macOS and Windows. Press **Ctrl+backtick** to open or focus it. PHP and Composer are ready even when persistent command-line integration is disabled. New embedded terminals also import your normal shell’s PATH and exported tool settings on macOS, or the current Windows user/system environment, so existing Node, Python, Git, SDK and user-installed commands remain available. Fairway keeps priority for its PHP and Composer. Use **+** beside the attached tabs and choose a project or registered site folder to open a second terminal while a development server keeps running. The menu shows the actual path to `fairway/www` in your home folder. Both tabs stay open while switching pages or hiding the window; quitting Fairway ends them. Type `exit` to finish: the first terminal opens fresh in its starting folder, while the extra terminal closes its tab. The extra tab also has a close button. Find, text size, clipboard tools, starting-folder details and Restart terminal are in the options or right-click menu. On macOS, the embedded prompt shows `➜` and the current folder name. The terminal height adjusts automatically with the window. Extra space below the panel lets you scroll the terminal higher in the window. The visible **External terminal** button in the header opens a separate system terminal at the active shell’s current path. It uses your normal shell configuration, prompt, history and environment without startup scripts or tool-path injection. Fairway CLI tools are available there according to **Settings → Command-line tools**. The external terminal stays open independently of Fairway.
 
 On macOS, Fairway remembers roughly 1,000 commands privately on your device, separately from your usual shell history. Start a command with a space to omit it, or turn off **Remember commands** in terminal options before creating or restarting a shell. Windows keeps its normal Command Prompt history within each session. macOS and Windows also add a **Data browser** beside phpMyAdmin, with `fairway db` commands for SQL import/export.
 
@@ -114,6 +131,16 @@ Fairway includes PHP 8.2 through 8.5. Switch under **Settings → Service Settin
 Under **Settings → PHP settings**, adjust memory, execution time, upload size, timezone, displayed errors and session upload progress. The active PHP version is shown first; other versions are available under **Choose another PHP version**. Changes survive app updates. Stop Nginx/PHP before saving active settings; **Reset to defaults** restores that version only. See [PHP settings](docs/php-settings.md).
 
 For projects with their own development server, run the usual command, such as Laravel’s `php artisan serve`.
+
+## Node.js on macOS and Windows
+
+See [Node tools](docs/node-tools.md) for storage, activation and troubleshooting across platforms.
+
+The macOS and Windows apps include **fnm**, the upstream Node version manager. The separate **Settings → Node.js** card highlights the version, source manager and executable detected in your login shell (macOS) or current user/system PATH (Windows). **Manage Node.js** opens automatically when no active Node is detected; otherwise it starts collapsed. It offers the latest release in each major from Node 20 onward, including non-LTS majors, and lets you use or uninstall an installed version. Other installations are shown with their manager and path. Node itself is downloaded only when requested.
+
+When Node is missing, **Install & use** installs the selected release and enables it in new terminals. With an existing Node setup, **Install** keeps that setup active; choose the green **Use** button beside an installed version to switch. If command-line tools are enabled, this also configures new Bash/Zsh shells on macOS or Command Prompt and PowerShell sessions on Windows. Existing terminals and development servers keep their version; reopen them to pick up changes. Other Node installations are kept, and you can switch back with **Use existing Node setup**. There is no automatic project switching. **Uninstall** removes only the selected fnm version and its global npm packages. Uninstalling the active default first turns off Fairway’s activation; other managers’ installations are kept.
+
+The normal CLI is available directly after enabling command-line tools: `fnm install --lts`, `fnm list`, `fnm use VERSION`, and `fnm default VERSION`. Manual Zsh activation is `eval "$(fnm env --shell zsh)"` (use `--shell bash` for Bash). Fairway adds no command wrapper. Versions live in fnm's user storage and survive app updates and removal. On Windows, Fairway copies the unchanged `fnm.exe` into its CLI tools folder. Opting into Node activation adds a removable user Command Prompt AutoRun entry and managed blocks in the normal Windows PowerShell 5 and PowerShell 7 profiles. Existing startup commands and profile contents are preserved. PowerShell uses your existing script execution policy; sessions started with `-NoProfile` or Command Prompt `/D` skip these hooks. The embedded terminal initializes fnm independently. Manual PowerShell activation is `fnm env --shell powershell | Out-String | Invoke-Expression`. Linux also includes the unchanged fnm CLI; initialize it in your preferred shell yourself, with no Fairway Node wrapper or automatic project switching.
 
 ## Your database
 

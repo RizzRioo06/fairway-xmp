@@ -37,6 +37,10 @@ Database engine upgrade fixtures and installed-lifecycle baselines remain automa
 
 ## Browser and native bridge
 
+Node/fnm checks are noninteractive and use isolated stores. On macOS run `cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_smoke --no-default-features --features terminal --locked -- /path/to/fresh-fnm-check`; on Windows use `node_tools_windows_smoke`. The examples install Node into scratch storage, test version selection and native startup scripts, and preserve personal profiles/installations. Mac/Windows candidate jobs run the appropriate example after staging fnm.
+
+On Linux, after building the CLI, run `python3 tests/linux_node_browser_smoke.py --cli src-tauri/target/release/fairway-cli --runtime src-tauri/resources/runtime --install-node --with-mysql`. It uses a temporary home and checks first-use setup, concurrent setup, warm offline starts, missing/old Node guidance, per-run access authentication, live-browser update/uninstall blocking, static assets and real SQLite/bundled-MySQL queries. It does not open a browser. See [Node tools](node-tools.md) and [Linux browser](linux-data-browser.md).
+
 `npm run dev` is a disabled browser preview. `npm run dev:ui` enables an explicitly labeled in-memory backend for service/error/update scenarios; no native files, services or settings are changed.
 
 ```sh

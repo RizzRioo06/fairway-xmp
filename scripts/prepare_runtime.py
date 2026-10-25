@@ -227,6 +227,7 @@ def windows(target, lock, refresh):
                     shutil.copytree(base / directory, target / 'mysql' / directory,
                                     dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.pdb', '*.lib'))
                 for file in base.glob('*LICENSE*'): copy(file, target / 'licenses/mysql' / file.name)
+    if 'fnm' in MANIFEST: fnm_runtime(target, lock, refresh, 'windows')
     # The Microsoft redistributable is installed by our NSIS hook if required.
     url = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
     copy(lock_download('vc-runtime', url, refresh=refresh, lock=lock), target / 'vc_redist.x64.exe')
@@ -356,6 +357,21 @@ def relocate(target, bottles):
             raise RuntimeError(f'Non-relocatable binary: {binary}')
 
 
+def fnm_runtime(target, lock, refresh, system):
+    """Ship upstream fnm unchanged. Node versions are installed by the user."""
+    version = MANIFEST['fnm']
+    archive = lock_download(f'fnm-{system}', f'https://github.com/Schniz/fnm/releases/download/v{version}/fnm-{system}.zip', refresh=refresh, lock=lock)
+    source = lock_download('fnm-source', f'https://codeload.github.com/Schniz/fnm/tar.gz/refs/tags/v{version}', refresh=refresh, lock=lock)
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        safe_extract(archive, root / 'binary', 'zip')
+        name = 'fnm.exe' if system == 'windows' else 'fnm'
+        copy(root / 'binary' / name, target / 'fnm/bin' / name)
+        (target / 'fnm/bin' / name).chmod(0o755)
+        safe_extract(source, root / 'source', 'tar')
+        copy(root / f'source/fnm-{version}/LICENSE', target / 'licenses/fnm/LICENSE')
+
+
 def macos(target, lock, refresh):
     if platform.machine() != 'arm64': raise RuntimeError('Only Apple Silicon builders are supported')
     with tempfile.TemporaryDirectory(prefix='fairway-bottles-') as folder:
@@ -386,6 +402,9 @@ def macos(target, lock, refresh):
                 f'brew-{name}-arm64-sequoia' for name in bottles.kegs
             }:
                 del lock[key]
+    # Upstream fnm is a universal, system-linked executable. Keep it out of the
+    # Homebrew relocator, whose input binaries contain one ARM64 architecture.
+    if 'fnm' in MANIFEST: fnm_runtime(target, lock, refresh, 'macos')
 
 
 def build_nginx(target, bottles, lock, refresh):
@@ -471,11 +490,24 @@ def verify(target):
     ]
     if 'mailpit' in MANIFEST:
         commands.append(([str(target / 'mailpit/bin' / ('mailpit' + suffix)), 'version', '--no-release-check'], f' v{MANIFEST["mailpit"]} '))
+    if 'fnm' in MANIFEST:
+        commands.append(([str(target / 'fnm/bin' / ('fnm' + suffix)), '--version'], f'fnm {MANIFEST["fnm"]}'))
     for command, expected in commands:
         output = subprocess.check_output(command, env=env, stderr=subprocess.STDOUT, text=True)
         if expected not in output:
             raise RuntimeError(f'Runtime version mismatch: expected {expected!r}, received {output.strip()!r}')
         print(output.strip(), flush=True)
+    if platform.system() == 'Linux' and 'dataBrowser' in MANIFEST:
+        browser = target / 'data-browser'
+        identity = json.loads((browser / 'build.json').read_text())
+        digest = hashlib.sha256()
+        for path in sorted(browser.rglob('*')):
+            if path.is_file() and path.name != 'build.json':
+                digest.update(path.relative_to(browser).as_posix().encode() + b'\0' + path.read_bytes())
+        if identity['revision'] != MANIFEST['dataBrowser'] or identity['id'] != digest.hexdigest():
+            raise RuntimeError('The standalone data browser payload is out of date or incomplete')
+        for name in ('server.mjs', 'sqlite-query.mjs', 'launch.mjs', 'package.json', 'package-lock.json', 'dist/index.html'):
+            if not (browser / name).is_file(): raise RuntimeError(f'Missing data browser payload: {name}')
     ini.unlink()
 
 
@@ -523,4 +555,9 @@ def main():
         raise
 
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    # Linux/browser helpers import this module. Share the same overridden
+    # manifest and lock settings instead of loading a second copy of the script.
+    import sys
+    sys.modules['prepare_runtime'] = sys.modules[__name__]
+    main()

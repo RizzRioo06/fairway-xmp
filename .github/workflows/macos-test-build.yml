@@ -92,6 +92,8 @@ jobs:
         id: downloads
       - name: Stage verified macOS runtimes
         run: python scripts/prepare_runtime.py
+      - name: Verify native fnm and isolated Node activation
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_smoke --no-default-features --features terminal --locked -- "$PWD/.runtime-work/fnm-check"
       - name: Collect exact sources before signing or installer tests
         run: python scripts/package_sources.py --locked
       - uses: actions/cache/save@v5

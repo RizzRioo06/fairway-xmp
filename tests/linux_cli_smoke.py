@@ -23,7 +23,7 @@ def main(installer, baseline=None, report=None):
         home.mkdir()
         prefix = home / 'installation'
         data = home / '.local/share/dev.fairway.environment'
-        env = {**os.environ, 'HOME': str(home), 'XDG_DATA_HOME': str(home / '.local/share'), 'ZDOTDIR': str(home), 'TERM': 'xterm-256color'}
+        env = {**os.environ, 'HOME': str(home), 'XDG_DATA_HOME': str(home / '.local/share'), 'ZDOTDIR': str(home), 'TERM': 'xterm-256color', 'FNM_DIR': str(home / '.local/share/fnm')}
         if baseline:
             subprocess.run(['sh', str(baseline), '--prefix', str(prefix)], env=env, check=True)
             old_cli = prefix / 'current/bin/fairway'
@@ -43,6 +43,14 @@ def main(installer, baseline=None, report=None):
             call('shutdown')
             build = json.loads(call('--build-info').stdout)
             runtime_manifest = json.loads((prefix / 'current/runtime/manifest.json').read_text())
+            assert (data / 'bin/fnm').is_symlink()
+            assert 'fnm ' + runtime_manifest['fnm'] in subprocess.check_output([str(data / 'bin/fnm'), '--version'], env=env, text=True)
+            node_store = Path(env['FNM_DIR']) / 'keep-node-version'
+            node_store.parent.mkdir(parents=True, exist_ok=True)
+            node_store.write_text('User Node storage')
+            browser_backup = home / '.data-browser/backups/keep.sqlite'
+            browser_backup.parent.mkdir(parents=True, exist_ok=True)
+            browser_backup.write_bytes(b'User database backup')
             if baseline:
                 call('start')
                 assert call('mysql', '--batch', '--skip-column-names', '-e', 'SELECT id FROM beta_lifecycle.coursework;').stdout.strip() == '42'
@@ -185,6 +193,9 @@ def main(installer, baseline=None, report=None):
             assert probe.exists() and backup.exists() and (data / 'mysql/mysql').is_dir()
             assert not (data / 'supervisor.sock').exists()
             assert not (data / 'bin/fairway').exists()
+            assert not (data / 'bin/fnm').exists()
+            assert node_store.read_text() == 'User Node storage'
+            assert browser_backup.read_bytes() == b'User database backup'
             for profile in ('.bashrc', '.bash_profile', '.zshrc', '.zprofile'):
                 if (home / profile).exists(): assert '>>> fairway' not in (home / profile).read_text()
             # Reinstall after complete removal must reopen the same student database.

@@ -3,6 +3,9 @@ description: Install builder prerequisites and reuse the locked glibc 2.35 runti
 runs:
   using: composite
   steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: '24'
     - name: Install build dependencies (not needed on target machines)
       shell: bash
       run: |
@@ -33,7 +36,7 @@ runs:
         path: |
           src-tauri/resources/runtime
           .runtime-work/linux-sources
-        key: linux-glibc235-v2-${{ hashFiles('runtime-linux-downloads.lock.json', 'runtime-manifest.json', 'THIRD_PARTY_NOTICES.md', 'scripts/prepare_runtime.py', 'scripts/prepare_linux_runtime.py', '.github/actions/prepare-linux-runtime/action.yml') }}
+        key: linux-glibc235-v3-${{ hashFiles('runtime-linux-downloads.lock.json', 'runtime-manifest.json', 'THIRD_PARTY_NOTICES.md', 'scripts/prepare_runtime.py', 'scripts/prepare_linux_runtime.py', 'scripts/prepare_data_browser.py', 'scripts/fnm_sources.py', 'packaging/linux/data-browser-*.mjs', '.github/actions/prepare-linux-runtime/action.yml') }}
     - name: Build locked runtime on cache miss
       if: steps.runtime.outputs.cache-hit != 'true'
       shell: bash

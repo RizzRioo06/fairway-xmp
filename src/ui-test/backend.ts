@@ -1,13 +1,13 @@
 import { preview } from '../bridge';
 import { terminalRequest } from './terminal';
-import type { MailMessage, PhpSettings, PhpSettingsView, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
+import type { MailMessage, NodeStatus, PhpSettings, PhpSettingsView, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
 import { cancelData, databaseRequest, resetData } from './data-browser';
 
 // Fixture modules own event subscriptions and state. Reload them together so
 // Fast Refresh cannot keep a screen subscribed to an obsolete simulation.
 if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
 
-export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled', 'Logs under load', 'Logs empty', 'Logs unreadable', 'Slow mail', 'Mail unavailable'] as const;
+export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled', 'Node not detected', 'Logs under load', 'Logs empty', 'Logs unreadable', 'Slow mail', 'Mail unavailable'] as const;
 export type Scenario = typeof scenarios[number];
 export type Platform = 'Windows' | 'macOS';
 const events = new EventTarget();
@@ -15,6 +15,7 @@ let scenario: Scenario = 'Stopped';
 export const defaultPlatform: Platform = navigator.platform.startsWith('Mac') ? 'macOS' : 'Windows';
 let platform: Platform = defaultPlatform;
 let data: Snapshot;
+let nodeFixture: NodeStatus;
 const phpDefaults: PhpSettings = { memoryLimitMb: 256, maxExecutionTime: 120, uploadMaxFilesizeMb: 64, timezone: 'UTC', displayErrors: true, sessionUploadProgress: true };
 let phpOverrides: Record<string, PhpSettings> = {};
 function phpSettings(version: string): PhpSettingsView {
@@ -117,6 +118,7 @@ export function select(next: Scenario, os: Platform) {
   data.domainsPending = next === 'Hosts update pending';
   data.os = platform === 'Windows' ? 'windows' : 'macos';
   configureCli(next !== 'CLI disabled');
+  resetNode();
   if (next === 'Running' || next === 'Partially running' || next === 'Slow mail' || next === 'Mail unavailable') running('nginx', true);
   if (next === 'Running' || next === 'Slow mail') { running('mysql', true); running('mail', true); }
   if (next === 'Mail unavailable') running('mysql', true);
@@ -138,10 +140,48 @@ export function listen(event: string, callback: (payload: unknown) => void) {
   return () => events.removeEventListener(event, handler);
 }
 
+function resetNode() {
+  const windows = platform === 'Windows';
+  const detected = scenario === 'Node not detected' ? null : {
+    version: 'v24.14.1', path: windows ? 'C:\\Program Files\\nodejs\\node.exe' : '/opt/homebrew/bin/node',
+  };
+  nodeFixture = {
+    fnmPath: windows ? 'C:\\Program Files\\Fairway XMP\\runtime\\fnm\\bin\\fnm.exe' : '/Applications/Fairway XMP.app/Contents/Resources/runtime/fnm/bin/fnm',
+    fnmVersion: scenario === 'Missing runtime' ? null : 'fnm 1.39.0',
+    directory: joinPath(home(), ...(windows ? ['AppData', 'Roaming', 'fnm'] : ['.local', 'share', 'fnm'])),
+    detected, detectionError: null, managed: null, installed: [], defaultVersion: null, enabled: false,
+    installations: detected ? [{ ...detected, source: windows ? 'External' : 'Homebrew' }] : [],
+  };
+}
+
+function managedNode(version: string) {
+  return { version, path: joinPath(nodeFixture.directory, 'node-versions', version, 'installation', ...(platform === 'Windows' ? ['node.exe'] : ['bin', 'node'])) };
+}
+
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'get_php_settings') return phpSettings(String(args.version)) as T;
+  if (command === 'node_status') return structuredClone(nodeFixture) as T;
+  if (command === 'node_versions') return ['v25.0.0', 'v24.14.1', 'v23.11.0', 'v22.1.0', 'v21.7.3', 'v20.19.0'] as T;
+  if (command === 'node_action') {
+    const version = String(args.version ?? '');
+    if (args.action === 'install' && !nodeFixture.installed.includes(version)) {
+      nodeFixture.installed.push(version);
+      nodeFixture.defaultVersion ??= version;
+    }
+    if (args.action === 'default') nodeFixture.defaultVersion = version;
+    if (args.action === 'enable') nodeFixture.enabled = true;
+    if (args.action === 'disable') nodeFixture.enabled = false;
+    if (args.action === 'uninstall') {
+      nodeFixture.installed = nodeFixture.installed.filter(value => value !== version);
+      if (nodeFixture.defaultVersion === version) nodeFixture.enabled = false;
+      if (nodeFixture.defaultVersion === version) nodeFixture.defaultVersion = null;
+    }
+    nodeFixture.managed = nodeFixture.defaultVersion ? managedNode(nodeFixture.defaultVersion) : null;
+    nodeFixture.installations = [...nodeFixture.installations.filter(node => node.source !== 'fnm'), ...nodeFixture.installed.map(version => ({ ...managedNode(version), source: 'fnm' }))];
+    return undefined as T;
+  }
   if (command === 'snapshot') return structuredClone(data) as T;
   if (command === 'startup_status' || command === 'retry_startup') return { blocking: false, errors: [], dataDir: data.dataDir } as T;
   if (command === 'load_mail_image') {

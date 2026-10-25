@@ -262,6 +262,18 @@
     "sha256": "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6",
     "url": "https://getcomposer.org/download/2.10.3/composer.phar"
   },
+  "fnm-macos": {
+    "sha256": "f046483e85c53b3278efe49a3620c8680f22efa58a8dabfd03eafc6b59b31a25",
+    "url": "https://github.com/Schniz/fnm/releases/download/v1.39.0/fnm-macos.zip"
+  },
+  "fnm-source": {
+    "sha256": "224081a677a02acd9f972885e824a98fa3843f5b778b28400ad5af97752f6127",
+    "url": "https://codeload.github.com/Schniz/fnm/tar.gz/refs/tags/v1.39.0"
+  },
+  "fnm-windows": {
+    "sha256": "8183bed4348cb78fdfd8abb3d1247fbeab7b2082f941363929c61e747c001e10",
+    "url": "https://github.com/Schniz/fnm/releases/download/v1.39.0/fnm-windows.zip"
+  },
   "mailpit-macos": {
     "sha256": "23709bd727f20da2290de6a2a40c4685c48a3127586d77370efd1a3a595f9ef6",
     "url": "https://github.com/axllent/mailpit/releases/download/v1.32.0/mailpit-darwin-arm64.tar.gz"
