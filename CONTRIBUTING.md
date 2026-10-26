@@ -16,7 +16,7 @@ npm run tauri -- dev           # native app with the staged runtime
 
 On Windows use `python` and, if PowerShell blocks `npm.ps1`, `npm.cmd`. Runtime preparation verifies pinned official Windows archives or Mac bottles/upstream sources and stages the complete runtime without a system MySQL/PHP installation. Keep the committed download locks for ordinary preparation; do not refresh unrelated runtime inputs to resolve a local setup problem.
 
-The UI simulation resets on reload, uses example paths, and does not change real files/services. To preview a machine without Node, choose **Scenario → Node not detected**, then open **Settings**. The simulated Install & use flow works on both example platforms; changing scenarios resets Node installations and activation. Native development uses real services. Set `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA` to isolated directories when testing startup, settings, launchers and data. See [Testing](docs/testing.md#isolated-development-profiles).
+The UI simulation resets on reload, uses example paths, and does not change real files/services. To preview a machine without Node, choose **Scenario → Node not detected**, then open **Settings**. Choose **Existing fnm**, **Existing fnm store** or **fnm handover** to preview read-only guidance and explicit activation handover. The simulated Install & use flow works on both example platforms; changing scenarios resets Node installations and activation. Native development uses real services. Set `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA` to isolated directories when testing startup, settings, launchers and data. See [Testing](docs/testing.md#isolated-development-profiles).
 
 ## Verification
 

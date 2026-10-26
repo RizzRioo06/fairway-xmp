@@ -68,9 +68,12 @@ fn safe_component(value: &str) -> bool {
 }
 
 fn node_guidance(layout: &Layout) -> String {
-    let fnm =
-        crate::integration::shell_quote(&layout.runtime.join("fnm/bin/fnm").to_string_lossy());
-    format!("Install Node using the bundled fnm, then retry:\n  {fnm} install --lts\n  eval \"$({fnm} env --shell bash)\"\n  {fnm} use lts-latest\nUse --shell zsh if that is your shell. For Fish, run: {fnm} env --shell fish | source\nNative fnm is also on PATH after install-cli.")
+    let context = crate::fnm_setup::inspect(layout);
+    let executable = context
+        .external
+        .unwrap_or_else(|| layout.runtime.join("fnm/bin/fnm"));
+    let fnm = crate::integration::shell_quote(&executable.to_string_lossy());
+    format!("Install Node using fnm, then retry:\n  {fnm} install --lts\n  eval \"$({fnm} env --shell bash)\"\n  {fnm} use lts-latest\nUse --shell zsh if that is your shell. For Fish, run: {fnm} env --shell fish | source\nNative fnm is also on PATH after install-cli.")
 }
 
 fn detect(layout: &Layout, minimum: u32) -> Result<Node> {

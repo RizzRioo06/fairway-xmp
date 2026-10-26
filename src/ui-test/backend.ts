@@ -7,7 +7,7 @@ import { cancelData, databaseRequest, resetData } from './data-browser';
 // Fast Refresh cannot keep a screen subscribed to an obsolete simulation.
 if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
 
-export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled', 'Node not detected', 'Logs under load', 'Logs empty', 'Logs unreadable', 'Slow mail', 'Mail unavailable'] as const;
+export const scenarios = ['Stopped', 'No sites', 'Saved sites unavailable', 'Hosts update pending', 'Missing web root', 'Running', 'Partially running', 'Port conflict', 'Missing runtime', 'Update available', 'Update failure', 'CLI not detected by app', 'Other PHP on PATH', 'CLI disabled', 'Node not detected', 'Existing fnm', 'Existing fnm store', 'fnm handover', 'Logs under load', 'Logs empty', 'Logs unreadable', 'Slow mail', 'Mail unavailable'] as const;
 export type Scenario = typeof scenarios[number];
 export type Platform = 'Windows' | 'macOS';
 const events = new EventTarget();
@@ -146,12 +146,25 @@ function resetNode() {
     version: 'v24.14.1', path: windows ? 'C:\\Program Files\\nodejs\\node.exe' : '/opt/homebrew/bin/node',
   };
   nodeFixture = {
+    externalFnm: null, readOnlyReason: null,
     fnmPath: windows ? 'C:\\Program Files\\Fairway XMP\\runtime\\fnm\\bin\\fnm.exe' : '/Applications/Fairway XMP.app/Contents/Resources/runtime/fnm/bin/fnm',
     fnmVersion: scenario === 'Missing runtime' ? null : 'fnm 1.39.0',
     directory: joinPath(home(), ...(windows ? ['AppData', 'Roaming', 'fnm'] : ['.local', 'share', 'fnm'])),
     detected, detectionError: null, managed: null, installed: [], defaultVersion: null, enabled: false,
     installations: detected ? [{ ...detected, source: windows ? 'External' : 'Homebrew' }] : [],
   };
+  if (['Existing fnm', 'Existing fnm store', 'fnm handover'].includes(scenario)) {
+    nodeFixture.readOnlyReason = scenario === 'Existing fnm store' ? 'An existing fnm store was found. Its Node versions are managed outside Fairway.' : 'An existing fnm installation was found. Manage Node versions with fnm in your terminal.';
+    nodeFixture.externalFnm = scenario === 'Existing fnm store' ? null : windows ? 'C:\\Users\\Student\\scoop\\shims\\fnm.exe' : '/opt/homebrew/bin/fnm';
+    nodeFixture.fnmVersion = null;
+    nodeFixture.installed = ['v24.14.1', 'v22.1.0'];
+    nodeFixture.defaultVersion = 'v24.14.1';
+    nodeFixture.managed = managedNode('v24.14.1');
+    nodeFixture.detected = nodeFixture.managed;
+    nodeFixture.installations = [{ ...nodeFixture.managed, source: 'fnm' }];
+    nodeFixture.enabled = scenario === 'fnm handover';
+  }
+
 }
 
 function managedNode(version: string) {
@@ -165,6 +178,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   if (command === 'node_status') return structuredClone(nodeFixture) as T;
   if (command === 'node_versions') return ['v25.0.0', 'v24.14.1', 'v23.11.0', 'v22.1.0', 'v21.7.3', 'v20.19.0'] as T;
   if (command === 'node_action') {
+    if (nodeFixture.readOnlyReason && args.action !== 'disable') throw new Error(nodeFixture.readOnlyReason);
     const version = String(args.version ?? '');
     if (args.action === 'install' && !nodeFixture.installed.includes(version)) {
       nodeFixture.installed.push(version);

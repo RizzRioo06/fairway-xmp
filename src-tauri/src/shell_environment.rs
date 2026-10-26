@@ -1,6 +1,6 @@
 //! Import tool discovery settings without running user startup code in the PTY.
 //! Exported values stay in memory and are never logged or persisted.
-#[cfg(feature = "terminal")]
+#[cfg(any(target_os = "macos", feature = "terminal"))]
 use crate::config::{Layout, Result};
 use std::ffi::OsString;
 

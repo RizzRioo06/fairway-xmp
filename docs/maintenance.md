@@ -17,7 +17,7 @@ Removing a PHP branch requires handling saved selections explicitly: preserve th
 
 ## Node and standalone browser updates
 
-`fnm` in the runtime manifest pins all three platform binaries. Update the Mac/Windows download pins and the separate Linux pin, plus `fnm-source` in both locks. Regenerate fnm’s full locked crate source plan; retain GPL notices and the offline reconstruction recipe. Keep fnm native, with no Fairway argument wrapper. Run the Mac/Windows activation smoke checks and Linux browser smoke after changing fnm or startup integration.
+`fnm` in the runtime manifest pins all three platform binaries. Update the Mac/Windows download pins and the separate Linux pin, plus `fnm-source` in both locks. Regenerate fnm’s full locked crate source plan; retain GPL notices and the offline reconstruction recipe. Keep fnm native, with no Fairway argument wrapper. Run the Mac/Windows activation smoke checks and Linux browser smoke after changing fnm or startup integration. Preserve read-only handling for external managers and unrecorded populated stores; never infer ownership merely from an active marker.
 
 `dataBrowser` pins an exact commit of `eimg/data-browser`; its archive SHA is in the Linux download lock. Review its original npm lock and the checked production overlay in `prepare_data_browser.py`, then rebuild the payload. An upstream server change that no longer matches the overlay must fail preparation. Verify first-use setup, failed-setup retry, offline reuse, token access, real database queries, and active-browser update/removal guards. The runtime cache key includes the preparer and HTTP/launcher adapters; the warmer must trigger on those inputs too. Browser dependencies are not silently updated by the end user: changes require a reviewed source/lock update and new payload identity.
 
@@ -43,7 +43,7 @@ The following are useful directions when a concrete project need justifies them,
 - Review Action revision pinning and toolchain/dependency updates as part of routine maintenance.
 - Label LTS releases and consider recommending an LTS default while keeping all requested non-LTS majors available.
 - Offer explicit cleanup of unused standalone-browser dependency caches, preserving active caches, Node stores and backups.
-- Extend GUI discovery of FNM_DIR set only inside shell profiles; currently only an inherited absolute override controls the managed store.
+- Extend Windows discovery of custom FNM_DIR values defined only in PowerShell profiles; macOS already reads the login shell exports.
 - Add explicit root license metadata to the separate data-browser repository; the current pinned source has no root LICENSE file.
 
 ## Diagnosing native permissions

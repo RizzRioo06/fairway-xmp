@@ -5,6 +5,7 @@ pub mod data_browser;
 pub mod database;
 pub mod diagnostics;
 mod durability;
+mod fnm_setup;
 pub mod hosts;
 pub mod integration;
 pub mod logs;
@@ -16,7 +17,7 @@ pub mod manager;
 pub mod node_tools;
 pub mod php_settings;
 pub mod process;
-#[cfg(any(all(target_os = "macos", feature = "terminal"), windows))]
+#[cfg(any(target_os = "macos", windows))]
 mod shell_environment;
 pub mod tls;
 pub mod updates;

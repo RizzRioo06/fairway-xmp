@@ -24,6 +24,8 @@ pub struct NodeInstallation {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeStatus {
+    pub external_fnm: Option<String>,
+    pub read_only_reason: Option<String>,
     pub fnm_path: String,
     pub fnm_version: Option<String>,
     pub fnm_error: Option<String>,
@@ -59,55 +61,46 @@ fn node_relative() -> &'static str {
 }
 
 pub fn directory(layout: &Layout) -> PathBuf {
-    if let Some(path) = std::env::var_os("FNM_DIR")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-    {
-        return path;
-    }
-    #[cfg(windows)]
-    return windows::directory(layout);
-    #[cfg(unix)]
-    {
-        // Match upstream 1.39's XDG default and its legacy macOS fallbacks.
-        let modern = std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .unwrap_or_else(|| layout.home.join(".local/share"))
-            .join("fnm");
-        if modern.exists() {
-            return modern;
-        }
-        for legacy in [
-            layout.home.join(".fnm"),
-            layout.home.join("Library/Application Support/fnm"),
-        ] {
-            if legacy.exists() {
-                return legacy;
-            }
-        }
-        modern
-    }
+    crate::fnm_setup::inspect(layout).directory
+}
+
+/// Keep a previously selected Fairway store stable until explicit handover.
+fn activation_directory(layout: &Layout) -> PathBuf {
+    fs::read(layout.data.join("fnm-store.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<PathBuf>(&bytes).ok())
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| directory(layout))
 }
 
 pub fn enabled(layout: &Layout) -> bool {
     layout.data.join("fnm-enabled").is_file()
 }
 
-fn command(layout: &Layout) -> Command {
+fn command_in(layout: &Layout, directory: &std::path::Path) -> Command {
     let mut cmd = crate::process::command(executable(layout));
     cmd.env("HOME", &layout.home)
-        .env("FNM_DIR", directory(layout))
+        .env("FNM_DIR", directory)
         .env("NO_COLOR", "1")
         .env_remove("FNM_MULTISHELL_PATH")
         .current_dir(&layout.home);
     cmd
 }
 
-fn run(layout: &Layout, args: &[&str]) -> Result<String> {
-    let mut cmd = command(layout);
+#[cfg(windows)]
+fn command(layout: &Layout) -> Command {
+    command_in(layout, &activation_directory(layout))
+}
+
+fn run_in(layout: &Layout, directory: &std::path::Path, args: &[&str]) -> Result<String> {
+    let mut cmd = command_in(layout, directory);
     cmd.args(args);
     output(cmd, 30, &|| false)
+}
+
+#[cfg(windows)]
+fn run(layout: &Layout, args: &[&str]) -> Result<String> {
+    run_in(layout, &activation_directory(layout), args)
 }
 
 pub fn valid_version(value: &str) -> bool {
@@ -193,8 +186,9 @@ fn parse_detection(text: &str) -> Option<NodeBinary> {
 }
 
 #[cfg(unix)]
-fn installation_source(layout: &Layout, path: &str) -> &'static str {
-    if std::path::Path::new(path).starts_with(directory(layout)) {
+fn installation_source(store: &std::path::Path, path: &str) -> &'static str {
+    let store = fs::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
+    if std::path::Path::new(path).starts_with(store) {
         "fnm"
     } else if path.contains("/.nvm/")
         || std::env::var_os("NVM_DIR")
@@ -209,7 +203,11 @@ fn installation_source(layout: &Layout, path: &str) -> &'static str {
 }
 
 #[cfg(unix)]
-fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstallation> {
+fn inventory(
+    layout: &Layout,
+    detected: Option<&NodeBinary>,
+    store: &std::path::Path,
+) -> Vec<NodeInstallation> {
     fn children(path: PathBuf) -> Vec<PathBuf> {
         fs::read_dir(path)
             .into_iter()
@@ -222,7 +220,7 @@ fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstalla
     if let Some(node) = detected {
         candidates.push((
             PathBuf::from(&node.path),
-            installation_source(layout, &node.path),
+            installation_source(store, &node.path),
         ));
     }
     if let Some(path) = std::env::var_os("PATH") {
@@ -242,7 +240,7 @@ fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstalla
             .map(|path| (path.join("bin/node"), "nvm")),
     );
     candidates.extend(
-        children(directory(layout).join("node-versions"))
+        children(store.join("node-versions"))
             .into_iter()
             .filter(|path| {
                 path.file_name()
@@ -291,7 +289,7 @@ fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstalla
         }
         if let Some(node) = probe(canonical) {
             let source = if source == "External" {
-                installation_source(layout, &node.path)
+                installation_source(store, &node.path)
             } else {
                 source
             };
@@ -308,9 +306,10 @@ fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstalla
 }
 
 pub fn is_enabled_default(layout: &Layout, version: &str) -> bool {
+    let context = crate::fnm_setup::inspect(layout);
     enabled(layout)
         && valid_version(version)
-        && run(layout, &["default"])
+        && run_in(layout, &context.directory, &["default"])
             .ok()
             .is_some_and(|default| same_version(&default, version))
 }
@@ -320,52 +319,81 @@ fn same_version(left: &str, right: &str) -> bool {
 }
 
 pub fn status(layout: &Layout) -> Result<NodeStatus> {
+    let context = crate::fnm_setup::inspect(layout);
     #[cfg(unix)]
     let detected = detected(layout);
     #[cfg(windows)]
     let detected = windows::detected(layout);
+    status_in(layout, context, detected)
+}
+
+fn status_in(
+    layout: &Layout,
+    context: crate::fnm_setup::Context,
+    detected: Result<Option<NodeBinary>>,
+) -> Result<NodeStatus> {
+    let read_only_reason = crate::fnm_setup::read_only_reason(layout, &context);
     #[cfg(windows)]
     use windows::inventory;
     let installations = inventory(
         layout,
         detected.as_ref().ok().and_then(|node| node.as_ref()),
+        &context.directory,
     );
-    let fnm = if executable(layout).is_file() {
-        run(layout, &["--version"])
-    } else {
+    let fnm = if context.external.is_some() {
+        Ok(String::new())
+    } else if !executable(layout).is_file() {
         Err("The bundled fnm is missing. Reinstall the complete app.".into())
-    };
-    let available = fnm.is_ok();
-    let mut fnm_error = fnm.as_ref().err().cloned();
-    let installed = if available {
-        match run(layout, &["list"]) {
-            Ok(text) => versions(&text),
-            Err(error) => {
-                fnm_error = Some(error);
-                Vec::new()
-            }
-        }
+    } else if read_only_reason.is_some() {
+        Ok(String::new())
     } else {
-        Vec::new()
+        run_in(layout, &context.directory, &["--version"])
     };
-    let default_version = if available {
-        run(layout, &["default"]).ok().filter(|v| valid_version(v))
+    let fnm_error = fnm.as_ref().err().cloned();
+    // Inspect files directly. Even `fnm list` can initialize a previously empty
+    // store, which must not make a read-only status request claim ownership.
+    let mut installed: Vec<String> = fs::read_dir(context.directory.join("node-versions"))
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let version = entry.file_name().to_string_lossy().into_owned();
+            (valid_version(&version)
+                && entry
+                    .path()
+                    .join("installation")
+                    .join(node_relative())
+                    .is_file())
+            .then_some(version)
+        })
+        .collect();
+    installed.sort_by_key(|version| {
+        std::cmp::Reverse(
+            version
+                .trim_start_matches('v')
+                .split('.')
+                .filter_map(|part| part.parse::<u32>().ok())
+                .collect::<Vec<_>>(),
+        )
+    });
+    let managed_store = if enabled(layout) {
+        activation_directory(layout)
     } else {
-        None
+        context.directory.clone()
     };
+    let managed = probe(managed_store.join("aliases/default").join(node_relative()));
+    let default_version = managed.as_ref().map(|node| node.version.clone());
     Ok(NodeStatus {
+        external_fnm: context.external.map(|path| path.to_string_lossy().into()),
+        read_only_reason,
         fnm_path: executable(layout).to_string_lossy().into(),
-        fnm_version: fnm.ok(),
+        fnm_version: fnm.ok().filter(|version| !version.is_empty()),
         fnm_error,
-        directory: directory(layout).to_string_lossy().into(),
+        directory: context.directory.to_string_lossy().into(),
         detection_error: detected.as_ref().err().cloned(),
         detected: detected.unwrap_or(None),
         installations,
-        managed: probe(
-            directory(layout)
-                .join("aliases/default")
-                .join(node_relative()),
-        ),
+        managed,
         installed,
         default_version,
         enabled: enabled(layout),
@@ -373,8 +401,11 @@ pub fn status(layout: &Layout) -> Result<NodeStatus> {
 }
 
 pub fn remote(layout: &Layout) -> Result<Vec<String>> {
-    Ok(latest_per_major(&versions(&run(
+    let context = crate::fnm_setup::inspect(layout);
+    crate::fnm_setup::require_management(layout, &context)?;
+    Ok(latest_per_major(&versions(&run_in(
         layout,
+        &layout.data.join("fnm-release-query"),
         &["list-remote", "--sort", "desc"],
     )?)))
 }
@@ -411,13 +442,14 @@ pub fn activation(layout: &Layout, action: &str) -> Result<()> {
     change(layout, action, "", &|| false)?;
     if crate::integration::installed(layout) {
         if let Err(error) = crate::integration::install(layout) {
-            let restore = if previously_enabled {
-                "enable"
+            // Restoring our prior marker is not a new activation request. In
+            // particular, handover rollback must work after external fnm appears.
+            let rollback = if previously_enabled {
+                atomic_write(&layout.data.join("fnm-enabled"), b"1")
             } else {
-                "disable"
-            };
-            let _ = change(layout, restore, "", &|| false);
-            let rollback = crate::integration::install(layout);
+                change(layout, "disable", "", &|| false)
+            }
+            .and_then(|()| crate::integration::install(layout));
             return Err(match rollback {
                 Ok(()) => error,
                 Err(rollback) => {
@@ -430,6 +462,7 @@ pub fn activation(layout: &Layout, action: &str) -> Result<()> {
 }
 
 pub fn prepare_uninstall(layout: &Layout, version: &str) -> Result<()> {
+    crate::fnm_setup::require_management(layout, &crate::fnm_setup::inspect(layout))?;
     if !valid_version(version) {
         return Err("Choose an installed Node version.".into());
     }
@@ -445,10 +478,30 @@ pub fn change(
     version: &str,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<()> {
+    change_in(
+        layout,
+        &crate::fnm_setup::inspect(layout),
+        action,
+        version,
+        cancelled,
+    )
+}
+
+fn change_in(
+    layout: &Layout,
+    context: &crate::fnm_setup::Context,
+    action: &str,
+    version: &str,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<()> {
+    if action != "disable" {
+        crate::fnm_setup::require_management(layout, context)?;
+    }
     if action == "enable" || action == "disable" {
         if action == "enable" {
             if probe(
-                directory(layout)
+                context
+                    .directory
                     .join("aliases/default")
                     .join(node_relative()),
             )
@@ -474,13 +527,14 @@ pub fn change(
     }
     if action == "uninstall"
         && enabled(layout)
-        && run(layout, &["default"])
+        && run_in(layout, &context.directory, &["default"])
             .ok()
             .is_some_and(|default| same_version(&default, version))
     {
         return Err("Choose another default or switch to your existing Node setup before removing this version.".into());
     }
-    let installed_binary = directory(layout)
+    let installed_binary = context
+        .directory
         .join("node-versions")
         .join(format!("v{}", version.trim_start_matches('v')))
         .join("installation")
@@ -488,7 +542,10 @@ pub fn change(
     if action == "default" && probe(installed_binary.clone()).is_none() {
         return Err("Install this Node version before choosing it as the default.".into());
     }
-    let mut cmd = command(layout);
+    if action == "install" {
+        crate::fnm_setup::claim_store(layout, context)?;
+    }
+    let mut cmd = command_in(layout, &context.directory);
     cmd.args([action, version]);
     if action == "install" {
         cmd.args(["--progress", "never"]);
@@ -508,7 +565,7 @@ pub fn shell_init(layout: &Layout, shell: &str) -> String {
     }
     let quote = crate::integration::shell_quote;
     let fnm = quote(&executable(layout).to_string_lossy());
-    format!("\n# Node managed with fnm; default applies to new shells.\nexport FNM_DIR={}\neval \"$({fnm} env --shell {shell})\"\nif _fairway_node_default=$({fnm} default 2>/dev/null); then\n  {fnm} use --silent-if-unchanged \"$_fairway_node_default\" >/dev/null\nfi\nunset _fairway_node_default\n", quote(&directory(layout).to_string_lossy()))
+    format!("\n# Node managed with fnm; default applies to new shells.\nexport FNM_DIR={}\neval \"$({fnm} env --shell {shell})\"\nif _fairway_node_default=$({fnm} default 2>/dev/null); then\n  {fnm} use --silent-if-unchanged \"$_fairway_node_default\" >/dev/null\nfi\nunset _fairway_node_default\n", quote(&activation_directory(layout).to_string_lossy()))
 }
 
 pub fn write_launcher(layout: &Layout) -> Result<()> {
@@ -531,6 +588,92 @@ pub use windows::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn readonly_status_and_actions_do_not_invoke_fnm_or_change_store() {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("fairway-readonly-fnm-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        fs::create_dir_all(layout.runtime.join("fnm/bin")).unwrap();
+        fs::create_dir_all(&layout.home).unwrap();
+        fs::create_dir_all(&layout.data).unwrap();
+        let store = root.join("existing-store");
+        fs::create_dir_all(store.join("node-versions/v24.0.0/installation/bin")).unwrap();
+        fs::write(
+            store.join("node-versions/v24.0.0/installation/bin/node"),
+            b"not executable",
+        )
+        .unwrap();
+        let invoked = root.join("fnm-was-invoked");
+        fs::write(
+            executable(&layout),
+            format!(
+                "#!/bin/sh\ntouch {}\n",
+                crate::integration::shell_quote(&invoked.to_string_lossy())
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(executable(&layout), fs::Permissions::from_mode(0o755)).unwrap();
+        let context = crate::fnm_setup::Context {
+            directory: store,
+            external: None,
+            error: None,
+        };
+        let view = status_in(
+            &layout,
+            crate::fnm_setup::Context {
+                directory: context.directory.clone(),
+                external: None,
+                error: None,
+            },
+            Ok(None),
+        )
+        .unwrap();
+        assert!(view.read_only_reason.is_some());
+        assert_eq!(view.installed, ["v24.0.0"]);
+        for action in ["install", "default", "uninstall", "enable"] {
+            assert!(change_in(&layout, &context, action, "v24.0.0", &|| false).is_err());
+        }
+        fs::write(layout.data.join("fnm-enabled"), b"1").unwrap();
+        change_in(&layout, &context, "disable", "", &|| false).unwrap();
+        assert!(!enabled(&layout));
+        assert!(!invoked.exists());
+        assert!(context
+            .directory
+            .join("node-versions/v24.0.0/installation/bin/node")
+            .exists());
+        assert!(!layout.data.join("fnm-store.json").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn existing_activation_keeps_its_owned_store_until_explicit_handover() {
+        let root =
+            std::env::temp_dir().join(format!("fairway-fnm-handover-{}", rand::random::<u64>()));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        let original = crate::fnm_setup::Context {
+            directory: root.join("fairway-store"),
+            external: None,
+            error: None,
+        };
+        crate::fnm_setup::claim_store(&layout, &original).unwrap();
+        fs::write(layout.data.join("fnm-enabled"), b"1").unwrap();
+        let new = crate::fnm_setup::Context {
+            directory: root.join("other-store"),
+            external: Some(root.join("external-fnm")),
+            error: None,
+        };
+        assert_eq!(
+            activation_directory(&layout),
+            fs::canonicalize(&original.directory).unwrap()
+        );
+        assert!(change_in(&layout, &new, "enable", "", &|| false).is_err());
+        change_in(&layout, &new, "disable", "", &|| false).unwrap();
+        assert!(!enabled(&layout));
+        assert!(original.directory.is_dir());
+        assert!(!new.directory.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn default_comparison_accepts_versions_with_or_without_v() {
         assert!(same_version("v24.14.1", "24.14.1"));
@@ -551,7 +694,16 @@ mod tests {
         )
         .unwrap();
         fs::set_permissions(executable(&layout), fs::Permissions::from_mode(0o755)).unwrap();
-        let view = status(&layout).unwrap();
+        let view = status_in(
+            &layout,
+            crate::fnm_setup::Context {
+                directory: root.join("store"),
+                external: None,
+                error: None,
+            },
+            Ok(None),
+        )
+        .unwrap();
         assert!(view.fnm_version.is_none());
         assert!(view.fnm_error.unwrap().contains("broken-fnm"));
         fs::remove_dir_all(root).unwrap();

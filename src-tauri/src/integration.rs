@@ -114,6 +114,17 @@ pub fn write_unix_launchers(layout: &Layout) -> Result<()> {
 /// Expose the upstream binary directly, with no argument translation or Node activation.
 #[cfg(unix)]
 pub fn write_fnm_launcher(layout: &Layout) -> Result<()> {
+    write_fnm_launcher_in(layout, &crate::fnm_setup::inspect(layout))
+}
+
+#[cfg(unix)]
+fn write_fnm_launcher_in(layout: &Layout, context: &crate::fnm_setup::Context) -> Result<()> {
+    if context.external.is_some() {
+        return crate::fnm_setup::remove_launcher(layout);
+    }
+    if context.error.is_some() {
+        return Ok(());
+    }
     let executable = layout.runtime.join("fnm/bin/fnm");
     if !executable.is_file() {
         return Ok(());
@@ -292,6 +303,7 @@ pub fn remove(layout: &Layout) -> Result<()> {
         "composer.cmd",
         "fnm",
         "fnm.exe",
+        ".fairway-fnm.json",
     ] {
         let file = layout.bin.join(name);
         if file.exists() || file.is_symlink() {
@@ -633,8 +645,13 @@ mod tests {
         fs::create_dir_all(layout.home.join(".local/share/fnm")).unwrap();
         let binary = layout.runtime.join("fnm/bin/fnm");
         fs::write(&binary, "native binary unchanged").unwrap();
-        write_fnm_launcher(&layout).unwrap();
-        write_fnm_launcher(&layout).unwrap();
+        let context = crate::fnm_setup::Context {
+            directory: layout.home.join(".local/share/fnm"),
+            external: None,
+            error: None,
+        };
+        write_fnm_launcher_in(&layout, &context).unwrap();
+        write_fnm_launcher_in(&layout, &context).unwrap();
         assert_eq!(fs::read_link(layout.bin.join("fnm")).unwrap(), binary);
         assert_eq!(
             fs::read(layout.bin.join("fnm")).unwrap(),

@@ -206,3 +206,12 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .php-settings-toggle input{width:16px;height:16px;flex-shrink:0;margin:2px 0 0;accent-color:var(--green)}
 .php-settings .button-row{flex-wrap:wrap}
 @media(max-width:650px){.php-settings-grid{grid-template-columns:1fr}}
+
+.node-readonly{margin-top:20px;padding-top:18px;border-top:1px solid var(--border)}
+.node-readonly-heading{display:flex;align-items:center;gap:10px;font-size:12px}
+.node-readonly .path-list{margin-top:14px}
+.node-handover{padding:14px;border:1px solid var(--border);border-radius:7px;background:#f7f9f8;margin-top:16px}
+.node-handover p{margin-top:0}
+.node-cli-guide{list-style:none;margin:12px 0;padding:0}
+.node-cli-guide li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}
+.node-cli-guide code{overflow-wrap:anywhere}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { CircleCheck, Download, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, CircleCheck, Clipboard, Download, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { canControl, invoke } from './bridge';
 import HelpTip from './HelpTip';
 import type { NodeStatus } from './types';
@@ -31,6 +31,7 @@ function UninstallNodeDialog({ version, active, busy, onCancel, onConfirm }: {
 export default function NodeTools({ windows, disabled, onChange, run }: Props) {
   const [status, setStatus] = useState<NodeStatus | null>(null);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [versions, setVersions] = useState<string[]>([]);
   const [selected, setSelected] = useState('');
@@ -45,7 +46,8 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
   const restoreAfterUninstall = useRef(false);
   onChangeRef.current = onChange;
   const external = status?.installations.filter(node => node.source !== 'fnm') ?? [];
-  const usingManaged = !!(status?.enabled && status.fnmVersion && status.managed);
+  const readOnly = !!status?.readOnlyReason;
+  const usingManaged = !!(status?.enabled && status.managed);
   const current = usingManaged ? status?.managed : status?.detected;
   const currentSource = usingManaged ? 'fnm' : status?.installations.find(node => windows ? node.path.toLowerCase() === current?.path.toLowerCase() : node.path === current?.path)?.source;
   const installAndUse = !!status && !current && !status.detectionError;
@@ -74,6 +76,10 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
     } catch (cause) { if (live.current) setError(String(cause)); }
     finally { remoteRequest.current = false; if (live.current) setRemoteLoading(false); }
   };
+  const copyCommand = async (command: string) => {
+    try { await navigator.clipboard.writeText(command); setCopied(command); }
+    catch { setError('Could not copy the command. Select the command text to copy it.'); }
+  };
   const change = async (action: string, version = '') => {
     const label = action === 'install' ? `Installing Node ${version}…` : action === 'uninstall' ? `Uninstalling Node ${version}…` : 'Updating Node tools…';
     await run(label, async () => {
@@ -95,9 +101,11 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
     }
   }, [remove, disabled, loading]);
 
+  const otherInstallations = external.length ? <details className="node-other"><summary>Other Node installations <span>{external.length}</span></summary><ul>{external.map(node => <li key={node.path}><div><strong>{node.source}</strong><code>{node.version}</code></div><span className="node-file-path">{node.path}</span></li>)}</ul><p>Managed outside Fairway. Use their original manager to update or uninstall them.</p></details> : null;
+
   return <><section className="settings-card node-tools" aria-label="Node.js settings">
     <div className="node-heading">
-      <div className="node-title"><h2 ref={heading} tabIndex={-1}>Node.js</h2><HelpTip label="Node.js help"><p>Fairway includes fnm. Node versions download when you install them.</p><p>Use selects a version for new Fairway terminals and, with CLI tools enabled, new {windows ? 'Command Prompt/PowerShell sessions' : 'Bash/Zsh shells'}. Existing terminals retain their version.</p>{windows && <p>PowerShell uses its normal profile script policy. Sessions started without profiles or with Command Prompt AutoRun disabled skip external shell activation.</p>}<p>For an older exact release, use <code>fnm install VERSION</code>. Project switching is not enabled automatically.</p></HelpTip></div>
+      <div className="node-title"><h2 ref={heading} tabIndex={-1}>Node.js</h2><HelpTip label="Node.js help"><p>Fairway includes fnm. Node versions download when you install them.</p><p>{readOnly ? 'Existing fnm installations and stores are read-only here. Manage them with fnm in your terminal.' : <>Use selects a version for new Fairway terminals and, with CLI tools enabled, new {windows ? 'Command Prompt/PowerShell sessions' : 'Bash/Zsh shells'}. Existing terminals retain their version.</>}</p>{windows && <p>PowerShell uses its normal profile script policy. Sessions started without profiles or with Command Prompt AutoRun disabled skip external shell activation.</p>}<p>For an older exact release, use <code>fnm install VERSION</code>. Project switching is not enabled automatically.</p></HelpTip></div>
       <button className="icon-button" disabled={unavailable} onClick={() => { void refresh(); }} aria-label="Refresh Node detection" title="Refresh Node detection"><RefreshCw size={15} className={loading ? 'spin' : undefined} /></button>
     </div>
     {current ? <div className="node-current">
@@ -111,7 +119,25 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
     {error && <p className="node-error" role="alert">{error}</p>}
     {status?.fnmError && <p className="node-error" role="alert">fnm: {status.fnmError}</p>}
     {status?.detectionError && <p className="node-status">{windows ? 'Node on PATH could not be checked.' : 'Shell selection could not be checked.'} Installed versions are listed below.</p>}
-    {status && <details className="node-manager" open={managerOpen ?? installAndUse} onToggle={event => { setManagerOpen(event.currentTarget.open); if (event.currentTarget.open && status.fnmVersion && !versions.length) void loadVersions(); }}>
+    {status && readOnly && <div className="node-readonly">
+      <div className="node-readonly-heading"><strong>{status.externalFnm ? 'Managed by your fnm installation' : 'Node management'}</strong><span className="node-badge inactive">Read-only</span></div>
+      <p>{status.readOnlyReason}</p>
+      <dl className="path-list">
+        {status.externalFnm && <div><dt>Existing fnm</dt><dd>{status.externalFnm}</dd></div>}
+        <div><dt>Node storage</dt><dd>{status.directory}</dd></div>
+        {!!status.installed.length && <div><dt>Installed versions</dt><dd>{status.installed.join(', ')}</dd></div>}
+      </dl>
+      {status.enabled && <div className="node-handover"><p>Fairway’s Node activation is still enabled. Turn it off to let your own shell setup choose Node. This keeps installed versions and the current fnm default.</p><button className="secondary" disabled={unavailable} onClick={() => { void change('disable'); }}>Turn off Fairway activation</button></div>}
+      {otherInstallations}
+      <details className="node-other"><summary>Manage in your terminal</summary>
+        <p>Use your fnm command to manage versions. If fnm is unavailable on PATH, use {status.externalFnm ? 'the executable path above' : 'the bundled fnm path below'}. Open a new terminal after changing your shell setup.</p>
+        <p>Initialize fnm in your shell before using a version. {windows ? 'In PowerShell:' : 'In Zsh:'} <code>{windows ? 'fnm env --shell powershell | Out-String | Invoke-Expression' : 'eval "$(fnm env --shell zsh)"'}</code></p>
+        {!status.externalFnm && <code className="node-file-path">{status.fnmPath}</code>}
+        <ul className="node-cli-guide">{['fnm list', 'fnm install --lts', 'fnm use VERSION', 'fnm default VERSION', 'fnm uninstall VERSION'].map(command => <li key={command}><code>{command}</code><button className="icon-button" aria-label={`Copy ${command}`} title={copied === command ? 'Copied' : 'Copy command'} onClick={() => { void copyCommand(command); }}>{copied === command ? <Check size={14} /> : <Clipboard size={14} />}</button></li>)}</ul>
+        <p>Replace VERSION with an installed version. Use selects it in that terminal; default applies to future fnm sessions. Uninstall also removes that version’s global npm packages.</p>
+      </details>
+    </div>}
+    {status && !readOnly && <details className="node-manager" open={managerOpen ?? installAndUse} onToggle={event => { setManagerOpen(event.currentTarget.open); if (event.currentTarget.open && status.fnmVersion && !versions.length) void loadVersions(); }}>
       <summary>Manage Node.js<span>{status.installed.length ? `${status.installed.length} installed with fnm` : 'Install with fnm'}</span></summary>
       {!status.fnmVersion ? <p className="node-status">Existing Node installations remain available. Reinstall the complete app to restore fnm management.</p> : <>
         <div className="node-install-row">
@@ -130,9 +156,9 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
           <div className="node-version-actions">{(version !== status.defaultVersion || !status.enabled) && <button className="primary node-use-button" disabled={unavailable} onClick={() => { void change('use', version); }} aria-label={`Use Node ${version} in new terminals`}>Use</button>}<button className="secondary node-uninstall" disabled={unavailable} onClick={() => setRemove(version)} aria-label={`Uninstall Node ${version}`}>Uninstall</button></div>
         </li>)}</ul> : <p className="node-status">No versions installed with fnm yet.</p>}
         {status.enabled && <div className="node-external-action"><button className="text-link" disabled={unavailable} onClick={() => { void change('disable'); }}>{external.length ? 'Use existing Node setup' : 'Turn off Node activation'}</button></div>}
-        {!!external.length && <details className="node-other"><summary>Other Node installations <span>{external.length}</span></summary><ul>{external.map(node => <li key={node.path}><div><strong>{node.source}</strong><code>{node.version}</code></div><span className="node-file-path">{node.path}</span></li>)}</ul><p>Managed outside Fairway. Use their original manager to update or uninstall them.</p></details>}
+        {otherInstallations}
         <details className="node-other"><summary>Command details</summary><dl className="path-list"><div><dt>Bundled fnm</dt><dd>{status.fnmVersion} · {status.fnmPath}</dd></div><div><dt>Node storage</dt><dd>{status.directory}</dd></div><div><dt>{windows ? 'Detected on PATH' : 'Selected by your shell'}</dt><dd>{status.detected ? `${status.detected.version} · ${status.detected.path}` : status.detectionError ?? 'Not available'}</dd></div><div><dt>fnm default</dt><dd>{status.managed?.path ?? 'No installed default'}</dd></div></dl></details>
       </>}
     </details>}
-  </section>{remove && <UninstallNodeDialog version={remove} active={removingActive} busy={disabled} onCancel={() => setRemove(null)} onConfirm={() => { restoreAfterUninstall.current = true; void change('uninstall', remove); }} />}</>;
+  </section>{remove && !readOnly && <UninstallNodeDialog version={remove} active={removingActive} busy={disabled} onCancel={() => setRemove(null)} onConfirm={() => { restoreAfterUninstall.current = true; void change('uninstall', remove); }} />}</>;
 }

@@ -1,7 +1,7 @@
 //! Windows paths and reversible shell startup integration.
 use super::windows_scripts::{cmd_init, cmd_path, powershell_init, profile, remove_autorun};
 use super::{
-    command, directory as store, enabled, executable, output, probe, run, valid_version,
+    activation_directory as store, command, enabled, executable, output, probe, run, valid_version,
     NodeBinary, NodeInstallation,
 };
 use crate::config::{atomic_write, Layout, Result};
@@ -13,18 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 use winreg::{enums::*, RegKey, RegValue};
-
-pub(super) fn directory(layout: &Layout) -> PathBuf {
-    // etcetera's Windows strategy uses FOLDERID_RoamingAppData (fnm 1.39).
-    let modern = dirs::data_dir()
-        .unwrap_or_else(|| layout.home.join("AppData/Roaming"))
-        .join("fnm");
-    if !modern.exists() && layout.home.join(".fnm").exists() {
-        layout.home.join(".fnm")
-    } else {
-        modern
-    }
-}
 
 fn path_entries() -> Vec<PathBuf> {
     crate::shell_environment::windows_environment()
@@ -48,13 +36,19 @@ pub(super) fn detected(_: &Layout) -> Result<Option<NodeBinary>> {
     }
     Ok(None)
 }
-fn source(layout: &Layout, path: &std::path::Path) -> &'static str {
+fn source(directory: &std::path::Path, path: &std::path::Path) -> &'static str {
     let path = path
         .to_string_lossy()
         .trim_start_matches("\\\\?\\")
         .replace('/', "\\")
         .to_lowercase();
-    if path.starts_with(&store(layout).to_string_lossy().to_lowercase()) {
+    let directory = fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
+    let directory = directory
+        .to_string_lossy()
+        .trim_start_matches("\\\\?\\")
+        .replace('/', "\\")
+        .to_lowercase();
+    if std::path::Path::new(&path).starts_with(directory) {
         "fnm"
     } else if std::env::var_os("NVM_HOME")
         .is_some_and(|home| path.starts_with(&home.to_string_lossy().to_lowercase()))
@@ -69,7 +63,11 @@ fn source(layout: &Layout, path: &std::path::Path) -> &'static str {
         "External"
     }
 }
-pub(super) fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<NodeInstallation> {
+pub(super) fn inventory(
+    layout: &Layout,
+    detected: Option<&NodeBinary>,
+    directory: &std::path::Path,
+) -> Vec<NodeInstallation> {
     let mut candidates = Vec::new();
     if let Some(node) = detected {
         candidates.push(PathBuf::from(&node.path));
@@ -102,7 +100,7 @@ pub(super) fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<N
         layout.home.join("AppData/Local/Volta/bin/node.exe"),
     ]);
     for (root, managed) in [
-        (store(layout).join("node-versions"), true),
+        (directory.join("node-versions"), true),
         (
             std::env::var_os("NVM_HOME")
                 .map(PathBuf::from)
@@ -139,7 +137,7 @@ pub(super) fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<N
         }
         if let Some(node) = probe(path) {
             result.push(NodeInstallation {
-                source: source(layout, std::path::Path::new(&node.path)).into(),
+                source: source(directory, std::path::Path::new(&node.path)).into(),
                 node,
             });
         }
@@ -148,6 +146,13 @@ pub(super) fn inventory(layout: &Layout, detected: Option<&NodeBinary>) -> Vec<N
 }
 
 pub(super) fn write_launcher(layout: &Layout) -> Result<()> {
+    let context = crate::fnm_setup::inspect(layout);
+    if context.external.is_some() && !enabled(layout) {
+        return crate::fnm_setup::remove_launcher(layout);
+    }
+    if context.error.is_some() {
+        return Ok(());
+    }
     fs::create_dir_all(&layout.bin).map_err(|e| e.to_string())?;
     let bytes = fs::read(executable(layout)).map_err(|e| e.to_string())?;
     let path = layout.bin.join("fnm.exe");
@@ -156,7 +161,7 @@ pub(super) fn write_launcher(layout: &Layout) -> Result<()> {
     if fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
         atomic_write(&path, &bytes)?;
     }
-    Ok(())
+    crate::fnm_setup::record_launcher(layout)
 }
 
 /// Initialize native fnm without evaluating generated batch text in the PTY.

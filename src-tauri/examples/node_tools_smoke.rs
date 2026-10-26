@@ -24,6 +24,8 @@ fn main() -> Result<(), String> {
     }
     let home = root.join("home 日本 with spaces");
     fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    // Never inherit a personal fnm launcher from the caller’s PATH.
+    std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
     // Never inherit a personal custom Zsh profile directory into this fixture.
     std::env::set_var("ZDOTDIR", &home);
     // A single-threaded example owns its environment, never the actual user's store.

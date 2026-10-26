@@ -8,7 +8,7 @@ Run `fairway data-browser`, then open the access URL printed by the command in a
 
 The command uses Node from your current shell’s PATH. The standalone browser’s SQLite driver requires Node **22 or newer**. npm is needed for initial dependency setup, not for warm offline launches. The desktop install picker still offers Node 20+ for other development work.
 
-If Node is missing or older, Fairway prints commands using the included native fnm executable. After installing Fairway’s CLI tools, you can use fnm directly:
+If Node is missing or older, Fairway prints commands using an existing fnm executable when detected, otherwise the included native executable. CLI integration preserves the existing fnm’s PATH priority. After installing Fairway’s CLI tools, you can use fnm directly:
 
 ```sh
 fnm install --lts
