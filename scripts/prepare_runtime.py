@@ -497,17 +497,6 @@ def verify(target):
         if expected not in output:
             raise RuntimeError(f'Runtime version mismatch: expected {expected!r}, received {output.strip()!r}')
         print(output.strip(), flush=True)
-    if platform.system() == 'Linux' and 'dataBrowser' in MANIFEST:
-        browser = target / 'data-browser'
-        identity = json.loads((browser / 'build.json').read_text())
-        digest = hashlib.sha256()
-        for path in sorted(browser.rglob('*')):
-            if path.is_file() and path.name != 'build.json':
-                digest.update(path.relative_to(browser).as_posix().encode() + b'\0' + path.read_bytes())
-        if identity['revision'] != MANIFEST['dataBrowser'] or identity['id'] != digest.hexdigest():
-            raise RuntimeError('The standalone data browser payload is out of date or incomplete')
-        for name in ('server.mjs', 'sqlite-query.mjs', 'launch.mjs', 'package.json', 'package-lock.json', 'dist/index.html'):
-            if not (browser / name).is_file(): raise RuntimeError(f'Missing data browser payload: {name}')
     ini.unlink()
 
 
@@ -556,7 +545,7 @@ def main():
 
 
 if __name__ == '__main__':
-    # Linux/browser helpers import this module. Share the same overridden
+    # Linux runtime helpers import this module. Share the same overridden
     # manifest and lock settings instead of loading a second copy of the script.
     import sys
     sys.modules['prepare_runtime'] = sys.modules[__name__]

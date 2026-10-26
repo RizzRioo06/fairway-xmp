@@ -15,10 +15,6 @@
     "sha256": "803a3de1c096cc6ba4b568de3859c6debcfd95a09b80404ee2fb6a19ddd22680",
     "url": "https://codeload.github.com/composer/composer/tar.gz/refs/tags/2.10.3"
   },
-  "data-browser-source": {
-    "sha256": "8ba7750e41338a4bc0f7c6925a8f54222996fad5aaff0ffd861f6608a6429914",
-    "url": "https://codeload.github.com/eimg/data-browser/tar.gz/04ed044ba80628e1a59bfb93f542bfd23bf33914"
-  },
   "fnm-linux": {
     "sha256": "7807664f39d39fc518da1c35ba0181e4b3267603c4b1dedeb4b5fc6ae440a224",
     "url": "https://github.com/Schniz/fnm/releases/download/v1.39.0/fnm-linux.zip"

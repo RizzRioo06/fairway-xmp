@@ -25,7 +25,7 @@ case "${XDG_DATA_HOME:-}" in
   /*) DATA_HOME=$XDG_DATA_HOME ;;
   *) DATA_HOME="$HOME/.local/share" ;;
 esac
-for PROTECTED in "$HOME/fairway/www" "$DATA_HOME/dev.fairway.environment" "${FNM_DIR:-$DATA_HOME/fnm}" "$DATA_HOME/fnm" "$HOME/.fnm" "$HOME/.data-browser"; do
+for PROTECTED in "$HOME/fairway/www" "$DATA_HOME/dev.fairway.environment" "${FNM_DIR:-$DATA_HOME/fnm}" "$DATA_HOME/fnm" "$HOME/.fnm"; do
   PROTECTED=$(realpath -m -- "$PROTECTED")
   case "$PREFIX/" in "$PROTECTED/"*) echo 'Choose an installation directory separate from your projects and application data.' >&2; exit 1 ;; esac
   case "$PROTECTED/" in "$PREFIX/"*) echo 'Choose an installation directory separate from your projects and application data.' >&2; exit 1 ;; esac
@@ -66,4 +66,4 @@ if ! "$PREFIX/current/bin/fairway" install-cli; then
   echo 'Installation setup failed; existing data is preserved.' >&2
   exit 1
 fi
-printf '\nInstalled Fairway XMP in %s\nReopen your shell, then run: fairway\nOr run now: "%s/current/bin/fairway"\nServices remain stopped until you start them.\nNative fnm is included. Run fairway data-browser for the local browser (requires Node 22+).\n' "$PREFIX" "$PREFIX"
+printf '\nInstalled Fairway XMP in %s\nReopen your shell, then run: fairway\nOr run now: "%s/current/bin/fairway"\nServices remain stopped until you start them.\nNative fnm is included for optional Node.js setup.\n' "$PREFIX" "$PREFIX"

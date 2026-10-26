@@ -2,8 +2,6 @@
 
 Fairway's SQL backups contain student databases, tables, views, routines, events, and triggers. They exclude MySQL's system databases and account tables. Projects in `fairway/www` need their own file backup.
 
-The Linux standalone browser uses separate snapshots under `~/.data-browser/backups`. Those SQL snapshots are not full engine backups; see [Linux data browser](linux-data-browser.md#updates-removal-and-backups). This guide covers Fairway’s full MySQL environment backups.
-
 ## Create and keep a backup
 
 1. Start MySQL. In the desktop panel, choose **Back up databases**; on Linux, run `fairway backup`.

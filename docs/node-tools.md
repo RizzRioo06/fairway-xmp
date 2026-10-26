@@ -6,13 +6,13 @@ Prepared for `0.1.0-rc.5`; RC 5 has not been built or published. Current source 
 | --- | --- |
 | macOS | Settings checks an interactive login Zsh environment, including nvm/Homebrew and inherited custom ZDOTDIR. Embedded terminals import exported tool settings, then use Fairway’s own prompt/history configuration. |
 | Windows | Settings and embedded terminals refresh the system/user registry environment. Opting into fnm Node configures new embedded terminals and, with CLI tools enabled, new Command Prompt and PowerShell sessions. |
-| Linux | An existing fnm keeps PATH priority; otherwise CLI integration or `fairway shell` exposes the bundled executable. Node activation is configured by the user’s shell. The standalone browser uses the invoking shell’s Node. |
+| Linux | An existing fnm keeps PATH priority; otherwise CLI integration or `fairway shell` exposes the bundled executable. Node activation is configured by the user’s shell. |
 
 ## Existing fnm installations
 
 When Fairway finds an external fnm executable or an existing populated store without a Fairway ownership record, the Node.js card is **read-only**. It shows the selected Node, existing fnm path, storage path and installed versions, with copyable CLI commands under **Manage in your terminal**. Install, Use and Uninstall are unavailable; the backend also rejects those actions and enabling Fairway activation. Existing shell initialization and defaults stay under your control. This does not change how nvm/Homebrew Node setups can opt into a new Fairway-managed store.
 
-CLI setup and embedded-terminal launchers skip the bundled fnm when an external executable is found, including when another Fairway launcher is earlier on PATH. Detection excludes Fairway's persistent and temporary launchers and symlinks to its bundled executable. Linux browser setup guidance also prefers the detected existing executable. Bundled fnm remains inside the app and can be invoked by its full path when needed.
+CLI setup and embedded-terminal launchers skip the bundled fnm when an external executable is found, including when another Fairway launcher is earlier on PATH. Detection excludes Fairway's persistent and temporary launchers and symlinks to its bundled executable. Bundled fnm remains inside the app and can be invoked by its full path when needed.
 
 If Fairway activation was enabled before another fnm appeared, the card offers **Turn off Fairway activation**. This explicitly removes Fairway's activation hooks for new sessions and preserves installed versions, global packages and the current shared default. It does not restore a historical default. Existing sessions retain their selection. Detection alone does not silently remove existing activation. On Windows the CLI copy needed by already-enabled startup hooks remains until that handover, so those hooks keep working.
 
@@ -42,10 +42,10 @@ fnm default VERSION
 fnm uninstall VERSION
 ```
 
-The [Linux standalone browser](linux-data-browser.md) requires Node 22+ and npm for first-use setup. Fairway’s PHP services, desktop browser and ordinary CLI do not require a preinstalled Node runtime.
+Fairway’s PHP services, desktop browser and ordinary CLI do not require a preinstalled Node runtime.
 
 ## Verification and troubleshooting
 
 Refresh detection after changing managers or PATH. New embedded terminals read the configured tool environment; macOS export capture does not import personal aliases/functions, prompts or history hooks. Detection timeouts and fnm errors stay visible. If bundled fnm is missing and Fairway management is available, reinstall the complete Fairway package. In read-only mode, use the displayed existing fnm or bundled executable path and your normal shell initialization. If native fnm changed/deleted a Fairway-managed default outside Settings, select an installed version with Use to repair activation.
 
-The noninteractive Mac/Windows fnm smoke examples use scratch stores/profiles, exercise downloads/defaults/uninstall and leave personal installations unchanged. The Linux browser smoke covers native fnm, missing/old Node, concurrent setup, offline reuse, local access authentication, lifetime locks and real SQLite/MySQL requests. Commands are in [Contributing](../CONTRIBUTING.md) and [Testing](testing.md). These checks do not replace native Windows execution or optional WebView review.
+The noninteractive Mac/Windows fnm smoke examples use scratch stores/profiles, exercise downloads/defaults/uninstall and leave personal installations unchanged. The Linux fnm smoke checks the bundled executable and optional Node LTS installation with Node/npm/npx in an isolated store. Commands are in [Contributing](../CONTRIBUTING.md) and [Testing](testing.md). These checks do not replace native Windows execution or optional WebView review.

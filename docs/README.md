@@ -9,7 +9,6 @@ Start with the [user guide](../README.md) or [development setup](../CONTRIBUTING
 | [Maintenance](maintenance.md) | Updating runtime dependencies, current limitations and future improvements |
 | [CI performance](ci-build-performance.md) | Cache reuse, build retries and artifact cleanup |
 | [Desktop data browser](data-browser.md) | MySQL/SQLite operations, limits and desktop CLI commands |
-| [Linux data browser](linux-data-browser.md) | Standalone PostgreSQL/MySQL/SQLite browser, Node setup, access URLs and SSH forwarding |
 | [Node tools](node-tools.md) | Native fnm, existing Node detection, activation, storage and removal |
 | [PostgreSQL clients](postgres-client-support.md) | Connecting PHP applications to a user-supplied server |
 | [PHP settings](php-settings.md) | Per-version controls, persistent overrides and reset |

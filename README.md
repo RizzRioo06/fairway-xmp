@@ -18,7 +18,7 @@ Latest published release: **[v0.1.0-rc.4](https://github.com/eimg/fairway-xmp/re
 
 See the [release page](https://github.com/eimg/fairway-xmp/releases/tag/v0.1.0-rc.4) for these downloads and [current limitations](docs/maintenance.md#current-limitations). Download the installer for your computer and follow its prompts. The Mac app and installer are Developer ID signed and notarized by Apple. Windows installers do not yet have Authenticode signatures and may show an unknown-publisher warning; in-app updates use a separate cryptographic signature.
 
-**RC 5 is in preparation.** Current source targets `0.1.0-rc.5`, including Node/fnm management and the standalone Linux `fairway data-browser` command described below. RC 5 has not been built or published; the RC 4 downloads above predate these additions. See the [prepared release notes](docs/release-notes.md).
+**RC 5 is in preparation.** Current source targets `0.1.0-rc.5`, including Node/fnm management. RC 5 has not been built or published; the RC 4 downloads above predate these additions. See the [prepared release notes](docs/release-notes.md).
 
 ## Linux terminal edition
 
@@ -35,7 +35,6 @@ fairway php --version
 fairway composer --version
 fairway mysql fairway         # connect with the local teaching account
 fairway backup               # requires running MySQL
-fairway data-browser         # RC 5 source: web data browser (Node 22+)
 fairway shutdown             # stop services and the supervisor
 ```
 
@@ -54,12 +53,8 @@ fnm install --lts
 # Bash; use --shell zsh for Zsh:
 eval "$(fnm env --shell bash)"
 fnm use lts-latest
-fairway data-browser
+node --version
 ```
-
-`fairway data-browser` runs the [standalone data browser](https://github.com/eimg/data-browser) on loopback port **8803**. Open the access URL printed by the command; it includes a temporary per-run token. Keep the command running; Ctrl+C stops it. It requires Node 22 or newer and npm. The production browser is bundled; first use downloads its locked runtime dependencies, then later runs work offline. Switching Node ABI or updating the browser prepares a separate dependency cache. `fairway data-browser --prepare` sets up that cache ahead of time; `--port 9000` selects another loopback port. Existing Node managers are respected; missing/older Node produces instructions for an existing fnm or the bundled executable.
-
-On a remote Linux host, run `ssh -L 8803:127.0.0.1:8803 user@host`, start `fairway data-browser` there, then open its printed access URL in your own browser. The server binds only to loopback. It does not start Fairway services: start MySQL separately when needed, or connect to your own PostgreSQL/MySQL server or an existing SQLite file. Credentials stay in the running browser server; backups use `~/.data-browser/backups`. See [Linux data browser](docs/linux-data-browser.md) for details.
 
 ## What’s included
 
@@ -74,7 +69,7 @@ The control panel provides service controls, port settings, logs, database backu
 
 ## PostgreSQL client support
 
-RC 4 includes `pdo_pgsql` and `pgsql` in every bundled PHP version (8.2–8.5) on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the desktop Data browser supports MySQL and SQLite only. The separate Linux browser also connects to PostgreSQL. Fairway’s environment backup/updater does not back up or upgrade external PostgreSQL databases; the standalone browser’s SQL snapshots are separate.
+RC 4 includes `pdo_pgsql` and `pgsql` in every bundled PHP version (8.2–8.5) on Windows, macOS and Linux. Your PHP applications and Composer projects can connect to a PostgreSQL server you provide, without installing extra PHP drivers. This is additional client support: Fairway does not ship or manage a PostgreSQL server, and the desktop Data browser supports MySQL and SQLite only. Fairway’s environment backup/updater does not back up or upgrade external PostgreSQL databases.
 
 See [PostgreSQL connection examples and requirements](docs/postgres-client-support.md).
 

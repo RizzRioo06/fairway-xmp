@@ -4,7 +4,7 @@ Current source builds include PHP's `pdo_pgsql` and `pgsql` extensions, with the
 
 Supply your own running PostgreSQL server, locally, in a container, or on another host. Configure your project with that server's host, port, database, username, password and any required TLS settings. Its network access and database permissions determine which operations your application can perform. PostgreSQL does not require Fairway's MySQL service to be running.
 
-Fairway includes no PostgreSQL server, `psql`, `pg_dump` or PostgreSQL service controls. The desktop data browser supports MySQL/SQLite; Linux additionally provides a separate [standalone PostgreSQL/MySQL/SQLite browser](linux-data-browser.md) with connection forms. Install any administration tools separately. Fairway's environment backups and updater protect its own MySQL data; external PostgreSQL databases keep their own backup and upgrade process. phpMyAdmin remains MySQL-only.
+Fairway includes no PostgreSQL server, `psql`, `pg_dump` or PostgreSQL service controls. The desktop data browser supports MySQL/SQLite. Install any administration tools separately. Fairway's environment backups and updater protect its own MySQL data; external PostgreSQL databases keep their own backup and upgrade process. phpMyAdmin remains MySQL-only.
 
 ## Verify the PHP drivers
 
@@ -51,6 +51,6 @@ python3 scripts/check_postgres_clients.py --postgres-bin /path/to/postgresql/bin
 
 The check requires an external PostgreSQL installation and Cargo. It initializes a disposable cluster on an available loopback port with SCRAM password authentication, runs the Rust smoke example, then stops and removes only that test cluster. It does not start/stop an existing PostgreSQL service or put server files in the runtime. Every bundled PHP version is exercised through production-generated PHP configuration, both as CLI and through Nginx/PHP, while Fairway's MySQL remains stopped. Checks cover both APIs, rejected incorrect passwords, parameterized queries, Unicode, exact BIGINT/NUMERIC values, JSONB, writes and transaction rollback.
 
-Candidate workflows run this check on macOS, Windows and Linux. macOS installs a server on the builder only, Windows uses the runner's `PGBIN`, and Linux installs a server on the builder only. No PostgreSQL server is packaged; the Linux standalone browser additionally ships client-side driver dependencies on first use.
+Candidate workflows run this check on macOS, Windows and Linux. macOS installs a server on the builder only, Windows uses the runner's `PGBIN`, and Linux installs a server on the builder only. No PostgreSQL server is packaged.
 
 On Windows, the check grants the current user's SID inheritable access to its private test directory before creating the password file or cluster. PostgreSQL's `initdb` drops administrator group privileges, so a directory accessible only through those groups would otherwise reject the password file. This permission change applies only to the disposable test directory.

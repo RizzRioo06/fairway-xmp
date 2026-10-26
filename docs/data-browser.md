@@ -1,7 +1,5 @@
 # Desktop data browser
 
-For the standalone browser on Linux, use [`fairway data-browser`](linux-data-browser.md). This guide describes the desktop Rust/PHP implementation.
-
 **Data browser** is available in the macOS and Windows desktop panels alongside phpMyAdmin. Open it through **Browse Data** in the sidebar. The existing Linux terminal edition does not include the desktop data browser.
 
 ## Reading a row

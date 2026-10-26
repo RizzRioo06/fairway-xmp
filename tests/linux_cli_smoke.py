@@ -48,9 +48,6 @@ def main(installer, baseline=None, report=None):
             node_store = Path(env['FNM_DIR']) / 'keep-node-version'
             node_store.parent.mkdir(parents=True, exist_ok=True)
             node_store.write_text('User Node storage')
-            browser_backup = home / '.data-browser/backups/keep.sqlite'
-            browser_backup.parent.mkdir(parents=True, exist_ok=True)
-            browser_backup.write_bytes(b'User database backup')
             if baseline:
                 call('start')
                 assert call('mysql', '--batch', '--skip-column-names', '-e', 'SELECT id FROM beta_lifecycle.coursework;').stdout.strip() == '42'
@@ -195,7 +192,6 @@ def main(installer, baseline=None, report=None):
             assert not (data / 'bin/fairway').exists()
             assert not (data / 'bin/fnm').exists()
             assert node_store.read_text() == 'User Node storage'
-            assert browser_backup.read_bytes() == b'User database backup'
             for profile in ('.bashrc', '.bash_profile', '.zshrc', '.zprofile'):
                 if (home / profile).exists(): assert '>>> fairway' not in (home / profile).read_text()
             # Reinstall after complete removal must reopen the same student database.

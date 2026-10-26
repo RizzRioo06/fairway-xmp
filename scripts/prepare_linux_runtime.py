@@ -148,9 +148,6 @@ def linux(target, lock, refresh):
             list(workers.map(collect, plan))
         copy(ROOT / 'scripts/fnm_sources.py', source_output / 'fnm_sources.py')
         (source_output / 'fnm-source-inputs.json').write_text(json.dumps(plan, indent=2) + '\n')
-    if 'dataBrowser' in MANIFEST:
-        from prepare_data_browser import prepare
-        prepare(target, source_output, lock, refresh)
     php_builds = [('php', MANIFEST['php'])]
     php_builds.extend((f'php-{minor}', version) for minor, version in MANIFEST.get('phpVersions', {}).items() if version != MANIFEST['php'])
     for name, version in [*php_builds, ('nginx', MANIFEST['nginx'])]:

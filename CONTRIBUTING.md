@@ -70,7 +70,7 @@ Use a fresh directory for each run. Node downloads require network access. The m
 cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_windows_smoke --no-default-features --locked -- .runtime-work/fnm-windows-check
 ```
 
-The Mac and Windows workflows run their respective native fnm checks after runtime preparation. Native unit tests exercise profile/AutoRun restoration against scratch files and a unique test registry subkey. The smoke check covers Node downloads, native CLI copies, Node/npm/npx, the actual Command Prompt and PowerShell startup bodies, retained versions in existing terminals, and default uninstall. Linux stages the unchanged upstream x64 binary and the same complete fnm/crate sources. Its headless smoke check exercises native fnm and the standalone browser.
+The Mac and Windows workflows run their respective native fnm checks after runtime preparation. Native unit tests exercise profile/AutoRun restoration against scratch files and a unique test registry subkey. The smoke check covers Node downloads, native CLI copies, Node/npm/npx, the actual Command Prompt and PowerShell startup bodies, retained versions in existing terminals, and default uninstall. Linux stages the unchanged upstream x64 binary and the same complete fnm/crate sources. Its headless smoke check exercises native fnm and optional Node downloads in an isolated store.
 
 To verify existing tools against your current macOS shell setup without opening the UI, run:
 
@@ -82,18 +82,18 @@ This opens a headless embedded shell with command history off and prints only se
 
 ## Linux terminal builds
 
-The Linux Rust CLI uses `--no-default-features --features cli`, without Tauri or desktop libraries. Runtime preparation additionally needs Node 24 and npm to build the pinned standalone browser; target users need Node 22+ and npm only for `fairway data-browser`. Build on Ubuntu 22.04 for the glibc 2.35 baseline. The builder packages and `deb-src` setup are defined in `.github/actions/prepare-linux-runtime/action.yml`.
+The Linux Rust CLI uses `--no-default-features --features cli`, without Tauri or desktop libraries. Build on Ubuntu 22.04 for the glibc 2.35 baseline. The builder packages and `deb-src` setup are defined in `.github/actions/prepare-linux-runtime/action.yml`.
 
 ```sh
 python3 scripts/prepare_runtime.py --lockfile runtime-linux-downloads.lock.json
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
 cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
-python3 tests/linux_node_browser_smoke.py --cli src-tauri/target/release/fairway-cli --runtime src-tauri/resources/runtime --install-node --with-mysql
+python3 tests/linux_fnm_smoke.py --runtime src-tauri/resources/runtime --install-node
 python3 scripts/package_linux.py
 python3 tests/linux_cli_smoke.py artifacts/linux-installer/fairway-xmp-*-linux-x86_64.run
 ```
 
-The Linux workflow packages `.run`/`.tar.gz` installers, source archives, and checks clean distro environments. Target machines need no compiler or installed runtime library packages. The browser first installs its locked npm dependencies into isolated user storage; its SQLite driver ships Node-API prebuilds. The headless smoke checks concurrent setup, offline reuse, missing/old Node guidance, static assets, real SQLite and bundled MySQL API queries, binding collisions, per-run access cookies and active-browser update/uninstall guards. Service tests run as an ordinary user and bind to loopback.
+The Linux workflow packages `.run`/`.tar.gz` installers, source archives, and checks clean distro environments. Target machines need no compiler or installed runtime library packages. The native fnm smoke checks its bundled version and optionally downloads Node LTS into a temporary store, then verifies Node/npm/npx. Node and npm are not required for building or using the Linux PHP environment. Service tests run as an ordinary user and bind to loopback.
 
 ## Builds, publication and maintenance
 
