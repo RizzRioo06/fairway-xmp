@@ -89,6 +89,7 @@ pub fn write_unix_launchers(layout: &Layout) -> Result<()> {
         atomic_write(&path, text.as_bytes())?;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
     }
+    write_fnm_launcher(layout)?;
     #[cfg(target_os = "macos")]
     {
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -106,6 +107,34 @@ pub fn write_unix_launchers(layout: &Layout) -> Result<()> {
             fs::set_permissions(path, fs::Permissions::from_mode(0o755))
                 .map_err(|e| e.to_string())?;
         }
+    }
+    Ok(())
+}
+
+/// Expose the upstream binary directly, with no argument translation or Node activation.
+#[cfg(unix)]
+pub fn write_fnm_launcher(layout: &Layout) -> Result<()> {
+    write_fnm_launcher_in(layout, &crate::fnm_setup::inspect(layout))
+}
+
+#[cfg(unix)]
+fn write_fnm_launcher_in(layout: &Layout, context: &crate::fnm_setup::Context) -> Result<()> {
+    if context.external.is_some() {
+        return crate::fnm_setup::remove_launcher(layout);
+    }
+    if context.error.is_some() {
+        return Ok(());
+    }
+    let executable = layout.runtime.join("fnm/bin/fnm");
+    if !executable.is_file() {
+        return Ok(());
+    }
+    fs::create_dir_all(&layout.bin).map_err(|e| e.to_string())?;
+    let temporary = layout.bin.join(format!(".fnm-{}", rand::random::<u64>()));
+    std::os::unix::fs::symlink(executable, &temporary).map_err(|e| e.to_string())?;
+    if let Err(error) = fs::rename(&temporary, layout.bin.join("fnm")) {
+        let _ = fs::remove_file(temporary);
+        return Err(error.to_string());
     }
     Ok(())
 }
@@ -135,6 +164,7 @@ pub fn write_windows_launchers(layout: &Layout) -> Result<()> {
         )
         .as_bytes(),
     )?;
+    crate::node_tools::write_launcher(layout)?;
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     if executable
         .file_name()
@@ -185,6 +215,15 @@ pub fn install(layout: &Layout) -> Result<()> {
         let mut records = Vec::new();
         let mut edits = Vec::new();
         for file in &files {
+            #[cfg(target_os = "macos")]
+            let shell = if file
+                .file_name()
+                .is_some_and(|name| name == ".zshrc" || name == ".zprofile")
+            {
+                "zsh"
+            } else {
+                "bash"
+            };
             let file = if fs::symlink_metadata(file).is_ok_and(|m| m.file_type().is_symlink()) {
                 fs::canonicalize(file).map_err(|e| e.to_string())?
             } else {
@@ -196,7 +235,16 @@ pub fn install(layout: &Layout) -> Result<()> {
                 .map(|r| r.created)
                 .unwrap_or_else(|| !file.exists());
             let previous = read_profile(&file)?;
-            let updated = profile_with_block(&previous, Some(&block))?;
+            #[cfg(target_os = "macos")]
+            let profile_block = format!(
+                "{}{}{}",
+                block.strip_suffix(END).unwrap_or(&block),
+                crate::node_tools::shell_init(layout, shell),
+                END
+            );
+            #[cfg(not(target_os = "macos"))]
+            let profile_block = &block;
+            let updated = profile_with_block(&previous, Some(&profile_block))?;
             edits.push((file.clone(), updated));
             records.push(ProfileRecord {
                 path: file,
@@ -214,6 +262,7 @@ pub fn install(layout: &Layout) -> Result<()> {
     #[cfg(windows)]
     {
         write_windows_launchers(layout)?;
+        crate::node_tools::install_shells(layout)?;
         windows_path(&layout.bin, true)?;
     }
     atomic_write(&layout.data.join("cli-installed"), b"1")?;
@@ -243,17 +292,28 @@ pub fn remove(layout: &Layout) -> Result<()> {
         }
     }
     #[cfg(windows)]
-    windows_path(&layout.bin, false)?;
-    for name in ["php", "composer", "php.cmd", "composer.cmd"] {
+    {
+        crate::node_tools::remove_shells(layout)?;
+        windows_path(&layout.bin, false)?;
+    }
+    for name in [
+        "php",
+        "composer",
+        "php.cmd",
+        "composer.cmd",
+        "fnm",
+        "fnm.exe",
+        ".fairway-fnm.json",
+    ] {
         let file = layout.bin.join(name);
-        if file.exists() {
+        if file.exists() || file.is_symlink() {
             fs::remove_file(file).map_err(|e| e.to_string())?;
         }
     }
     #[cfg(target_os = "macos")]
     {
         let launcher = layout.bin.join("fairway");
-        if launcher.exists() {
+        if launcher.exists() || launcher.is_symlink() {
             fs::remove_file(launcher).map_err(|e| e.to_string())?;
         }
     }
@@ -572,5 +632,38 @@ mod tests {
     #[test]
     fn shell_quotes_do_not_interpolate() {
         assert_eq!(shell_quote("a'b$(whoami)"), "'a'\\''b$(whoami)'");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn native_fnm_launcher_tracks_runtime_updates_and_removal_preserves_store() {
+        let root = env::temp_dir().join(format!(
+            "fairway-linux-fnm-{} student's home",
+            rand::random::<u64>()
+        ));
+        let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+        fs::create_dir_all(layout.runtime.join("fnm/bin")).unwrap();
+        fs::create_dir_all(layout.home.join(".local/share/fnm")).unwrap();
+        let binary = layout.runtime.join("fnm/bin/fnm");
+        fs::write(&binary, "native binary unchanged").unwrap();
+        let context = crate::fnm_setup::Context {
+            directory: layout.home.join(".local/share/fnm"),
+            external: None,
+            error: None,
+        };
+        write_fnm_launcher_in(&layout, &context).unwrap();
+        write_fnm_launcher_in(&layout, &context).unwrap();
+        assert_eq!(fs::read_link(layout.bin.join("fnm")).unwrap(), binary);
+        assert_eq!(
+            fs::read(layout.bin.join("fnm")).unwrap(),
+            b"native binary unchanged"
+        );
+        fs::remove_file(&binary).unwrap();
+        assert!(layout.bin.join("fnm").is_symlink());
+        assert!(!layout.bin.join("fnm").exists());
+        remove(&layout).unwrap();
+        assert!(!layout.bin.join("fnm").exists());
+        assert!(!layout.bin.join("fnm").is_symlink());
+        assert!(layout.home.join(".local/share/fnm").is_dir());
+        fs::remove_dir_all(root).unwrap();
     }
 }

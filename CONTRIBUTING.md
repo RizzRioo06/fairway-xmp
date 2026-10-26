@@ -16,7 +16,7 @@ npm run tauri -- dev           # native app with the staged runtime
 
 On Windows use `python` and, if PowerShell blocks `npm.ps1`, `npm.cmd`. Runtime preparation verifies pinned official Windows archives or Mac bottles/upstream sources and stages the complete runtime without a system MySQL/PHP installation. Keep the committed download locks for ordinary preparation; do not refresh unrelated runtime inputs to resolve a local setup problem.
 
-The UI simulation resets on reload, uses example paths, and does not change real files/services. Native development uses real services. Set `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA` to isolated directories when testing startup, settings, launchers and data. See [Testing](docs/testing.md#isolated-development-profiles).
+The UI simulation resets on reload, uses example paths, and does not change real files/services. To preview a machine without Node, choose **Scenario → Node not detected**, then open **Settings**. Choose **Existing fnm**, **Existing fnm store** or **fnm handover** to preview read-only guidance and explicit activation handover. The simulated Install & use flow works on both example platforms; changing scenarios resets Node installations and activation. Native development uses real services. Set `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA` to isolated directories when testing startup, settings, launchers and data. See [Testing](docs/testing.md#isolated-development-profiles).
 
 ## Verification
 
@@ -56,19 +56,44 @@ python3 scripts/verify_macos_permissions.py 'src-tauri/target/release/bundle/mac
 
 The helper build is offline and needs its Rust dependencies already available. `scripts/package_macos.sh` verifies the helper/features and signs nested code before sealing the app. For signed packaging and credentials, follow [Build and release](docs/build-and-release.md#signing). A development app signed locally is not automatically notarized. Use standalone workflow outputs to test permissions without replacing the installed application.
 
+### macOS Node verification
+
+The macOS fnm integration has a non-interactive smoke example. It downloads Node into a fresh scratch home/store, checks native fnm commands, npm/npx, default activation, profile preservation and removal, and never edits your own shell profiles:
+
+```sh
+cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_smoke --no-default-features --features terminal --locked -- "$PWD/.runtime-work/fnm-check"
+```
+
+Use a fresh directory for each run. Node downloads require network access. The macOS and Windows runtime preparers stage and verify their pinned upstream fnm binaries. On Windows, run the equivalent isolated check (no UI, real shell profiles or personal registry changes):
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_windows_smoke --no-default-features --locked -- .runtime-work/fnm-windows-check
+```
+
+The Mac and Windows workflows run their respective native fnm checks after runtime preparation. Native unit tests exercise profile/AutoRun restoration against scratch files and a unique test registry subkey. The smoke check covers Node downloads, native CLI copies, Node/npm/npx, the actual Command Prompt and PowerShell startup bodies, retained versions in existing terminals, and default uninstall. Linux stages the unchanged upstream x64 binary and the same complete fnm/crate sources. Its headless smoke check exercises native fnm and the standalone browser.
+
+To verify existing tools against your current macOS shell setup without opening the UI, run:
+
+```sh
+cargo run --manifest-path src-tauri/Cargo.toml --example terminal_tools_smoke --no-default-features --features terminal --locked
+```
+
+This opens a headless embedded shell with command history off and prints only selected command paths and Node’s version. It checks Fairway PHP/Composer priority without logging exported environment values.
+
 ## Linux terminal builds
 
-Linux uses `--no-default-features --features cli`, without Node, Tauri or desktop libraries. Build on Ubuntu 22.04 for the glibc 2.35 baseline. The builder packages and `deb-src` setup are defined in `.github/actions/prepare-linux-runtime/action.yml`.
+The Linux Rust CLI uses `--no-default-features --features cli`, without Tauri or desktop libraries. Runtime preparation additionally needs Node 24 and npm to build the pinned standalone browser; target users need Node 22+ and npm only for `fairway data-browser`. Build on Ubuntu 22.04 for the glibc 2.35 baseline. The builder packages and `deb-src` setup are defined in `.github/actions/prepare-linux-runtime/action.yml`.
 
 ```sh
 python3 scripts/prepare_runtime.py --lockfile runtime-linux-downloads.lock.json
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
 cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
+python3 tests/linux_node_browser_smoke.py --cli src-tauri/target/release/fairway-cli --runtime src-tauri/resources/runtime --install-node --with-mysql
 python3 scripts/package_linux.py
 python3 tests/linux_cli_smoke.py artifacts/linux-installer/fairway-xmp-*-linux-x86_64.run
 ```
 
-The Linux workflow packages `.run`/`.tar.gz` installers, source archives, and checks clean distro environments. Target machines need no compiler or installed runtime library packages. Service tests run as an ordinary user and bind to loopback.
+The Linux workflow packages `.run`/`.tar.gz` installers, source archives, and checks clean distro environments. Target machines need no compiler or installed runtime library packages. The browser first installs its locked npm dependencies into isolated user storage; its SQLite driver ships Node-API prebuilds. The headless smoke checks concurrent setup, offline reuse, missing/old Node guidance, static assets, real SQLite and bundled MySQL API queries, binding collisions, per-run access cookies and active-browser update/uninstall guards. Service tests run as an ordinary user and bind to loopback.
 
 ## Builds, publication and maintenance
 

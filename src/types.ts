@@ -14,6 +14,15 @@ export type Snapshot = {
   pathPhp: string | null; pathComposer: string | null; version: string;
 };
 export type UpdateInfo = { configured: boolean; version: string | null; notes: string | null };
+export type NodeBinary = { version: string; path: string };
+export type NodeInstallation = NodeBinary & { source: string };
+export type NodeStatus = {
+  externalFnm: string | null; readOnlyReason: string | null;
+  fnmPath: string; fnmVersion: string | null; fnmError?: string | null; directory: string;
+  detected: NodeBinary | null; detectionError: string | null; managed: NodeBinary | null;
+  installations: NodeInstallation[];
+  installed: string[]; defaultVersion: string | null; enabled: boolean;
+};
 export type StartupStatus = { blocking: boolean; errors: string[]; dataDir: string | null };
 export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'preparing' | 'installing'; downloaded?: number; total?: number | null };
 export type MailAddress = { Name: string; Address: string };

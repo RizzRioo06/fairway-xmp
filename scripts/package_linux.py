@@ -67,6 +67,7 @@ __FAIRWAY_ARCHIVE_BELOW__
     source_stage.mkdir()
     subprocess.run(['git', 'archive', '--format=tar.gz', f'--output={source_stage / "fairway-xmp-build-source.tar.gz"}', 'HEAD'], cwd=ROOT, check=True)
     shutil.copytree(ROOT / '.runtime-work/linux-sources', source_stage / 'runtime-sources')
+    (source_stage / 'README.md').write_text('Linux runtime corresponding sources and recipes accompany the Fairway source archive.\nFor fnm: python3 runtime-sources/fnm_sources.py runtime-sources/fnm /absolute/path/to/new-build\nThen run the printed cargo build --release --locked --offline command.\nThe fnm binary is upstream and unchanged. Node runtimes are not bundled.\nThe standalone data-browser source is pinned by runtime-linux-downloads.lock.json.\nIts production overlay/build recipe is scripts/prepare_data_browser.py in the Fairway source;\nHTTP and launch adapters are in packaging/linux/. Its original npm lock accompanies the source.\nBrowser runtime dependencies are downloaded by npm on first use, not part of this installer.\n')
     for file in ('runtime-linux-downloads.lock.json', 'runtime-manifest.json', 'THIRD_PARTY_NOTICES.md'):
         shutil.copy2(ROOT / file, source_stage / file)
     with tarfile.open(source, 'w:gz', compresslevel=1) as bundle:

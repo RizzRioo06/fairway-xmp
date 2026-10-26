@@ -12,6 +12,7 @@
   "phpmyadmin": "5.2.3",
   "composer": "2.10.3",
   "mailpit": "1.32.0",
+  "fnm": "1.39.0",
   "minimumOS": {
     "windows": "Windows 10 22H2 x64",
     "macos": "macOS 15 arm64",
@@ -50,7 +51,14 @@
     "zip"
   ],
   "platformExtensions": {
-    "macos": ["pcntl", "posix"],
-    "linux": ["pcntl", "posix"]
-  }
+    "macos": [
+      "pcntl",
+      "posix"
+    ],
+    "linux": [
+      "pcntl",
+      "posix"
+    ]
+  },
+  "dataBrowser": "04ed044ba80628e1a59bfb93f542bfd23bf33914"
 }

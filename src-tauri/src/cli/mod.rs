@@ -1,6 +1,7 @@
 //! Terminal frontend. The supervisor is the only owner of the service manager.
 mod supervisor;
 mod tui;
+mod web_browser;
 
 use crate::{
     config::{Layout, Ports, ProjectConfig, Result},
@@ -92,7 +93,7 @@ pub fn run() -> Result<()> {
         args.first().map(String::as_str),
         Some("help" | "--help" | "-h")
     ) {
-        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql|mail]\nfairway site add DOMAIN FOLDER [--name NAME] [--index]\n                             Serve FOLDER at DOMAIN.test (updates the hosts file with sudo)\nfairway site remove DOMAIN   Remove a site; its files are kept\nfairway site https DOMAIN on|off\n                             Toggle HTTPS for one site (:8443)\nfairway site hosts           Retry the hosts-file update for registered sites\nfairway logs nginx|mysql|php|mail\n                             Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP [MAIL SMTP]\n                             Change ports while all services are stopped\n                             (mail inbox and SMTP default to 8802 and 11025)\nfairway php-version          Show selected PHP version\nfairway php-version 8.2–8.5  Switch PHP after stopping all services\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer on PATH\nfairway install-cli          Enable PHP/Composer/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
+        println!("Fairway XMP terminal edition\n\nfairway [tui]                 Open the terminal dashboard\nfairway status [--json]       Service status and paths\nfairway start|stop|restart [all|nginx|mysql|mail]\nfairway site add DOMAIN FOLDER [--name NAME] [--index]\n                             Serve FOLDER at DOMAIN.test (updates the hosts file with sudo)\nfairway site remove DOMAIN   Remove a site; its files are kept\nfairway site https DOMAIN on|off\n                             Toggle HTTPS for one site (:8443)\nfairway site hosts           Retry the hosts-file update for registered sites\nfairway logs nginx|mysql|php|mail\n                             Show recent log entries\nfairway ports                Show configured ports\nfairway ports WEB PMA DB PHP [MAIL SMTP]\n                             Change ports while all services are stopped\n                             (mail inbox and SMTP default to 8802 and 11025)\nfairway php-version          Show selected PHP version\nfairway php-version 8.2–8.5  Switch PHP after stopping all services\nfairway diagnostics          Print a shareable diagnostic report\nfairway backup               Back up student databases (MySQL must be running)\nfairway php|composer|mysql|mysqldump [arguments...]\nfairway shell                Open a shell with bundled PHP/Composer/fnm on PATH\nfairway data-browser [--port PORT] [--prepare]\n                             Browse PostgreSQL, MySQL and SQLite (Node 22+)\nfairway install-cli          Enable PHP/Composer/fnm/Fairway in shell profiles\nfairway remove-cli           Remove managed shell integration\nfairway shutdown             Gracefully stop services and the supervisor\nfairway uninstall            Remove the installation; preserve projects and data\n\nClosing the dashboard leaves services running. PHP-FPM follows Nginx.\nTools and services run as your user; do not run Fairway with sudo.");
         return Ok(());
     }
     if matches!(args.first().map(String::as_str), Some("--version" | "-V")) {
@@ -118,8 +119,10 @@ pub fn run() -> Result<()> {
         return crate::tls::remove_trust(&layout);
     }
     if args.first().is_some_and(|s| s == "uninstall") {
+        let _browser_lock = web_browser::lock_installation(&layout)?;
         let status = Command::new("sh")
             .arg(root.join("uninstall.sh"))
+            .env("FAIRWAY_UNINSTALL_LOCKED", "1")
             .status()
             .map_err(|e| e.to_string())?;
         return if status.success() {
@@ -129,7 +132,13 @@ pub fn run() -> Result<()> {
         };
     }
     let command = args.first().map(String::as_str).unwrap_or("tui");
+    if command == "data-browser" {
+        return web_browser::run(&layout, &args[1..]);
+    }
     if command == "shutdown" || command == "__prepare-update" {
+        let _browser_lock = (command == "__prepare-update")
+            .then(|| web_browser::lock_installation(&layout))
+            .transpose()?;
         if !supervisor::available(&layout) {
             // Starting a controller also recovers any verified service left after a crash.
             supervisor::ensure(&layout)?;

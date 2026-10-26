@@ -1,8 +1,11 @@
+#[cfg(any(target_os = "macos", windows, all(feature = "cli", unix)))]
+mod command_output;
 pub mod config;
 pub mod data_browser;
 pub mod database;
 pub mod diagnostics;
 mod durability;
+mod fnm_setup;
 pub mod hosts;
 pub mod integration;
 pub mod logs;
@@ -10,8 +13,12 @@ pub mod mail;
 #[cfg(feature = "desktop")]
 pub mod mail_images;
 pub mod manager;
+#[cfg(any(target_os = "macos", windows))]
+pub mod node_tools;
 pub mod php_settings;
 pub mod process;
+#[cfg(any(target_os = "macos", windows))]
+mod shell_environment;
 pub mod tls;
 pub mod updates;
 

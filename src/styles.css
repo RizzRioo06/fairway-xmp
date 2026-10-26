@@ -122,6 +122,21 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .cli-commands{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
 .cli-commands code{padding:5px 10px;border-radius:5px;background:#f0f5f2;color:#496c56;font-size:11px}
 .cli-diagnostics .cli-paths{padding-bottom:8px;border-bottom:1px solid var(--border)}
+/* Node tools keep status compact; management and paths expand on demand. */
+.node-tools{min-width:0}
+.node-heading,.node-title,.node-version-name,.node-version-actions{display:flex;align-items:center;gap:10px}
+.node-heading{justify-content:space-between}.node-title h2{font-size:14px}.node-title .help-tip{color:var(--muted)}
+.node-current{display:flex;align-items:flex-start;gap:12px;margin:14px 0 18px;padding:14px 16px;border:1px solid #dceae2;border-radius:8px;background:#f3f8f5}.node-current-icon{flex-shrink:0;margin-top:3px;color:var(--green)}.node-current-info{min-width:0}.node-current-label{display:block;font-size:10px;color:#597364;margin-bottom:4px}.node-current-version{display:flex;align-items:center;flex-wrap:wrap;gap:9px}.node-current strong{font-size:14px;font-weight:600;color:#253e31}.node-current-source{padding:2px 7px;border:1px solid #d8e5dd;border-radius:4px;background:#fff;font-size:10px;color:#496c56}.node-current-path{display:block;margin-top:5px;font-size:10px;line-height:1.6;color:#61786b;overflow-wrap:anywhere}
+.node-tools p.node-status{margin:9px 0 14px;font-size:11px}.node-tools p.node-error{color:#a83936;white-space:pre-wrap;max-height:140px;overflow:auto;margin:10px 0}
+.node-manager{font-size:11px;color:#65786c}.node-manager>summary{cursor:pointer;padding:5px 0}.node-manager>summary>span{font-size:10px;color:var(--muted);margin-left:10px}
+.node-install-row{margin:16px 0 20px;padding:14px;border:1px solid var(--border);border-radius:7px;background:#f8faf9}
+.node-install-row>label{display:block;font-size:11px;font-weight:550;margin-bottom:9px}.node-install-controls{display:flex;align-items:center;gap:8px;max-width:520px}.node-install-controls select{flex:1;min-width:0;width:auto;max-width:none;background-color:#fff}.node-tools .node-install-row>p{font-size:10px;margin:8px 0 0;line-height:1.5;color:var(--muted)}
+.node-section-title{font-size:10px;font-weight:600;color:#6c8072;margin-bottom:5px}.node-versions{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto}.node-versions>li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}.node-badge{font-size:9px;color:var(--green);background:#edf5f0;border-radius:4px;padding:3px 6px}.node-badge.inactive{color:#68796e;background:#f0f2f1}.node-version-actions{gap:8px}.node-version-actions .node-use-button,.node-version-actions .node-uninstall{height:32px;min-height:32px;margin:0;padding:7px 14px;font-size:11px;line-height:16px}.node-tools .node-uninstall{color:#96605a;border-color:#e5d7d3;background:#fff}.node-tools .node-uninstall:not(:disabled):hover{background:#fbf2ef;border-color:#d5b8b0}
+.node-external-action{margin:12px 0 16px}
+.node-other{margin-top:15px;padding-top:13px;border-top:1px solid var(--border);font-size:10px}.node-other>summary{cursor:pointer;color:var(--muted)}.node-other>summary>span{margin-left:5px}.node-other ul{list-style:none;padding:0;margin:9px 0 0;max-height:240px;overflow:auto}.node-other li{padding:9px 0}.node-other li>div{display:flex;gap:10px;align-items:center}.node-other li strong{font-size:10px;font-weight:550}.node-other li code{font-size:10px}.node-file-path{display:block;font:10px/1.6 ui-monospace,monospace;overflow-wrap:anywhere;color:var(--muted);margin-top:3px}.node-tools .node-other>p{font-size:10px;margin:8px 0 0}.node-other .path-list{margin-top:12px}.node-other dd{font-size:10px}
+.node-uninstall-dialog{max-width:440px;padding:24px}.node-uninstall-heading{display:flex;align-items:center;gap:12px}.node-uninstall-heading h2{font-size:16px;line-height:1.4;font-weight:600}.node-uninstall-icon{display:grid;place-items:center;flex-shrink:0;width:38px;height:38px;border-radius:10px;background:#fbedea;color:#ad4336}.node-uninstall-dialog>p{font-size:12px;color:#68796e;line-height:1.7;margin:18px 0 0}.node-uninstall-notice{margin-top:16px;padding:11px 13px;border-radius:6px;background:#f5f7f5;font-size:11px;line-height:1.7;color:#5f7265}.node-uninstall-dialog>p.node-uninstall-hint{font-size:11px;color:#849087;margin-top:13px}.node-uninstall-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:18px;border-top:1px solid var(--border)}.node-danger-button{min-height:34px;padding:8px 14px;border:1px solid #a33f33;border-radius:6px;background:#ad4739;color:#fff;font-size:11px;font-weight:550}.node-danger-button:not(:disabled):hover{background:#963a2f}
+@media(max-width:900px){.node-install-controls{flex-wrap:wrap}.node-install-controls select{min-width:180px}.node-manager>summary>span{display:none}}
+
 .help-tip{position:relative;display:inline-flex;flex-shrink:0}
 .help-tip-content{position:absolute;top:calc(100% + 8px);right:0;z-index:18;width:min(310px,calc(100vw - 80px));padding:14px 16px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 28px #1d35251f;color:#5b7263;overflow-wrap:anywhere}
 .help-tip-content p{font-size:11px;line-height:1.7;margin:0 0 9px;color:inherit}
@@ -157,7 +172,15 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .modal-form>.modal-form-actions{position:static;flex-shrink:0;margin:20px 0 0;padding:14px 0 0;background:#fff;border-top:1px solid var(--border)}
 .db-dialog .modal-form-body fieldset{display:flex;flex-direction:column;gap:14px}
 
-.update-progress{display:flex;flex-direction:column;gap:10px;margin-top:20px;color:var(--green);font-size:11px}.update-progress progress{width:100%;height:8px;accent-color:var(--green)}
+.update-available h3{overflow-wrap:anywhere}
+.update-release-notes{margin-top:14px;font-size:11px;line-height:1.8;color:#53665a}
+.update-release-notes .release-notes{overflow-wrap:anywhere;margin:0}
+.release-notes-preview{max-height:7.2em;overflow:hidden}
+.release-notes-preview.expanded{max-height:none}
+.release-notes-toggle{margin-top:8px;min-height:30px;font-size:11px}
+.update-install-actions{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin-top:18px}
+.update-progress{display:flex;flex:1 1 240px;min-width:0;flex-direction:column;gap:8px;color:var(--green);font-size:11px}
+.update-progress progress{width:100%;height:8px;accent-color:var(--green)}
 
 .topbar .sidebar-fold{flex-shrink:0;margin-right:2px;color:#738078}
 .app-shell.sidebar-folded .sidebar{width:64px;padding:20px 9px}
@@ -183,3 +206,12 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .php-settings-toggle input{width:16px;height:16px;flex-shrink:0;margin:2px 0 0;accent-color:var(--green)}
 .php-settings .button-row{flex-wrap:wrap}
 @media(max-width:650px){.php-settings-grid{grid-template-columns:1fr}}
+
+.node-readonly{margin-top:20px;padding-top:18px;border-top:1px solid var(--border)}
+.node-readonly-heading{display:flex;align-items:center;gap:10px;font-size:12px}
+.node-readonly .path-list{margin-top:14px}
+.node-handover{padding:14px;border:1px solid var(--border);border-radius:7px;background:#f7f9f8;margin-top:16px}
+.node-handover p{margin-top:0}
+.node-cli-guide{list-style:none;margin:12px 0;padding:0}
+.node-cli-guide li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}
+.node-cli-guide code{overflow-wrap:anywhere}

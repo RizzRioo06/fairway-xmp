@@ -52,6 +52,8 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --all-targets --locked -- -D warnings
       - name: Build terminal binary
         run: cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin fairway-cli --locked
+      - name: Verify native fnm and standalone browser without a GUI
+        run: python tests/linux_node_browser_smoke.py --cli src-tauri/target/release/fairway-cli --runtime src-tauri/resources/runtime --install-node --with-mysql
       - name: Exercise service manager and database recovery
         run: cargo run --manifest-path src-tauri/Cargo.toml --example smoke --no-default-features --locked -- "$PWD/.runtime-work/linux-smoke"
       - name: Recover web services after a force-killed controller
@@ -117,6 +119,10 @@ jobs:
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fairway-xmp:/fairway:ro" -e HOME=/tmp/student -e XDG_DATA_HOME=/tmp/student/.local/share "$TEST_IMAGE" sh -ec '
             mkdir -p "$HOME"
+            /fairway/runtime/fnm/bin/fnm --version
+            if PATH=/not-present /fairway/bin/fairway data-browser > /tmp/node-guidance 2>&1; then exit 1; fi
+            grep -q "Node was not detected" /tmp/node-guidance
+            grep -q "install --lts" /tmp/node-guidance
             trap "/fairway/bin/fairway shutdown" EXIT
             /fairway/bin/fairway php -r "echo PHP_VERSION, PHP_EOL;"
             /fairway/bin/fairway composer --version

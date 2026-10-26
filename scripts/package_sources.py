@@ -16,6 +16,7 @@ import urllib.parse
 import zipfile
 
 from prepare_runtime import CACHE, LOCK_PATH, MANIFEST, ROOT, download, read_json, request
+from fnm_sources import source_plan as fnm_source_plan
 
 
 def archive_git_tree(archive):
@@ -170,6 +171,10 @@ def collect_plan(stage, refresh=False):
     plan.append(source_input('phpmyadmin-development', f'https://codeload.github.com/phpmyadmin/phpmyadmin/tar.gz/refs/tags/RELEASE_{MANIFEST["phpmyadmin"].replace(".", "_")}'))
     plan.append(source_input('composer', f'https://codeload.github.com/composer/composer/tar.gz/refs/tags/{MANIFEST["composer"]}'))
     plan.append(source_input('mailpit', f'https://codeload.github.com/axllent/mailpit/tar.gz/refs/tags/v{MANIFEST["mailpit"]}'))
+    if 'fnm' in MANIFEST:
+        fnm = lock['fnm-source']
+        archive, _ = download(fnm['url'], fnm['sha256'])
+        plan.extend(fnm_source_plan(archive, fnm, MANIFEST['fnm']))
     certifi_version = re.search(r'certifi-([\d.]+)-', lock['ca-certificates']['url']).group(1)
     certifi = read_json(f'https://pypi.org/pypi/certifi/{certifi_version}/json')
     sdist, = [file for file in certifi['urls'] if file['packagetype'] == 'sdist']
@@ -302,6 +307,7 @@ def main():
     shutil.copyfile(LOCK_PATH, stage / LOCK_PATH.name)
     shutil.copyfile(ROOT / 'runtime-manifest.json', stage / 'runtime-manifest.json')
     shutil.copyfile(Path(__file__), stage / 'package_sources.py')
+    shutil.copyfile(ROOT / 'scripts/fnm_sources.py', stage / 'fnm_sources.py')
     (stage / 'README.md').write_text(f'''# Fairway XMP {version}: bundled-tool source
 
 This archive accompanies the Windows x64 and macOS ARM64 installers.
@@ -309,7 +315,7 @@ Fairway XMP source commit: {commit}.
 
 `upstream/` contains source distributions for every bundled Homebrew component,
 MySQL (also used by the official Windows distribution), Nginx, phpMyAdmin, Composer,
-and the certificate bundle. `source-inputs.json` maps each archive to its URL,
+fnm (macOS/Windows), and the certificate bundle. `source-inputs.json` maps each archive to its URL,
 SHA-256, and matching macOS bottle when applicable.
 Gitiles snapshots also record their pinned revision and full Git tree. Their
 archive compression may change; every file, symlink and executable mode must
@@ -320,6 +326,13 @@ bottles. Recipes include inline patches; externally downloaded patches and
 resource sources are in `upstream/`. Use the recorded recipes to build native
 components with Homebrew and their listed build prerequisites. These source
 archives retain the components' own licenses.
+
+`upstream/fnm.tar.gz` is the unmodified fnm tag source, including Cargo.lock.
+All locked Rust dependency source archives accompany it as `fnm-*.crate`.
+With Python 3.12+ and a Rust toolchain installed, run
+`python3 fnm_sources.py upstream /absolute/path/to/new-fnm-build`, then run the
+printed `cargo build --release --locked --offline` command. No source patches
+are applied to fnm. The macOS package starts with upstream's universal release binary and applies its normal Developer ID signing; Windows copies upstream's x64 executable. Neither receives source patches or a command wrapper.
 
 `nginx-build.json` records the stable Nginx source and configure options for the
 Mac build. The header/library paths in that record point to temporary extracted

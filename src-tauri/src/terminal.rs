@@ -268,16 +268,23 @@ fn prepare_history(layout: &Layout, remember: bool) -> Result<std::path::PathBuf
         "HISTFILE=''\nHISTSIZE=1000\nSAVEHIST=0\n".into()
     };
     settings.push_str("PROMPT='%F{green}➜%f  %B%1/%b '\nRPROMPT=''\nPROMPT_EOL_MARK=''\n");
+    settings.push_str(&crate::node_tools::shell_init(layout, "zsh"));
     crate::config::atomic_write(&config.join(".zshrc"), settings.as_bytes())?;
     crate::config::private_file(&config.join(".zshrc"))?;
     Ok(config)
 }
 
-fn tools_path(layout: &Layout) -> Result<std::ffi::OsString> {
+fn tools_path(
+    layout: &Layout,
+    environment: &[(std::ffi::OsString, std::ffi::OsString)],
+) -> Result<std::ffi::OsString> {
     let bin = prepare_tools(layout)?;
     let mut paths = vec![bin, layout.data.join("composer/vendor/bin")];
-    if let Some(path) = std::env::var_os("PATH") {
-        paths.extend(std::env::split_paths(&path));
+    if let Some((_, path)) = environment
+        .iter()
+        .find(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case("PATH"))
+    {
+        paths.extend(std::env::split_paths(path));
     }
     #[cfg(unix)]
     paths.extend([
@@ -353,15 +360,16 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
             "Runtime files are missing. Reinstall Fairway XMP to restore PHP and Composer.".into(),
         );
     }
+    #[cfg(any(target_os = "macos", windows))]
+    let environment = crate::shell_environment::load(layout)?;
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let environment: Vec<_> = std::env::vars_os().collect();
     #[cfg(target_os = "macos")]
     let mut command = {
         let mut c = CommandBuilder::new("/bin/zsh");
-        // Only Fairway's private startup file is read, never the user's profiles.
+        // User exports were imported above. The PTY keeps an app-owned
+        // configuration so personal prompts/history/hooks cannot replace ours.
         c.args(["-d", "-i"]);
-        c.env(
-            "ZDOTDIR",
-            prepare_history(layout, request.remember_history)?,
-        );
         c
     };
     #[cfg(windows)]
@@ -383,7 +391,39 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
         c.arg("-i");
         c
     };
-    command.env("PATH", tools_path(layout)?);
+    #[cfg(any(target_os = "macos", windows))]
+    {
+        command.env_clear();
+        for (name, value) in &environment {
+            if crate::shell_environment::is_tool_variable(name) {
+                command.env(name, value);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    command.env(
+        "ZDOTDIR",
+        prepare_history(layout, request.remember_history)?,
+    );
+    #[cfg(windows)]
+    {
+        let node_env = crate::node_tools::terminal_environment(layout)?;
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
+        for (name, value) in node_env {
+            if name == "FAIRWAY_NODE_BIN" {
+                paths.push(value.into());
+            } else {
+                command.env(name, value);
+            }
+        }
+        paths.extend(std::env::split_paths(&tools_path(layout, &environment)?));
+        command.env(
+            "PATH",
+            std::env::join_paths(paths).map_err(|e| e.to_string())?,
+        );
+    }
+    #[cfg(not(windows))]
+    command.env("PATH", tools_path(layout, &environment)?);
     #[cfg(windows)]
     // CMD expands $P on every prompt. Its full current path is the native
     // equivalent of zsh's folder name; no startup script or cd hook is needed.
@@ -393,8 +433,8 @@ fn shell(layout: &Layout, request: &StartRequest) -> Result<CommandBuilder> {
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "Fairway XMP");
-    // A clean interactive shell preserves the app's tool ordering. User startup
-    // scripts must not replace PATH or run unrelated commands on terminal open.
+    // The imported environment supplies the user's tools, while the PTY keeps
+    // Fairway's runtime ordering and its own working directory/history.
     #[cfg(unix)]
     {
         command.env_remove("ENV");
@@ -1425,10 +1465,61 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn shell_configured_node_and_sdk_tools_are_available_without_replacing_fairway_tools() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        let node_bin = fixture
+            .layout
+            .home
+            .join(".node manager/versions/current/bin");
+        let sdk_bin = fixture.layout.home.join("SDK 日本/bin");
+        for (bin, name, script) in [
+            (&node_bin, "node", "#!/bin/sh\necho SHELL_NODE_OK\n"),
+            (
+                &sdk_bin,
+                "sdk-tool",
+                "#!/bin/sh\nprintf 'SDK_TOOL_OK:%s\\n' \"$SDK_HOME\"\n",
+            ),
+            (&sdk_bin, "php", "#!/bin/sh\necho WRONG_PHP\n"),
+            (&sdk_bin, "composer", "#!/bin/sh\necho WRONG_COMPOSER\n"),
+        ] {
+            fs::create_dir_all(bin).unwrap();
+            fs::write(bin.join(name), script).unwrap();
+            fs::set_permissions(bin.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let quote = crate::integration::shell_quote;
+        fs::write(
+            fixture.layout.home.join(".zprofile"),
+            format!(
+                "export PATH={}:\"$PATH\"\nexport SDK_HOME={}\n",
+                quote(&sdk_bin.to_string_lossy()),
+                quote(&sdk_bin.parent().unwrap().to_string_lossy())
+            ),
+        )
+        .unwrap();
+        fs::write(fixture.layout.home.join(".zshrc"), format!("export PATH={}:\"$PATH\"\nexport PROMPT='PERSONAL_PROMPT'\nHISTFILE=\"$HOME/personal-history\"\nSAVEHIST=1000\nprint PROFILE_NOISE\ncd /\n", quote(&node_bin.to_string_lossy()))).unwrap();
+        fixture.start("shell-tools");
+        fixture.terminals.write("shell-tools", "node; sdk-tool; command -v php; command -v composer; printf '%s%s\\n' TOOLS_ DONE\r").unwrap();
+        let text = fixture.until("shell-tools", "TOOLS_DONE");
+        assert!(text.contains("SHELL_NODE_OK"));
+        assert!(text.contains("SDK_TOOL_OK:") && text.contains("SDK 日本"));
+        assert!(text.contains("terminal-bin/php") && text.contains("terminal-bin/composer"));
+        assert!(!text.contains("PROFILE_NOISE") && !text.contains("PERSONAL_PROMPT"));
+        assert!(!text.contains("WRONG_PHP") && !text.contains("WRONG_COMPOSER"));
+        assert_eq!(
+            fixture.terminals.current_directory("shell-tools").unwrap(),
+            fs::canonicalize(&fixture.layout.www).unwrap()
+        );
+        assert!(!fixture.layout.home.join("personal-history").exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn command_history_is_private_survives_restart_and_supports_opt_out() {
         use std::os::unix::fs::PermissionsExt;
         let fixture = Fixture::new();
-        // The app must not execute the student's personal shell startup file.
+        // Startup output is captured during environment discovery and must not
+        // enter the PTY or its private command history.
         fs::write(
             fixture.layout.home.join(".zshrc"),
             "print USER_PROFILE_EXECUTED\n",

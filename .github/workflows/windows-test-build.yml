@@ -92,6 +92,8 @@ jobs:
           } else {
             python scripts/prepare_runtime.py
           }
+      - name: Verify fnm Node management in isolated storage
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_windows_smoke --no-default-features --locked -- .runtime-work/fnm-windows-smoke
       - name: Verify persistent PHP settings and real uploads
         run: cargo run --manifest-path src-tauri/Cargo.toml --example php_settings_smoke --no-default-features --locked -- .runtime-work/php-settings-smoke
       - name: Verify PHP client extensions and Unix worker support

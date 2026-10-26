@@ -15,6 +15,29 @@ SPEC.loader.exec_module(runtime)
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_fnm_stages_unchanged_executable_and_matching_license_on_each_platform(self):
+        for system in ('windows', 'macos', 'linux'):
+            with self.subTest(system=system), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                name = 'fnm.exe' if system == 'windows' else 'fnm'
+                binary = root / f'fnm-{system}.zip'
+                with zipfile.ZipFile(binary, 'w') as archive:
+                    archive.writestr(name, b'upstream executable unchanged')
+                source = root / 'fnm-source.tar.gz'
+                with tarfile.open(source, 'w:gz') as archive:
+                    content = b'GPL version 3'
+                    entry = tarfile.TarInfo(f'fnm-{runtime.MANIFEST["fnm"]}/LICENSE')
+                    entry.size = len(content)
+                    archive.addfile(entry, io.BytesIO(content))
+                def download(key, *args, **kwargs):
+                    return source if key == 'fnm-source' else binary
+                target = root / 'runtime'
+                with patch.object(runtime, 'lock_download', side_effect=download):
+                    runtime.fnm_runtime(target, {}, False, system)
+                self.assertEqual((target / 'fnm/bin' / name).read_bytes(), b'upstream executable unchanged')
+                self.assertEqual((target / 'licenses/fnm/LICENSE').read_bytes(), b'GPL version 3')
+                self.assertFalse((target / 'node').exists())
+
     def test_verification_rejects_missing_client_or_worker_extension_on_each_php_version(self):
         for folder in ('php', 'php-8.2', 'php-8.3', 'php-8.4'):
             for extension in ('pdo_pgsql', 'pgsql', 'sockets', 'soap', 'ldap', 'pcntl', 'posix'):
@@ -41,6 +64,7 @@ class ArchiveTests(unittest.TestCase):
 
     def test_windows_verifier_loads_shipped_clients_without_unix_extensions(self):
         def output(command, **kwargs):
+            if Path(command[0]).name == 'fnm.exe': return f'fnm {runtime.MANIFEST["fnm"]}'
             php_folder = Path(command[0]).parts[-3]
             if '-r' in command:
                 ini = Path(command[command.index('-c') + 1]).read_text()
@@ -128,7 +152,7 @@ class ArchiveTests(unittest.TestCase):
         linux = json.loads((root / 'runtime-linux-downloads.lock.json').read_text())
         sources = json.loads((root / 'runtime-sources.lock.json').read_text())
         for name in (*downloads, *linux, *(item['name'] for item in sources)):
-            self.assertNotRegex(name, r'8\.0|8\.1')
+            self.assertNotRegex(name, r'(?:^|[-@])php[-@]8\.[01](?:\D|$)')
         self.assertIn('brew-icu4c@78-arm64-sequoia', downloads)
         for item in sources:
             versions = set(item.get('phpVersions') or [])

@@ -16,12 +16,15 @@ if [ -e "$PREFIX/.fairway-installation" ] || [ -L "$PREFIX/.fairway-installation
     /*) DATA_HOME=$XDG_DATA_HOME ;;
     *) DATA_HOME="$HOME/.local/share" ;;
   esac
-  for PROTECTED in "$HOME/fairway/www" "$DATA_HOME/dev.fairway.environment"; do
+  for PROTECTED in "$HOME/fairway/www" "$DATA_HOME/dev.fairway.environment" "${FNM_DIR:-$DATA_HOME/fnm}" "$DATA_HOME/fnm" "$HOME/.fnm" "$HOME/.data-browser"; do
     PROTECTED=$(realpath -m -- "$PROTECTED")
     case "$PREFIX/releases/" in "$PROTECTED/"*) echo 'Installation files overlap your projects or application data; files preserved.' >&2; exit 1 ;; esac
     case "$PROTECTED/" in "$PREFIX/releases/"*) echo 'Installation files overlap your projects or application data; files preserved.' >&2; exit 1 ;; esac
   done
   MANAGED=true
+fi
+if [ "${FAIRWAY_UNINSTALL_LOCKED:-}" != 1 ]; then
+  exec "$ROOT/bin/fairway" uninstall
 fi
 "$ROOT/bin/fairway" shutdown
 "$ROOT/bin/fairway" clear-domains

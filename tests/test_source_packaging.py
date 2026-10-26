@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 from pathlib import Path
 import sys
 import tarfile
@@ -9,9 +10,30 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from package_sources import archive_git_tree, fetch_source, require_locked_plan
+from fnm_sources import source_plan, rebuild
 
 
 class SourceTreeTests(unittest.TestCase):
+    def test_fnm_sources_reconstruct_an_offline_vendor_tree_and_check_crate_hashes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sources = root / 'upstream'; sources.mkdir()
+            crate = self.archive(sources, 'fnm-example-1.0.0.crate', b'library source', names=['example-1.0.0/src/lib.rs'])
+            checksum = hashlib.sha256(crate.read_bytes()).hexdigest()
+            lock = f'[[package]]\nname = "example"\nversion = "1.0.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "{checksum}"\n'
+            archive = self.archive(sources, 'fnm.tar.gz', lock.encode(), names=['fnm-1.39.0/Cargo.lock'])
+            entry = {'url': 'https://example.test/fnm.tar.gz', 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}
+            plan = source_plan(archive, entry, '1.39.0')
+            self.assertEqual(plan[1]['sha256'], checksum)
+            rebuild(sources, root / 'build')
+            project = root / 'build/fnm-1.39.0'
+            self.assertIn('vendored-sources', (project / '.cargo/config.toml').read_text())
+            vendor = project / 'vendor/example-1.0.0'
+            self.assertEqual(json.loads((vendor / '.cargo-checksum.json').read_text())['package'], checksum)
+            crate.write_bytes(b'tampered')
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                rebuild(sources, root / 'tampered-build')
+
     def test_candidate_source_inputs_must_already_be_pinned(self):
         locked = [{'name': 'php', 'url': 'https://example.test/php.tar.gz', 'sha256': 'a' * 64}]
         require_locked_plan(locked, locked)
