@@ -899,8 +899,10 @@ fi
             external: Some(root.join("external-fnm")),
             error: None,
         };
+        // Activation may use a CLI-compatible spelling (without Windows' \\?\
+        // prefix), but it must still point to the original owned directory.
         assert_eq!(
-            activation_directory(&layout),
+            fs::canonicalize(activation_directory(&layout)).unwrap(),
             fs::canonicalize(&original.directory).unwrap()
         );
         assert!(change_in(&layout, &new, "enable", "", &|| false).is_err());
