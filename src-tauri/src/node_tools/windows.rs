@@ -558,7 +558,7 @@ mod tests {
         // script's error/cleanup path without requiring a staged fnm or Node.
         // Only an existing, correctly decoded marker can reach the final echo.
         let script = cmd_init(
-            &windows.join("System32/where.exe").to_string_lossy(),
+            &windows.join("System32").join("where.exe").to_string_lossy(),
             &fixture.root.join("node store").to_string_lossy(),
             &marker.to_string_lossy(),
         )
@@ -569,7 +569,9 @@ mod tests {
         )
         .unwrap();
         let launch = || {
-            let mut command = crate::process::command(windows.join("System32/cmd.exe"));
+            // CMD parses its own executable name before processing /C. Unlike
+            // CreateProcessW, it rejects forward slashes in that name.
+            let mut command = crate::process::command(windows.join("System32").join("cmd.exe"));
             command
                 .creation_flags(CREATE_NEW_CONSOLE)
                 .current_dir(&fixture.layout.data)
@@ -585,7 +587,7 @@ mod tests {
         let root = std::env::var_os("SystemRoot")
             .map(PathBuf::from)
             .unwrap_or_else(|| "C:\\Windows".into());
-        let mut cmd = crate::process::command(root.join("System32/cmd.exe"));
+        let mut cmd = crate::process::command(root.join("System32").join("cmd.exe"));
         cmd.args(["/D", "/C", "ping -n 10 127.0.0.1 >nul"]);
         let start = Instant::now();
         assert!(output(cmd, 0, &|| false).is_err());

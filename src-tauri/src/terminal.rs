@@ -318,7 +318,10 @@ fn external_command(directory: &std::path::Path) -> std::process::Command {
         let executable = std::env::var_os("SystemRoot")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| "C:\\Windows".into())
-            .join("System32/cmd.exe");
+            // CMD also parses its executable name; forward slashes accepted
+            // by CreateProcessW make CMD reject the launch before startup.
+            .join("System32")
+            .join("cmd.exe");
         let mut command = std::process::Command::new(executable);
         command.current_dir(directory).creation_flags(0x00000010);
         command
@@ -1685,6 +1688,7 @@ mod tests {
         let folder = std::path::Path::new(r"C:\Student's projects 日本\shop");
         let command = external_command(folder);
         assert!(std::path::Path::new(command.get_program()).ends_with("cmd.exe"));
+        assert!(!command.get_program().to_string_lossy().contains('/'));
         assert_eq!(command.get_current_dir(), Some(folder));
         assert_eq!(command.get_args().count(), 0);
         assert_eq!(command.get_envs().count(), 0);

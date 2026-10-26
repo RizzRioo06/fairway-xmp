@@ -47,7 +47,8 @@ fn main() -> Result<(), String> {
     let cmd_path = std::env::var_os("SystemRoot")
         .map(PathBuf::from)
         .unwrap_or_else(|| "C:\\Windows".into())
-        .join("System32/cmd.exe");
+        .join("System32")
+        .join("cmd.exe");
     let mut shell = process::command(cmd_path);
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;
@@ -89,7 +90,10 @@ fn main() -> Result<(), String> {
     let powershell = std::env::var_os("SystemRoot")
         .map(PathBuf::from)
         .unwrap_or_else(|| "C:\\Windows".into())
-        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
     let mut ps = process::command(powershell);
     let ps_output = ps
         .args([
