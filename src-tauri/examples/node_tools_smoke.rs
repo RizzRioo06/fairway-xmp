@@ -121,6 +121,20 @@ fn main() -> Result<(), String> {
     );
     let other = "v22.14.0";
     node_tools::change(&layout, "install", other, &|| false)?;
+    // A real profile validation failure must restore the fnm default and keep
+    // the previously enabled selection, even after fnm accepted the new default.
+    let bashrc = layout.home.join(".bashrc");
+    let previous_profile = fs::read(&bashrc).map_err(|e| e.to_string())?;
+    fs::write(&bashrc, "# >>> fairway environment >>>\n").map_err(|e| e.to_string())?;
+    assert!(node_tools::use_version(&layout, other, &|| false).is_err());
+    assert_eq!(
+        node_tools::status(&layout)?.default_version.as_deref(),
+        Some(version)
+    );
+    assert!(node_tools::enabled(&layout));
+    fs::write(bashrc, previous_profile).map_err(|e| e.to_string())?;
+    node_tools::use_version(&layout, other, &|| false)?;
+    node_tools::use_version(&layout, version, &|| false)?;
     let script = format!(
         "{}\nnode --version\n{} default {}\nnode --version\n",
         node_tools::shell_init(&layout, "zsh"),

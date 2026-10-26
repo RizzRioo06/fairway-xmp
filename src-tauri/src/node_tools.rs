@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use std::{fs, path::PathBuf, process::Command};
 
+mod jobs;
+pub use jobs::{Installation, Installations};
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct NodeBinary {
     pub version: String,
@@ -24,6 +27,7 @@ pub struct NodeInstallation {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeStatus {
+    pub installation: Option<Installation>,
     pub external_fnm: Option<String>,
     pub read_only_reason: Option<String>,
     pub fnm_path: String,
@@ -384,6 +388,7 @@ fn status_in(
     let managed = probe(managed_store.join("aliases/default").join(node_relative()));
     let default_version = managed.as_ref().map(|node| node.version.clone());
     Ok(NodeStatus {
+        installation: None,
         external_fnm: context.external.map(|path| path.to_string_lossy().into()),
         read_only_reason,
         fnm_path: executable(layout).to_string_lossy().into(),
@@ -468,6 +473,74 @@ pub fn prepare_uninstall(layout: &Layout, version: &str) -> Result<()> {
     }
     if is_enabled_default(layout, version) {
         activation(layout, "disable")?;
+    }
+    Ok(())
+}
+
+/// Select and activate under one desktop operation. A failed activation must
+/// restore the shared fnm default as well as the activation preference.
+pub fn use_version(layout: &Layout, version: &str, cancelled: &dyn Fn() -> bool) -> Result<()> {
+    select_in(
+        layout,
+        &crate::fnm_setup::inspect(layout),
+        version,
+        cancelled,
+        &|| activation(layout, "enable"),
+    )
+}
+
+fn select_in(
+    layout: &Layout,
+    context: &crate::fnm_setup::Context,
+    version: &str,
+    cancelled: &dyn Fn() -> bool,
+    activate: &dyn Fn() -> Result<()>,
+) -> Result<()> {
+    crate::fnm_setup::require_management(layout, context)?;
+    if cancelled() {
+        return Err("Command cancelled.".into());
+    }
+    let alias = context.directory.join("aliases/default");
+    let previous = match fs::symlink_metadata(&alias) {
+        Ok(_) => Some(run_in(layout, &context.directory, &["default"])?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.to_string()),
+    };
+    if previous
+        .as_ref()
+        .is_some_and(|value| !valid_version(value) && value != "system")
+    {
+        return Err("The existing fnm default could not be preserved. Repair it with fnm before choosing Use.".into());
+    }
+    let result = change_in(layout, context, "default", version, cancelled).and_then(|()| {
+        if cancelled() {
+            Err("Command cancelled.".into())
+        } else {
+            activate()
+        }
+    });
+    if let Err(error) = result {
+        // Rollback intentionally ignores cancellation/quit so a cancelled
+        // selection cannot leave a different default behind.
+        let rollback = if let Some(previous) = previous {
+            run_in(layout, &context.directory, &["default", &previous]).map(|_| ())
+        } else {
+            #[cfg(windows)]
+            let removed = fs::remove_dir(&alias);
+            #[cfg(unix)]
+            let removed = fs::remove_file(&alias);
+            match removed {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.to_string()),
+            }
+        };
+        return Err(match rollback {
+            Ok(()) => error,
+            Err(rollback) => {
+                format!("{error} The previous fnm default could not be restored: {rollback}")
+            }
+        });
     }
     Ok(())
 }
@@ -588,6 +661,164 @@ pub use windows::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    struct SelectionFixture {
+        root: PathBuf,
+        layout: Layout,
+        context: crate::fnm_setup::Context,
+    }
+    #[cfg(unix)]
+    impl SelectionFixture {
+        fn new(previous: bool) -> Self {
+            use std::os::unix::fs::{symlink, PermissionsExt};
+            let root = std::env::temp_dir()
+                .join(format!("fairway-node-selection-{}", rand::random::<u64>()));
+            let layout = Layout::at(root.join("home"), root.join("data"), root.join("runtime"));
+            fs::create_dir_all(&layout.home).unwrap();
+            let context = crate::fnm_setup::Context {
+                directory: root.join("store"),
+                external: None,
+                error: None,
+            };
+            crate::fnm_setup::claim_store(&layout, &context).unwrap();
+            fs::create_dir_all(context.directory.join("aliases")).unwrap();
+            for version in ["v22.1.0", "v24.1.0"] {
+                let path = context
+                    .directory
+                    .join(format!("node-versions/{version}/installation/bin/node"));
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                let value = serde_json::json!({"version": version, "path": path.to_string_lossy()});
+                fs::write(&path, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", value)).unwrap();
+                fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            if previous {
+                symlink(
+                    context.directory.join("node-versions/v22.1.0/installation"),
+                    context.directory.join("aliases/default"),
+                )
+                .unwrap();
+            }
+            let fnm = executable(&layout);
+            fs::create_dir_all(fnm.parent().unwrap()).unwrap();
+            fs::write(
+                &fnm,
+                r#"#!/bin/sh
+if [ "$1" = default ]; then
+  if [ -z "$2" ]; then
+    target=$(/usr/bin/readlink "$FNM_DIR/aliases/default")
+    target=${target%/installation}
+    printf '%s\n' "${target##*/}"
+  else
+    /bin/rm -f "$FNM_DIR/aliases/default"
+    /bin/ln -s "$FNM_DIR/node-versions/$2/installation" "$FNM_DIR/aliases/default"
+    if [ "$2" = v24.1.0 ] && [ -f "$FNM_DIR/fail-default" ]; then exit 1; fi
+  fi
+fi
+"#,
+            )
+            .unwrap();
+            fs::set_permissions(fnm, fs::Permissions::from_mode(0o755)).unwrap();
+            Self {
+                root,
+                layout,
+                context,
+            }
+        }
+    }
+    #[cfg(unix)]
+    impl Drop for SelectionFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_use_restores_existing_default_or_absent_alias() {
+        for previous in [true, false] {
+            let fixture = SelectionFixture::new(previous);
+            let alias = fixture.context.directory.join("aliases/default");
+            let old = fs::read_link(&alias).ok();
+            let error = select_in(
+                &fixture.layout,
+                &fixture.context,
+                "v24.1.0",
+                &|| false,
+                &|| Err("Shell setup failed.".into()),
+            )
+            .unwrap_err();
+            assert_eq!(error, "Shell setup failed.");
+            assert_eq!(fs::read_link(&alias).ok(), old);
+            assert!(fixture
+                .context
+                .directory
+                .join("node-versions/v24.1.0/installation/bin/node")
+                .exists());
+            select_in(
+                &fixture.layout,
+                &fixture.context,
+                "v24.1.0",
+                &|| false,
+                &|| Ok(()),
+            )
+            .unwrap();
+            assert!(fs::read_link(alias)
+                .unwrap()
+                .ends_with("node-versions/v24.1.0/installation"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_default_command_and_cancelled_selection_keep_prior_default() {
+        let fixture = SelectionFixture::new(true);
+        let alias = fixture.context.directory.join("aliases/default");
+        let old = fs::read_link(&alias).unwrap();
+        fs::write(fixture.context.directory.join("fail-default"), "1").unwrap();
+        assert!(select_in(
+            &fixture.layout,
+            &fixture.context,
+            "v24.1.0",
+            &|| false,
+            &|| panic!("activation must not run")
+        )
+        .is_err());
+        assert_eq!(fs::read_link(&alias).unwrap(), old);
+        let error = select_in(
+            &fixture.layout,
+            &fixture.context,
+            "v24.1.0",
+            &|| true,
+            &|| panic!("activation must not run"),
+        )
+        .unwrap_err();
+        assert!(error.contains("cancelled"));
+        assert_eq!(fs::read_link(alias).unwrap(), old);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancelling_download_kills_children_before_they_can_finish_writing() {
+        let fixture = SelectionFixture::new(true);
+        let marker = fixture.root.join("download-finished");
+        let mut cmd = crate::process::command("/bin/sh");
+        cmd.args([
+            "-c",
+            &format!(
+                "(sleep 0.4; touch {}) & wait",
+                crate::integration::shell_quote(&marker.to_string_lossy())
+            ),
+        ]);
+        let start = Instant::now();
+        assert!(
+            output(cmd, 5, &|| start.elapsed() > Duration::from_millis(50))
+                .unwrap_err()
+                .contains("cancelled")
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!marker.exists());
+    }
     #[cfg(unix)]
     #[test]
     fn readonly_status_and_actions_do_not_invoke_fnm_or_change_store() {

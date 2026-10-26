@@ -16,7 +16,9 @@ export type Snapshot = {
 export type UpdateInfo = { configured: boolean; version: string | null; notes: string | null };
 export type NodeBinary = { version: string; path: string };
 export type NodeInstallation = NodeBinary & { source: string };
+export type NodeInstallationProgress = { id: string; version: string; phase: 'starting' | 'installing' | 'activating' };
 export type NodeStatus = {
+  installation?: NodeInstallationProgress | null;
   externalFnm: string | null; readOnlyReason: string | null;
   fnmPath: string; fnmVersion: string | null; fnmError?: string | null; directory: string;
   detected: NodeBinary | null; detectionError: string | null; managed: NodeBinary | null;

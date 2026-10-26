@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "macos", windows, all(feature = "cli", unix)))]
+#[cfg(any(target_os = "macos", windows))]
 mod command_output;
 pub mod config;
 pub mod data_browser;

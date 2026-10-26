@@ -32,8 +32,7 @@ fn main() -> Result<(), String> {
     for version in ["v24.14.1", "v22.14.0"] {
         node_tools::change(&layout, "install", version, &|| false)?;
     }
-    node_tools::change(&layout, "default", "v24.14.1", &|| false)?;
-    node_tools::activation(&layout, "enable")?;
+    node_tools::use_version(&layout, "v24.14.1", &|| false)?;
     // Exercise the actual external Command Prompt startup text, without AutoRun
     // registry edits. It must work with spaces, Unicode and ampersands in paths.
     let startup = layout.data.join("scratch-startup.cmd");

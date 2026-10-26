@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Check, CircleCheck, Clipboard, Download, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { canControl, invoke } from './bridge';
+import { canControl, invoke, listen } from './bridge';
 import HelpTip from './HelpTip';
-import type { NodeStatus } from './types';
+import type { NodeInstallationProgress, NodeStatus } from './types';
 import { useModalFocus } from './modal-focus';
 
 type Props = {
@@ -38,6 +38,10 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remove, setRemove] = useState<string | null>(null);
   const [managerOpen, setManagerOpen] = useState<boolean | null>(null);
+  const [installation, setInstallation] = useState<NodeInstallationProgress | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [result, setResult] = useState('');
+  const ownedInstallation = useRef<string | null>(null);
   const live = useRef(true);
   const refreshRequest = useRef(0);
   const remoteRequest = useRef(false);
@@ -57,11 +61,27 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
     setLoading(true); setError('');
     try {
       const next = await invoke<NodeStatus>('node_status');
-      if (live.current && request === refreshRequest.current) { setStatus(next); onChangeRef.current(next); }
+      if (live.current && request === refreshRequest.current) { setStatus(next); setInstallation(next.installation ?? null); onChangeRef.current(next); }
     } catch (cause) { if (live.current && request === refreshRequest.current) setError(String(cause)); }
     finally { if (live.current && request === refreshRequest.current) setLoading(false); }
   }, []);
-  useEffect(() => { live.current = true; void refresh(); return () => { live.current = false; refreshRequest.current++; }; }, [refresh]);
+  useEffect(() => {
+    live.current = true;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen('node-installation', payload => {
+      if (disposed) return;
+      setInstallation(payload as NodeInstallationProgress | null);
+      if (!payload) {
+        setCancelling(false);
+        if (!ownedInstallation.current) void refresh();
+      }
+    }).then(stop => {
+      if (disposed) stop();
+      else { unlisten = stop; void refresh(); }
+    }).catch(cause => { if (!disposed) { setError(String(cause)); setLoading(false); } });
+    return () => { disposed = true; live.current = false; refreshRequest.current++; unlisten?.(); };
+  }, [refresh]);
 
   const loadVersions = async () => {
     if (remoteRequest.current) return;
@@ -83,16 +103,34 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
   const change = async (action: string, version = '') => {
     const label = action === 'install' ? `Installing Node ${version}…` : action === 'uninstall' ? `Uninstalling Node ${version}…` : 'Updating Node tools…';
     await run(label, async () => {
+      const installing = action === 'install';
+      const id = installing ? crypto.randomUUID() : null;
+      setResult(''); setCancelling(false);
+      if (id) {
+        ownedInstallation.current = id;
+        setInstallation({ id, version, phase: 'starting' });
+      }
       try {
-        await invoke('node_action', { action: action === 'use' ? 'default' : action, version });
-        if (action === 'use' || (action === 'install' && installAndUse)) {
-          if (action === 'install') await invoke('node_action', { action: 'default', version });
-          await invoke('node_action', { action: 'enable', version: '' });
+        await invoke('node_action', { action: installing && installAndUse ? 'install-use' : action, version, id });
+      } catch (cause) {
+        if (installing && String(cause).includes('Command cancelled.')) {
+          if (live.current) setResult('Node installation cancelled. You can retry the download.');
+        } else {
+          throw cause;
         }
-      } finally { if (live.current) { setRemove(null); await refresh(); } }
+      } finally {
+        ownedInstallation.current = null;
+        if (live.current) { setInstallation(null); setCancelling(false); setRemove(null); await refresh(); }
+      }
     });
   };
-  const unavailable = disabled || loading || !canControl;
+  const cancelInstallation = async () => {
+    if (!installation || installation.phase !== 'installing' || cancelling) return;
+    setCancelling(true);
+    try { await invoke('cancel_node_installation', { id: installation.id }); }
+    catch (cause) { if (live.current) { setCancelling(false); setError(String(cause)); } }
+  };
+  const unavailable = disabled || loading || !!installation || !canControl;
   const removingActive = !!status?.enabled && remove === status.defaultVersion;
   useEffect(() => {
     if (restoreAfterUninstall.current && !remove && !disabled && !loading) {
@@ -119,6 +157,12 @@ export default function NodeTools({ windows, disabled, onChange, run }: Props) {
     {error && <p className="node-error" role="alert">{error}</p>}
     {status?.fnmError && <p className="node-error" role="alert">fnm: {status.fnmError}</p>}
     {status?.detectionError && <p className="node-status">{windows ? 'Node on PATH could not be checked.' : 'Shell selection could not be checked.'} Installed versions are listed below.</p>}
+    {result && <p className="node-status" role="status">{result}</p>}
+    {installation && <div className="node-install-progress">
+      <span role="status">{cancelling ? 'Cancelling Node installation…' : installation.phase === 'starting' ? 'Preparing Node download…' : installation.phase === 'activating' ? `Setting up Node ${installation.version} for new terminals…` : `Downloading and installing Node ${installation.version}…`}</span>
+      <progress aria-label="Node installation progress" />
+      <button className="secondary" disabled={installation.phase !== 'installing' || cancelling} onClick={() => { void cancelInstallation(); }}>{cancelling ? 'Cancelling…' : 'Cancel download'}</button>
+    </div>}
     {status && readOnly && <div className="node-readonly">
       <div className="node-readonly-heading"><strong>{status.externalFnm ? 'Managed by your fnm installation' : 'Node management'}</strong><span className="node-badge inactive">Read-only</span></div>
       <p>{status.readOnlyReason}</p>

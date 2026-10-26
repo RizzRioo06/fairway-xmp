@@ -124,6 +124,7 @@ select:not([multiple]){appearance:none;-webkit-appearance:none;min-height:36px;l
 .cli-diagnostics .cli-paths{padding-bottom:8px;border-bottom:1px solid var(--border)}
 /* Node tools keep status compact; management and paths expand on demand. */
 .node-tools{min-width:0}
+.node-install-progress{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:14px;margin:14px 0;border:1px solid var(--border);border-radius:7px;background:#f8faf9;font-size:11px;color:#53665a}.node-install-progress>span{flex-basis:100%}.node-install-progress progress{flex:1;min-width:100px;accent-color:var(--green)}
 .node-heading,.node-title,.node-version-name,.node-version-actions{display:flex;align-items:center;gap:10px}
 .node-heading{justify-content:space-between}.node-title h2{font-size:14px}.node-title .help-tip{color:var(--muted)}
 .node-current{display:flex;align-items:flex-start;gap:12px;margin:14px 0 18px;padding:14px 16px;border:1px solid #dceae2;border-radius:8px;background:#f3f8f5}.node-current-icon{flex-shrink:0;margin-top:3px;color:var(--green)}.node-current-info{min-width:0}.node-current-label{display:block;font-size:10px;color:#597364;margin-bottom:4px}.node-current-version{display:flex;align-items:center;flex-wrap:wrap;gap:9px}.node-current strong{font-size:14px;font-weight:600;color:#253e31}.node-current-source{padding:2px 7px;border:1px solid #d8e5dd;border-radius:4px;background:#fff;font-size:10px;color:#496c56}.node-current-path{display:block;margin-top:5px;font-size:10px;line-height:1.6;color:#61786b;overflow-wrap:anywhere}

@@ -4,6 +4,8 @@ Past entries record released changes; they are not current development or releas
 
 ## Unreleased
 
+- Make Node selection and activation transactional, restoring the previous fnm default after failed setup. Add cancellable Node installations with progress that survives Settings navigation, and browser coverage for Node management and recovery. Repair Linux candidate lint configuration and the notification test bridge.
+
 - Load supported remote images automatically in Mail previews, with Retry image placeholders for failures. Preserve downloaded images across HTML/Text switches and keep the preview’s restrictive security policies through a bounded, cookie-free native image loader.
 
 ## 0.1.0-rc.4 — 2026-10-24

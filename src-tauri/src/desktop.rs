@@ -42,6 +42,9 @@ mod node_tools_view {
     pub fn change(_: &Layout, _: &str, _: &str, _: &dyn Fn() -> bool) -> Result<()> {
         Err("Node management is currently available on macOS and Windows.".into())
     }
+    pub fn use_version(_: &Layout, _: &str, _: &dyn Fn() -> bool) -> Result<()> {
+        Err("Node management is currently available on macOS and Windows.".into())
+    }
 }
 
 type Shared = Arc<Mutex<crate::startup::Startup>>;
@@ -50,6 +53,8 @@ type Shared = Arc<Mutex<crate::startup::Startup>>;
 struct DesktopControl {
     lifecycle: Lifecycle,
     monitor_stopped: AtomicBool,
+    #[cfg(any(target_os = "macos", windows))]
+    node_installations: crate::node_tools::Installations,
 }
 
 struct DesktopOperation {
@@ -856,11 +861,26 @@ async fn backup_database(app: tauri::AppHandle, state: State<'_, Shared>) -> Res
 }
 
 #[tauri::command]
-async fn node_status(state: State<'_, Shared>) -> Result<node_tools_view::NodeStatus> {
+async fn node_status(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+) -> Result<node_tools_view::NodeStatus> {
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
-    tauri::async_runtime::spawn_blocking(move || node_tools_view::status(&layout))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(any(target_os = "macos", windows))]
+        {
+            let mut status = node_tools_view::status(&layout)?;
+            status.installation = app.state::<DesktopControl>().node_installations.current();
+            Ok(status)
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
+        {
+            let _ = app;
+            node_tools_view::status(&layout)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -877,6 +897,7 @@ async fn node_action(
     state: State<'_, Shared>,
     action: String,
     version: String,
+    id: Option<String>,
 ) -> Result<()> {
     let _operation = begin_operation(&app, "Updating Node tools…")?;
     if ["enable", "disable"].contains(&action.as_str()) {
@@ -886,6 +907,35 @@ async fn node_action(
         .await;
     }
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
+    #[cfg(any(target_os = "macos", windows))]
+    if action == "install" || action == "install-use" {
+        let id = id.ok_or("A Node installation request ID is required.")?;
+        let jobs = app.state::<DesktopControl>().node_installations.clone();
+        let job = jobs.start(&id, &version)?;
+        let _ = app.emit("node-installation", jobs.current());
+        let worker_app = app.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let cancelled =
+                || job.cancelled() || worker_app.state::<DesktopControl>().lifecycle.quitting();
+            node_tools_view::change(&layout, "install", &version, &cancelled)?;
+            if action == "install-use" {
+                job.activating()?;
+                let _ = worker_app.emit("node-installation", jobs.current());
+                node_tools_view::use_version(&layout, &version, &cancelled)?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| error.to_string())
+        .and_then(|result| result);
+        let _ = app.emit(
+            "node-installation",
+            Option::<crate::node_tools::Installation>::None,
+        );
+        return result;
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let _ = id;
     if action == "uninstall" {
         let check_version = version.clone();
         access(state.inner().clone(), move |m| {
@@ -894,12 +944,23 @@ async fn node_action(
         .await?;
     }
     tauri::async_runtime::spawn_blocking(move || {
-        node_tools_view::change(&layout, &action, &version, &|| {
-            app.state::<DesktopControl>().lifecycle.quitting()
-        })
+        let cancelled = || app.state::<DesktopControl>().lifecycle.quitting();
+        if action == "use" {
+            node_tools_view::use_version(&layout, &version, &cancelled)
+        } else {
+            node_tools_view::change(&layout, &action, &version, &cancelled)
+        }
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cancel_node_installation(app: tauri::AppHandle, id: String) {
+    #[cfg(any(target_os = "macos", windows))]
+    app.state::<DesktopControl>().node_installations.cancel(&id);
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let _ = (app, id);
 }
 
 #[derive(Serialize)]
@@ -1277,6 +1338,7 @@ pub fn run() {
             node_status,
             node_versions,
             node_action,
+            cancel_node_installation,
             backup_database,
             check_update,
             install_update

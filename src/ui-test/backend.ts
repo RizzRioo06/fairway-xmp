@@ -16,6 +16,7 @@ export const defaultPlatform: Platform = navigator.platform.startsWith('Mac') ? 
 let platform: Platform = defaultPlatform;
 let data: Snapshot;
 let nodeFixture: NodeStatus;
+let nodeInstallation: { id: string; version: string; phase: 'installing' | 'activating'; cancelled: boolean; wake?: () => void } | null = null;
 const phpDefaults: PhpSettings = { memoryLimitMb: 256, maxExecutionTime: 120, uploadMaxFilesizeMb: 64, timezone: 'UTC', displayErrors: true, sessionUploadProgress: true };
 let phpOverrides: Record<string, PhpSettings> = {};
 function phpSettings(version: string): PhpSettingsView {
@@ -171,18 +172,59 @@ function managedNode(version: string) {
   return { version, path: joinPath(nodeFixture.directory, 'node-versions', version, 'installation', ...(platform === 'Windows' ? ['node.exe'] : ['bin', 'node'])) };
 }
 
+function syncNode() {
+  nodeFixture.managed = nodeFixture.defaultVersion ? managedNode(nodeFixture.defaultVersion) : null;
+  nodeFixture.installations = [...nodeFixture.installations.filter(node => node.source !== 'fnm'), ...nodeFixture.installed.map(version => ({ ...managedNode(version), source: 'fnm' }))];
+}
+
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'get_php_settings') return phpSettings(String(args.version)) as T;
-  if (command === 'node_status') return structuredClone(nodeFixture) as T;
+  if (command === 'node_status') return structuredClone({ ...nodeFixture, installation: nodeInstallation ? { id: nodeInstallation.id, version: nodeInstallation.version, phase: nodeInstallation.phase } : null }) as T;
   if (command === 'node_versions') return ['v25.0.0', 'v24.14.1', 'v23.11.0', 'v22.1.0', 'v21.7.3', 'v20.19.0'] as T;
+  if (command === 'cancel_node_installation') {
+    const active = nodeInstallation;
+    if (active && active.id === args.id && active.phase === 'installing') {
+      active.cancelled = true;
+      active.wake?.();
+    }
+    return undefined as T;
+  }
   if (command === 'node_action') {
     if (nodeFixture.readOnlyReason && args.action !== 'disable') throw new Error(nodeFixture.readOnlyReason);
+    window.dispatchEvent(new CustomEvent('fairway-ui-node-action', { detail: args }));
     const version = String(args.version ?? '');
-    if (args.action === 'install' && !nodeFixture.installed.includes(version)) {
-      nodeFixture.installed.push(version);
-      nodeFixture.defaultVersion ??= version;
+    const options = (window as Window & { __fairwayNodeOptions?: { installDelay?: number; failActivation?: boolean } }).__fairwayNodeOptions;
+    if (args.action === 'install' || args.action === 'install-use') {
+      const job = { id: String(args.id), version, phase: 'installing' as const, cancelled: false, wake: undefined as (() => void) | undefined };
+      nodeInstallation = job;
+      emit('node-installation', { id: job.id, version, phase: job.phase });
+      try {
+        await new Promise<void>(resolve => {
+          const timer = window.setTimeout(resolve, options?.installDelay ?? 200);
+          job.wake = () => { window.clearTimeout(timer); resolve(); };
+        });
+        if (job.cancelled) throw new Error('Command cancelled.');
+        if (!nodeFixture.installed.includes(version)) nodeFixture.installed.push(version);
+        nodeFixture.defaultVersion ??= version;
+        if (args.action === 'install-use') {
+          nodeInstallation = { ...job, phase: 'activating' };
+          emit('node-installation', { id: job.id, version, phase: 'activating' });
+          if (options?.failActivation) throw new Error('Shell setup failed. Previous Node selection restored.');
+          nodeFixture.defaultVersion = version;
+          nodeFixture.enabled = true;
+        }
+      } finally {
+        nodeInstallation = null;
+        syncNode();
+        emit('node-installation', null);
+      }
+    }
+    if (args.action === 'use') {
+      if (options?.failActivation) throw new Error('Shell setup failed. Previous Node selection restored.');
+      nodeFixture.defaultVersion = version;
+      nodeFixture.enabled = true;
     }
     if (args.action === 'default') nodeFixture.defaultVersion = version;
     if (args.action === 'enable') nodeFixture.enabled = true;
@@ -192,8 +234,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       if (nodeFixture.defaultVersion === version) nodeFixture.enabled = false;
       if (nodeFixture.defaultVersion === version) nodeFixture.defaultVersion = null;
     }
-    nodeFixture.managed = nodeFixture.defaultVersion ? managedNode(nodeFixture.defaultVersion) : null;
-    nodeFixture.installations = [...nodeFixture.installations.filter(node => node.source !== 'fnm'), ...nodeFixture.installed.map(version => ({ ...managedNode(version), source: 'fnm' }))];
+    syncNode();
     return undefined as T;
   }
   if (command === 'snapshot') return structuredClone(data) as T;

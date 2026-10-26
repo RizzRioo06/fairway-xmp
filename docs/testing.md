@@ -37,6 +37,8 @@ Database engine upgrade fixtures and installed-lifecycle baselines remain automa
 
 ## Browser and native bridge
 
+`node-tools.spec.ts` covers desktop Install/Install & use, explicit selection, failed activation/retry, read-only stores, activation handover, confirmed active-version uninstall, and cancellable downloads across navigation in Chromium/WebKit at normal/minimum sizes. Native selection regression tests verify rollback of existing and absent defaults, failed fnm selection, and process-tree cancellation.
+
 Node/fnm checks are noninteractive and use isolated stores. Policy tests cover external-manager detection after Fairway launchers, shell-exported custom storage, ownership-bound mutations, read-only listing and activation handover without invoking fnm. On macOS run `cargo run --manifest-path src-tauri/Cargo.toml --example node_tools_smoke --no-default-features --features terminal --locked -- /path/to/fresh-fnm-check`; on Windows use `node_tools_windows_smoke`. The examples install Node into scratch storage, test version selection and native startup scripts, and preserve personal profiles/installations. Mac/Windows candidate jobs run the appropriate example after staging fnm.
 
 On Linux, after preparing the runtime, run `python3 tests/linux_fnm_smoke.py --runtime src-tauri/resources/runtime --install-node`. It checks the bundled native fnm and downloads Node LTS into a temporary home/store, then verifies Node/npm/npx without editing personal shell profiles. Omit `--install-node` to check fnm without a Node download. See [Node tools](node-tools.md).
