@@ -4,9 +4,17 @@ Past entries record released changes; they are not current development or releas
 
 ## Unreleased
 
+## 0.1.0-rc.5 — 2026-10-26
+
+- Bundle native fnm 1.39.0 on all platforms and add optional Node.js management to desktop Settings. Preserve external fnm ownership, installed versions and global npm packages, with explicit activation handover and no automatic project switching.
+
 - Make Node selection and activation transactional, restoring the previous fnm default after failed setup. Add cancellable Node installations with progress that survives Settings navigation, and browser coverage for Node management and recovery. Repair Linux candidate lint configuration and the notification test bridge.
 
+- Import user tool environments in new desktop terminals, repair Windows Node activation with Unicode and canonical storage paths, and show clearer desktop update progress with expandable release notes.
+
 - Load supported remote images automatically in Mail previews, with Retry image placeholders for failures. Preserve downloaded images across HTML/Text switches and keep the preview’s restrictive security policies through a bounded, cookie-free native image loader.
+
+Published from [candidate run 40288383232](https://github.com/eimg/fairway-xmp/actions/runs/40288383232), commit `d8646771670400591b2a5af743aa4b83d6a491da`, using the tested installers and updater payloads without rebuilding. Installed macOS and Windows clients receive RC 5 through the preview update feed; Linux updates remain manual.
 
 ## 0.1.0-rc.4 — 2026-10-24
 

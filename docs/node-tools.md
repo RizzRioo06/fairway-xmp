@@ -1,6 +1,6 @@
 # Node.js and native fnm
 
-Prepared for `0.1.0-rc.5`; RC 5 has not been built or published. Current source builds for all three platforms include the pinned upstream **fnm** executable. Published RC 4 installers predate this integration. Node itself is downloaded only when requested. macOS distribution applies the app’s normal code signing to fnm; its source and CLI behavior are unmodified. Use `fnm` directly; there is no `fairway node` or `fairway fnm` command.
+Starting with `0.1.0-rc.5`, installers for all three platforms include the pinned upstream **fnm** executable. Node itself is downloaded only when requested. macOS distribution applies the app’s normal code signing to fnm; its source and CLI behavior are unmodified. Use `fnm` directly; there is no `fairway node` or `fairway fnm` command.
 
 | Platform | Detection and activation |
 | --- | --- |
