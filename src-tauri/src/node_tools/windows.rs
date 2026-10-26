@@ -545,6 +545,39 @@ mod tests {
         assert!(fixture.key.get_raw_value("AutoRun").is_err());
     }
     #[test]
+    fn canonical_store_records_are_converted_before_cli_and_shell_activation() {
+        let fixture = Fixture::new();
+        let canonical = fs::canonicalize(&fixture.root).unwrap();
+        assert!(canonical.to_string_lossy().starts_with(r"\\?\"));
+        fs::write(
+            fixture.layout.data.join("fnm-store.json"),
+            serde_json::to_vec(&canonical).unwrap(),
+        )
+        .unwrap();
+        let directory = store(&fixture.layout);
+        assert!(!directory.to_string_lossy().starts_with(r"\\?\"));
+        assert_eq!(fs::canonicalize(&directory).unwrap(), canonical);
+        let command = crate::node_tools::command_in(&fixture.layout, &canonical);
+        let value = command
+            .get_envs()
+            .find(|(name, _)| *name == "FNM_DIR")
+            .unwrap()
+            .1
+            .unwrap();
+        assert_eq!(std::path::Path::new(value), directory);
+        assert!(cmd_startup(&fixture.layout)
+            .unwrap()
+            .contains(&format!("set \"FNM_DIR={}\"", directory.display())));
+        assert_eq!(
+            powershell_startup(&fixture.layout),
+            powershell_init(
+                &fixture.layout.bin.join("fnm.exe").to_string_lossy(),
+                &directory.to_string_lossy(),
+                &fixture.layout.data.join("fnm-enabled").to_string_lossy(),
+            )
+        );
+    }
+    #[test]
     fn cmd_startup_reads_unicode_marker_before_running_native_tools() {
         use std::os::windows::process::CommandExt;
         use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;

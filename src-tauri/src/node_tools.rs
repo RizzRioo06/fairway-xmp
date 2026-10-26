@@ -70,11 +70,14 @@ pub fn directory(layout: &Layout) -> PathBuf {
 
 /// Keep a previously selected Fairway store stable until explicit handover.
 fn activation_directory(layout: &Layout) -> PathBuf {
-    fs::read(layout.data.join("fnm-store.json"))
+    let directory = fs::read(layout.data.join("fnm-store.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<PathBuf>(&bytes).ok())
         .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| directory(layout))
+        .unwrap_or_else(|| directory(layout));
+    #[cfg(windows)]
+    let directory = PathBuf::from(windows_scripts::fnm_directory(&directory.to_string_lossy()));
+    directory
 }
 
 pub fn enabled(layout: &Layout) -> bool {
@@ -83,6 +86,8 @@ pub fn enabled(layout: &Layout) -> bool {
 
 fn command_in(layout: &Layout, directory: &std::path::Path) -> Command {
     let mut cmd = crate::process::command(executable(layout));
+    #[cfg(windows)]
+    let directory = windows_scripts::fnm_directory(&directory.to_string_lossy());
     cmd.env("HOME", &layout.home)
         .env("FNM_DIR", directory)
         .env("NO_COLOR", "1")

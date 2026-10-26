@@ -4,6 +4,18 @@ use crate::config::Result;
 const BEGIN: &str = "# >>> fairway node >>>";
 const END: &str = "# <<< fairway node <<<";
 
+pub(super) fn fnm_directory(value: &str) -> String {
+    // Store ownership records use canonical Win32 paths. fnm's junction
+    // creation treats a \\?\ prefix as part of the target, creating links
+    // that cannot be followed. Pass the equivalent DOS/UNC path to the CLI.
+    let native = value.replace('/', "\\");
+    if let Some(unc) = native.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        native.strip_prefix(r"\\?\").unwrap_or(&native).into()
+    }
+}
+
 pub(super) fn powershell_quote(value: &str) -> String {
     if value.is_ascii() {
         format!("'{}'", value.replace('\'', "''"))
@@ -32,7 +44,34 @@ pub(super) fn powershell_init(fnm: &str, directory: &str, marker: &str) -> Strin
         powershell_quote(directory),
         powershell_quote(marker),
     );
-    format!("if (Test-Path -LiteralPath {marker}) {{\n  $env:FNM_DIR = {directory}\n  & {fnm} env --shell powershell | Out-String | Invoke-Expression\n  $_fairwayNodeDefault = & {fnm} default\n  if ($_fairwayNodeDefault -match '^v?[0-9]+\\.[0-9]+\\.[0-9]+$') {{ & {fnm} use --silent-if-unchanged $_fairwayNodeDefault | Out-Null }}\n  Remove-Variable _fairwayNodeDefault -ErrorAction SilentlyContinue\n}}")
+    // PowerShell 5 decodes native pipelines with the console's legacy encoding.
+    // Capture fnm's UTF-8 explicitly, including in hosts without a console,
+    // without changing the user's console or session encoding.
+    format!(
+        r#"if (Test-Path -LiteralPath {marker}) {{
+  $env:FNM_DIR = {directory}
+  $_fairwayFnmProcess = New-Object System.Diagnostics.Process
+  try {{
+    $_fairwayFnmProcess.StartInfo.FileName = {fnm}
+    $_fairwayFnmProcess.StartInfo.Arguments = 'env --shell powershell'
+    $_fairwayFnmProcess.StartInfo.UseShellExecute = $false
+    $_fairwayFnmProcess.StartInfo.RedirectStandardOutput = $true
+    $_fairwayFnmProcess.StartInfo.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $_fairwayFnmProcess.StartInfo.CreateNoWindow = $true
+    [void]$_fairwayFnmProcess.Start()
+    $_fairwayFnmEnv = $_fairwayFnmProcess.StandardOutput.ReadToEnd()
+    $_fairwayFnmProcess.WaitForExit()
+    if ($_fairwayFnmProcess.ExitCode -eq 0) {{
+      $_fairwayFnmEnv | Invoke-Expression
+      $_fairwayNodeDefault = & {fnm} default
+      if ($_fairwayNodeDefault -match '^v?[0-9]+\.[0-9]+\.[0-9]+$') {{ & {fnm} use --silent-if-unchanged $_fairwayNodeDefault | Out-Null }}
+    }}
+  }} finally {{
+    $_fairwayFnmProcess.Dispose()
+    Remove-Variable _fairwayFnmProcess, _fairwayFnmEnv, _fairwayNodeDefault -ErrorAction SilentlyContinue
+  }}
+}}"#
+    )
 }
 
 pub(super) fn cmd_init(fnm: &str, directory: &str, marker: &str) -> Result<String> {
@@ -126,6 +165,23 @@ pub(super) fn remove_autorun(previous: &str, hook: &str) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn fnm_store_paths_drop_verbatim_prefixes_without_losing_unicode_or_unc_roots() {
+        for (input, expected) in [
+            (
+                r"\\?\C:\Users\日本 & tools\node store",
+                r"C:\Users\日本 & tools\node store",
+            ),
+            (
+                r"\\?\UNC\server\share\日本\node store",
+                r"\\server\share\日本\node store",
+            ),
+            (r"C:\Users/日本/node store", r"C:\Users\日本\node store"),
+            (r"\\server\share\node store", r"\\server\share\node store"),
+        ] {
+            assert_eq!(fnm_directory(input), expected);
+        }
+    }
+    #[test]
     fn profile_edits_preserve_unicode_encoding_and_unrelated_content() {
         let text = "# 日本語\r\nWrite-Host 'mine'\r\n";
         for bytes in [
@@ -155,7 +211,7 @@ mod tests {
         assert!(ps.is_ascii());
         assert!(ps.contains("FromBase64String"));
         assert_eq!(powershell_quote("May's tools"), "'May''s tools'");
-        assert!(ps.contains(" env --shell powershell") && ps.contains(" default"));
+        assert!(ps.contains("'env --shell powershell'") && ps.contains(" default"));
         let cmd = cmd_init(path, "C:\\node store", "C:\\enabled").unwrap();
         assert!(cmd.contains("usebackq tokens=1,*"));
         assert!(!cmd.contains(" in ('"));

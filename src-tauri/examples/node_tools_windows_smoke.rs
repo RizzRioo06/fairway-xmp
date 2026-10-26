@@ -39,7 +39,7 @@ fn main() -> Result<(), String> {
     fs::write(
         &startup,
         format!(
-            "{}\r\nnode --version\r\ncall npm --version\r\ncall npx --version\r\n",
+            "{}\r\necho FNM_DIR=\"%FNM_DIR%\"\r\necho FNM_MULTISHELL_PATH=\"%FNM_MULTISHELL_PATH%\"\r\nwhere node\r\nnode --version\r\nnode -p process.execPath\r\ncall npm --version\r\ncall npx --version\r\n",
             node_tools::cmd_startup(&layout)?
         ),
     )
@@ -70,9 +70,13 @@ fn main() -> Result<(), String> {
         String::from_utf8_lossy(&startup_output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&startup_output.stdout).contains("v24.14.1"),
-        "{}",
         String::from_utf8_lossy(&startup_output.stdout)
+            .lines()
+            .any(|line| line.trim() == "v24.14.1"),
+        "Command Prompt did not select Node v24.14.1 ({}).\nstdout: {}\nstderr: {}",
+        startup_output.status,
+        String::from_utf8_lossy(&startup_output.stdout),
+        String::from_utf8_lossy(&startup_output.stderr)
     );
     // Run the same managed PowerShell body explicitly, without loading or
     // editing a real profile and without changing the execution policy.
@@ -107,13 +111,19 @@ fn main() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     assert!(
         ps_output.status.success(),
-        "{}",
+        "PowerShell startup failed ({}).\nstdout: {}\nstderr: {}",
+        ps_output.status,
+        String::from_utf8_lossy(&ps_output.stdout),
         String::from_utf8_lossy(&ps_output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&ps_output.stdout).contains("v24.14.1"),
-        "{}",
         String::from_utf8_lossy(&ps_output.stdout)
+            .lines()
+            .any(|line| line.trim() == "v24.14.1"),
+        "PowerShell did not select Node v24.14.1 ({}).\nstdout: {}\nstderr: {}",
+        ps_output.status,
+        String::from_utf8_lossy(&ps_output.stdout),
+        String::from_utf8_lossy(&ps_output.stderr)
     );
     let first = node_tools::terminal_environment(&layout)?;
     let check = |env: &[(String, String)], expected: &str| -> Result<(), String> {
