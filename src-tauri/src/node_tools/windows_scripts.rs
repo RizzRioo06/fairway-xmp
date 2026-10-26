@@ -21,7 +21,9 @@ pub(super) fn cmd_path(value: &str) -> Result<String> {
     {
         return Err("Windows Node activation requires paths without percent signs, exclamation marks, quotes or line breaks.".into());
     }
-    Ok(format!("\"{value}\""))
+    // Rust/Win32 accept mixed separators; CMD can parse a forward slash in an
+    // executable or batch path as an option. Always emit native separators.
+    Ok(format!("\"{}\"", value.replace('/', "\\")))
 }
 
 pub(super) fn powershell_init(fnm: &str, directory: &str, marker: &str) -> String {
@@ -36,10 +38,11 @@ pub(super) fn powershell_init(fnm: &str, directory: &str, marker: &str) -> Strin
 pub(super) fn cmd_init(fnm: &str, directory: &str, marker: &str) -> Result<String> {
     let (fnm, marker) = (cmd_path(fnm)?, cmd_path(marker)?);
     cmd_path(directory)?;
+    let directory = directory.replace('/', "\\");
     // Read native output from per-session files instead of FOR /F command
     // substitution: its implicit child cmd would rerun the user's AutoRun.
     // Do not CALL returned text (which expands PATH percent signs twice).
-    Ok(format!("@echo off\r\nif not exist {marker} exit /b\r\nchcp 65001 >nul\r\nset \"PATH=%PATH:\"=%\"\r\nset \"FNM_DIR={directory}\"\r\nset \"_FAIRWAY_FNM_ENV=%TEMP%\\fairway-fnm-%RANDOM%-%RANDOM%.env\"\r\n{fnm} env --shell cmd > \"%_FAIRWAY_FNM_ENV%\"\r\nif errorlevel 1 goto fairway_fnm_cleanup\r\nfor /f \"usebackq tokens=1,*\" %%A in (\"%_FAIRWAY_FNM_ENV%\") do if /i \"%%A\"==\"SET\" set \"%%B\"\r\n{fnm} default > \"%_FAIRWAY_FNM_ENV%.default\"\r\nfor /f \"usebackq delims=\" %%V in (\"%_FAIRWAY_FNM_ENV%.default\") do {fnm} use --silent-if-unchanged \"%%V\" >nul\r\n:fairway_fnm_cleanup\r\ndel /q \"%_FAIRWAY_FNM_ENV%\" \"%_FAIRWAY_FNM_ENV%.default\" >nul 2>&1\r\nset \"_FAIRWAY_FNM_ENV=\"\r\n"))
+    Ok(format!("@echo off\r\nchcp 65001 >nul\r\nif not exist {marker} exit /b\r\nset \"PATH=%PATH:\"=%\"\r\nset \"FNM_DIR={directory}\"\r\nset \"_FAIRWAY_FNM_ENV=%TEMP%\\fairway-fnm-%RANDOM%-%RANDOM%.env\"\r\n{fnm} env --shell cmd > \"%_FAIRWAY_FNM_ENV%\"\r\nif errorlevel 1 goto fairway_fnm_cleanup\r\nfor /f \"usebackq tokens=1,*\" %%A in (\"%_FAIRWAY_FNM_ENV%\") do if /i \"%%A\"==\"SET\" set \"%%B\"\r\n{fnm} default > \"%_FAIRWAY_FNM_ENV%.default\"\r\nfor /f \"usebackq delims=\" %%V in (\"%_FAIRWAY_FNM_ENV%.default\") do {fnm} use --silent-if-unchanged \"%%V\" >nul\r\n:fairway_fnm_cleanup\r\ndel /q \"%_FAIRWAY_FNM_ENV%\" \"%_FAIRWAY_FNM_ENV%.default\" >nul 2>&1\r\nset \"_FAIRWAY_FNM_ENV=\"\r\n"))
 }
 
 pub(super) fn profile(bytes: &[u8], init: Option<&str>) -> Result<Vec<u8>> {
@@ -161,6 +164,22 @@ mod tests {
         for invalid in ["C:\\%USER%", "C:\\wow!", "C:\\bad\"", "C:\\new\nline"] {
             assert!(cmd_path(invalid).is_err());
         }
+    }
+    #[test]
+    fn cmd_paths_normalize_separators_and_enable_utf8_before_reading_unicode_paths() {
+        let script = cmd_init(
+            "D:\\build/.runtime-work/fnm-check/日本 & tools/bin/fnm.exe",
+            "D:\\build/.runtime-work/fnm-check/日本 & tools/store",
+            "D:\\build/.runtime-work/fnm-check/日本 & tools/fnm-enabled",
+        )
+        .unwrap();
+        assert!(script.starts_with("@echo off\r\nchcp 65001 >nul\r\nif not exist "));
+        assert!(script.contains(
+            "\"D:\\build\\.runtime-work\\fnm-check\\日本 & tools\\bin\\fnm.exe\" env --shell cmd"
+        ));
+        assert!(script
+            .contains("set \"FNM_DIR=D:\\build\\.runtime-work\\fnm-check\\日本 & tools\\store\""));
+        assert!(!script.contains("build/") && !script.contains("tools/"));
     }
     #[test]
     fn autorun_removal_preserves_existing_commands_and_later_edits() {

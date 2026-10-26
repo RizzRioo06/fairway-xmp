@@ -244,7 +244,7 @@ pub fn install(layout: &Layout) -> Result<()> {
             );
             #[cfg(not(target_os = "macos"))]
             let profile_block = &block;
-            let updated = profile_with_block(&previous, Some(&profile_block))?;
+            let updated = profile_with_block(&previous, Some(profile_block.as_str()))?;
             edits.push((file.clone(), updated));
             records.push(ProfileRecord {
                 path: file,

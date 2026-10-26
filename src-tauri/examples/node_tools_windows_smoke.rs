@@ -50,13 +50,22 @@ fn main() -> Result<(), String> {
         .join("System32/cmd.exe");
     let mut shell = process::command(cmd_path);
     use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;
+    // Pass the Unicode/space/ampersand folder through CreateProcessW's working
+    // directory, and let CMD open a fixed ASCII basename. The script itself
+    // still exercises all generated full paths in that folder. Unlike fnm's
+    // noninteractive subprocesses, this external-shell check needs a console:
+    // CHCP cannot select UTF-8 with CREATE_NO_WINDOW.
     shell
-        .args(["/D", "/V:OFF", "/S", "/C"])
-        .raw_arg(format!("\"\"{}\"\"", startup.display()));
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .current_dir(&layout.data)
+        .args(["/D", "/V:OFF", "/S", "/C", "scratch-startup.cmd"]);
     let startup_output = shell.output().map_err(|e| e.to_string())?;
     assert!(
         startup_output.status.success(),
-        "{}",
+        "Command Prompt startup failed ({}).\nstdout: {}\nstderr: {}",
+        startup_output.status,
+        String::from_utf8_lossy(&startup_output.stdout),
         String::from_utf8_lossy(&startup_output.stderr)
     );
     assert!(

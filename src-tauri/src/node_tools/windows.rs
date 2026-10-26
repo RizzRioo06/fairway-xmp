@@ -545,6 +545,42 @@ mod tests {
         assert!(fixture.key.get_raw_value("AutoRun").is_err());
     }
     #[test]
+    fn cmd_startup_reads_unicode_marker_before_running_native_tools() {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;
+        let fixture = Fixture::new();
+        let windows = std::env::var_os("SystemRoot")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "C:\\Windows".into());
+        let marker = fixture.layout.data.join("fnm-enabled");
+        fs::write(&marker, "1").unwrap();
+        // WHERE is an ordinary EXE that rejects fnm's arguments, taking the
+        // script's error/cleanup path without requiring a staged fnm or Node.
+        // Only an existing, correctly decoded marker can reach the final echo.
+        let script = cmd_init(
+            &windows.join("System32/where.exe").to_string_lossy(),
+            &fixture.root.join("node store").to_string_lossy(),
+            &marker.to_string_lossy(),
+        )
+        .unwrap();
+        fs::write(
+            fixture.layout.data.join("probe.cmd"),
+            format!("{script}\r\necho FAIRWAY_MARKER_READ\r\nexit /b 0\r\n"),
+        )
+        .unwrap();
+        let launch = || {
+            let mut command = crate::process::command(windows.join("System32/cmd.exe"));
+            command
+                .creation_flags(CREATE_NEW_CONSOLE)
+                .current_dir(&fixture.layout.data)
+                .args(["/D", "/V:OFF", "/S", "/C", "probe.cmd"]);
+            output(command, 10, &|| false).unwrap()
+        };
+        assert!(launch().contains("FAIRWAY_MARKER_READ"));
+        fs::remove_file(marker).unwrap();
+        assert!(!launch().contains("FAIRWAY_MARKER_READ"));
+    }
+    #[test]
     fn command_timeout_kills_a_windows_process_without_pipe_hangs() {
         let root = std::env::var_os("SystemRoot")
             .map(PathBuf::from)
