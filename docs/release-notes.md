@@ -2,6 +2,8 @@
 
 Fairway XMP's first stable release brings the PHP development environment to Windows x64, Apple Silicon Macs and Linux x86_64. It carries forward RC 5's features and bundled runtime versions, with improved macOS background behavior.
 
+Published from [candidate run 40445387643](https://github.com/eimg/fairway-xmp/actions/runs/40445387643), source `c6bf2d086890fd4dc50f877c6ab28abb87e419c5`, using the tested installers and updater payloads without rebuilding. Automated installer lifecycle checks passed on all three platforms, and desktop updater lifecycle checks passed on macOS and Windows.
+
 - **PHP development tools:** switch between PHP 8.2–8.5, manage Nginx, MySQL and Mailpit, use Composer, and keep persistent PHP settings for each bundled version. Services run locally without Docker or a system PHP/MySQL installation.
 - **Sites and local HTTPS:** register project folders with `.test` addresses, configure front-controller routing, and enable local HTTPS. All sites share the selected PHP version.
 - **Desktop workspace:** manage MySQL and SQLite data, run SQL, create database backups, inspect logs, preview captured email, and work in two embedded terminal tabs. phpMyAdmin and MySQL command-line tools are included on every platform.
@@ -13,7 +15,7 @@ Bundled tools: PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12 (default), Composer 2.10.3,
 
 ## Upgrading
 
-After publication and update-feed promotion, existing macOS and Windows beta/RC clients can update to 0.1.0 through Settings. Stable installations check the stable feed for future releases. Linux users rerun the new installer. Projects, databases, backups, settings and installed Node versions are preserved by normal updates.
+Existing macOS and Windows beta/RC clients can update to 0.1.0 through Settings. Stable installations check the stable feed for future releases. Linux users rerun the new installer. Projects, databases, backups, settings and installed Node versions are preserved by normal updates.
 
 Node installation is optional. Choosing a Node version affects new terminals; existing terminals and development servers retain their selection until restarted. A populated fnm store from an older development build without a Fairway ownership record remains read-only; the stable release does not automatically adopt it. See [Node.js and fnm](https://github.com/eimg/fairway-xmp/blob/main/docs/node-tools.md) for storage and activation details.
 

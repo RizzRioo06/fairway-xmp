@@ -4,11 +4,13 @@ Past entries record released changes; they are not current development or releas
 
 ## Unreleased
 
-### 0.1.0 stable preparation
+## 0.1.0 — 2026-10-27
 
-- Prepare the first stable release for Windows x64, Apple Silicon macOS and Linux x86_64, carrying forward RC 5's features and pinned runtimes. Stable desktop builds use the stable update feed.
+- Release the first stable version for Windows x64, Apple Silicon macOS and Linux x86_64, carrying forward RC 5's features and pinned runtimes. Stable desktop builds use the stable update feed.
 - On macOS, closing the window hides the Dock icon while services and the menu bar remain available. Reopening restores the window and Dock icon; minimizing keeps the Dock icon.
 - Verify release configuration against both preview and stable update feeds.
+
+Published from [candidate run 40445387643](https://github.com/eimg/fairway-xmp/actions/runs/40445387643), commit `c6bf2d086890fd4dc50f877c6ab28abb87e419c5`, using the tested installers and updater payloads without rebuilding. macOS and Windows clients receive 0.1.0 through both stable and preview update feeds; Linux updates remain manual.
 
 ## 0.1.0-rc.5 — 2026-10-26
 
