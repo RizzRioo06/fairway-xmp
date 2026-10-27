@@ -7,6 +7,23 @@ use std::{
     task::{Poll, Waker},
 };
 
+/// Both stacks must get a cleanup attempt even when either is unavailable.
+/// Keep this separate from PHP Start All/Stop All, which never controls Node.
+pub(crate) fn stop_components(
+    node: impl FnOnce() -> Result<(), String>,
+    php: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let errors: Vec<_> = [node(), php()]
+        .into_iter()
+        .filter_map(Result::err)
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
+}
+
 #[derive(Default)]
 struct State {
     working: bool,
@@ -359,6 +376,41 @@ mod tests {
         lifecycle.allow_exit();
         assert!(lifecycle.exit_allowed());
         assert!(lifecycle.begin().is_err());
+    }
+
+    #[test]
+    fn shutdown_attempts_both_stacks_and_preserves_both_errors() {
+        use std::cell::Cell;
+        for node_fails in [false, true] {
+            for php_fails in [false, true] {
+                let calls = Cell::new(0);
+                let result = stop_components(
+                    || {
+                        calls.set(calls.get() + 1);
+                        if node_fails {
+                            Err("node".into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    || {
+                        calls.set(calls.get() + 1);
+                        if php_fails {
+                            Err("php".into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                assert_eq!(calls.get(), 2);
+                match (node_fails, php_fails) {
+                    (false, false) => assert!(result.is_ok()),
+                    (true, false) => assert_eq!(result.unwrap_err(), "node"),
+                    (false, true) => assert_eq!(result.unwrap_err(), "php"),
+                    (true, true) => assert_eq!(result.unwrap_err(), "node\nphp"),
+                }
+            }
+        }
     }
 
     #[test]

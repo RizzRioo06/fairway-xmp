@@ -1,10 +1,18 @@
-//! Optional Node project registrations. This module never launches a project,
-//! changes fnm activation, or participates in the PHP service snapshot.
+//! Optional Node registry, isolated runtime preparation, and explicitly owned runs.
+//! PHP service snapshots and global Node activation stay independent.
 use crate::config::Layout;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, sync::Mutex};
 
 mod environment;
+mod execution;
+mod run_logs;
+mod runner;
+pub use execution::{
+    LogRequest, RestartRequest, RunState, RunStatus, RunsSnapshot, StartRequest, StopRequest,
+};
+pub use run_logs::{LogBatch, LogRecord, LogStream};
+pub use runner::entrypoint as runner_entrypoint;
 mod isolation;
 mod manifest;
 pub use environment::ChildEnvironment;
@@ -31,6 +39,12 @@ pub enum ErrorCode {
     Conflict,
     NotFound,
     SaveFailed,
+    ConfirmationRequired,
+    ProjectBusy,
+    RunNotFound,
+    StaleRun,
+    ExecutionFailed,
+    LogUnavailable,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -196,12 +210,16 @@ pub struct NodeProjects {
     supported: bool,
     mutation: Mutex<()>,
     discover: Discover,
+    executions: execution::Executions,
 }
 
 impl NodeProjects {
     pub fn new(layout: Option<Layout>) -> Self {
+        let executions =
+            execution::Executions::new(layout.as_ref().map(|layout| layout.data.clone()));
         Self {
             layout,
+            executions,
             supported: cfg!(target_os = "macos"),
             mutation: Mutex::new(()),
             discover: runtime::discover,
@@ -279,6 +297,9 @@ impl NodeProjects {
         let (mut document, current) = store::load(&layout.data)?;
         store::check_revision(&request.expected_revision, &current)?;
         let config = request.config;
+        if let Some(id) = &config.id {
+            self.executions.ensure_stopped(id)?;
+        }
         validate_text(&config.name, 80, "Enter a project name of 1–80 characters.")?;
         validate_text(
             &config.script,
@@ -391,6 +412,115 @@ impl NodeProjects {
         Ok(prepared)
     }
 
+    pub fn start(&self, request: StartRequest) -> Result<RunStatus> {
+        let layout = self.layout()?;
+        if !request.confirmed {
+            return Err(Error::new(
+                ErrorCode::ConfirmationRequired,
+                "Starting imported package scripts requires an explicit user action.",
+            ));
+        }
+        let _guard = self
+            .mutation
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::Unavailable, "The registry is unavailable."))?;
+        self.executions.ensure_stopped(&request.id)?;
+        let (document, revision) = store::load(&layout.data)?;
+        store::check_revision(&request.expected_revision, &revision)?;
+        let project = document
+            .projects
+            .into_iter()
+            .find(|project| project.id == request.id)
+            .ok_or_else(|| {
+                Error::new(ErrorCode::NotFound, "This project is no longer registered.")
+            })?;
+        let inspection = manifest::inspect(&project.root)?;
+        store::check_revision(&request.manifest_revision, &inspection.manifest_revision)?;
+        self.executions.start(
+            runner::Launch {
+                home: layout.home.clone(),
+                data: layout.data.clone(),
+                runtime: layout.runtime.clone(),
+                id: project.id,
+                run_id: format!("{:032x}", rand::random::<u128>()),
+                expected_revision: request.expected_revision,
+                manifest_revision: request.manifest_revision,
+            },
+            project.runtime,
+        )
+    }
+    pub fn stop(&self, request: StopRequest) -> Result<RunStatus> {
+        self.layout()?;
+        self.executions.stop(request)
+    }
+    pub fn restart(&self, request: RestartRequest) -> Result<RunStatus> {
+        self.layout()?;
+        if !request.confirmed {
+            return Err(Error::new(
+                ErrorCode::ConfirmationRequired,
+                "Restart requires an explicit user action.",
+            ));
+        }
+        self.stop(StopRequest {
+            id: request.id.clone(),
+            run_id: request.run_id,
+        })?;
+        self.start(StartRequest {
+            id: request.id,
+            expected_revision: request.expected_revision,
+            manifest_revision: request.manifest_revision,
+            confirmed: true,
+        })
+    }
+    pub fn runs(&self) -> RunsSnapshot {
+        RunsSnapshot {
+            supported: self.supported,
+            runs: self.executions.statuses(),
+        }
+    }
+    pub fn logs(&self, request: LogRequest) -> Result<LogBatch> {
+        self.layout()?;
+        self.executions.logs(request)
+    }
+    pub fn stop_all_runs(&self) -> Result<()> {
+        self.executions.stop_all()
+    }
+    pub fn disconnect_runs(&self) {
+        self.executions.disconnect_all();
+    }
+    pub fn ensure_runtime_unused(&self, node: &Path) -> Result<()> {
+        self.executions.ensure_runtime_unused(node)
+    }
+    pub fn observe_runs(&self, observer: impl Fn(RunStatus) + Send + Sync + 'static) {
+        self.executions.set_observer(observer);
+    }
+    #[cfg(target_os = "macos")]
+    fn execution_script(
+        &self,
+        id: &str,
+        expected: &str,
+        manifest_revision: &str,
+    ) -> Result<String> {
+        let (document, revision) = store::load(&self.layout()?.data)?;
+        store::check_revision(expected, &revision)?;
+        let project = document
+            .projects
+            .into_iter()
+            .find(|p| p.id == id)
+            .ok_or_else(|| {
+                Error::new(ErrorCode::NotFound, "This project is no longer registered.")
+            })?;
+        let inspection = manifest::inspect(&project.root)?;
+        store::check_revision(manifest_revision, &inspection.manifest_revision)?;
+        if !inspection.scripts.contains_key(&project.script) {
+            return Err(Error::new(
+                ErrorCode::InvalidProject,
+                "The selected script disappeared.",
+            ));
+        }
+        Ok(project.script)
+    }
+
     pub fn remove(&self, request: RemoveRequest) -> Result<RegistryChanged> {
         let layout = self.layout()?;
         let _guard = self
@@ -399,6 +529,7 @@ impl NodeProjects {
             .map_err(|_| Error::new(ErrorCode::Unavailable, "The Node registry is unavailable."))?;
         let (mut document, current) = store::load(&layout.data)?;
         store::check_revision(&request.expected_revision, &current)?;
+        self.executions.ensure_stopped(&request.id)?;
         let count = document.projects.len();
         document.projects.retain(|project| project.id != request.id);
         if document.projects.len() == count {
@@ -407,9 +538,9 @@ impl NodeProjects {
                 "This Node project is no longer registered.",
             ));
         }
-        Ok(RegistryChanged {
-            revision: store::save(&layout.data, &request.expected_revision, &document)?,
-        })
+        let revision = store::save(&layout.data, &request.expected_revision, &document)?;
+        self.executions.forget(&request.id);
+        Ok(RegistryChanged { revision })
     }
 }
 
@@ -463,3 +594,7 @@ fn validate_url(value: Option<&str>) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "node_projects/execution_tests.rs"]
+mod execution_tests;

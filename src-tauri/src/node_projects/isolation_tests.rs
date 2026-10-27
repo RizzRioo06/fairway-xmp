@@ -447,6 +447,9 @@ fn public_preparation_checks_registration_and_manifest_revisions_before_probing(
         supported: true,
         mutation: Mutex::new(()),
         discover: fixture_inventory,
+        executions: crate::node_projects::execution::Executions::new(Some(
+            fixture.layout.data.clone(),
+        )),
     };
     let inspection = state
         .inspect(InspectRequest {

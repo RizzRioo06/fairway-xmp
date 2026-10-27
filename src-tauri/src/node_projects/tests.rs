@@ -90,6 +90,13 @@ fn unicode_registration_round_trips_and_removal_keeps_project_files() {
         supported: true,
         mutation: Mutex::new(()),
         discover: inventory,
+        executions: execution::Executions::new(
+            fixture
+                .projects
+                .layout
+                .as_ref()
+                .map(|layout| layout.data.clone()),
+        ),
     };
     assert_eq!(
         restored.snapshot().projects[0].config.id,
@@ -405,6 +412,40 @@ fn unsupported_platform_and_missing_layout_are_explicit_and_do_not_create_files(
         state
             .inspect(InspectRequest {
                 root: fixture.root("unsupported")
+            })
+            .unwrap_err()
+            .code,
+        ErrorCode::UnsupportedPlatform
+    );
+    assert!(!state.runs().supported);
+    assert_eq!(
+        state
+            .start(StartRequest {
+                id: "a".repeat(32),
+                expected_revision: String::new(),
+                manifest_revision: String::new(),
+                confirmed: true
+            })
+            .unwrap_err()
+            .code,
+        ErrorCode::UnsupportedPlatform
+    );
+    assert_eq!(
+        state
+            .stop(StopRequest {
+                id: "a".repeat(32),
+                run_id: "b".repeat(32)
+            })
+            .unwrap_err()
+            .code,
+        ErrorCode::UnsupportedPlatform
+    );
+    assert_eq!(
+        state
+            .logs(LogRequest {
+                id: "a".repeat(32),
+                run_id: "b".repeat(32),
+                after_cursor: 0
             })
             .unwrap_err()
             .code,
