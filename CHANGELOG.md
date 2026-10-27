@@ -4,6 +4,12 @@ Past entries record released changes; they are not current development or releas
 
 ## Unreleased
 
+### 0.1.0 stable preparation
+
+- Prepare the first stable release for Windows x64, Apple Silicon macOS and Linux x86_64, carrying forward RC 5's features and pinned runtimes. Stable desktop builds use the stable update feed.
+- On macOS, closing the window hides the Dock icon while services and the menu bar remain available. Reopening restores the window and Dock icon; minimizing keeps the Dock icon.
+- Verify release configuration against both preview and stable update feeds.
+
 ## 0.1.0-rc.5 — 2026-10-26
 
 - Bundle native fnm 1.39.0 on all platforms and add optional Node.js management to desktop Settings. Preserve external fnm ownership, installed versions and global npm packages, with explicit activation handover and no automatic project switching.

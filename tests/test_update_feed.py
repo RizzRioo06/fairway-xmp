@@ -62,11 +62,19 @@ class UpdateFeedTests(unittest.TestCase):
 
     def test_release_overlay(self):
         with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / 'overlay.json'
-            subprocess.run([sys.executable, str(SCRIPTS / 'configure_release.py'), '--public-key', str(SCRIPTS.parent / 'packaging/updater.pub'), '--output', str(output)], check=True, capture_output=True)
-            config = json.loads(output.read_text())
-            self.assertTrue(config['bundle']['createUpdaterArtifacts'])
-            self.assertTrue(config['plugins']['updater']['requireSignedVersion'])
-            self.assertEqual(config['plugins']['updater']['endpoints'], ['https://github.com/eimg/fairway-xmp/releases/download/beta-feed/latest.json'])
+            root = Path(temporary)
+            scripts = root / 'scripts'
+            scripts.mkdir()
+            for name in ('configure_release.py', 'release_versions.py'):
+                (scripts / name).write_bytes((SCRIPTS / name).read_bytes())
+            output = root / 'overlay.json'
+            for version, feed in [('0.1.0-rc.5', 'beta-feed'), ('0.1.0', 'stable-feed')]:
+                with self.subTest(version=version):
+                    (root / 'package.json').write_text(json.dumps({'version': version}))
+                    subprocess.run([sys.executable, str(scripts / 'configure_release.py'), '--public-key', str(SCRIPTS.parent / 'packaging/updater.pub'), '--output', str(output)], check=True, capture_output=True)
+                    config = json.loads(output.read_text())
+                    self.assertTrue(config['bundle']['createUpdaterArtifacts'])
+                    self.assertTrue(config['plugins']['updater']['requireSignedVersion'])
+                    self.assertEqual(config['plugins']['updater']['endpoints'], [f'https://github.com/eimg/fairway-xmp/releases/download/{feed}/latest.json'])
             result = subprocess.run([sys.executable, str(SCRIPTS / 'configure_release.py'), '--public-key', str(SCRIPTS.parent / 'packaging/updater.pub'), '--endpoint', 'http://insecure.invalid'], capture_output=True)
             self.assertNotEqual(result.returncode, 0)

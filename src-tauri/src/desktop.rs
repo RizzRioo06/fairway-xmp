@@ -1351,6 +1351,7 @@ pub fn run() {
                 if window.app_handle().try_state::<NativeTray>().is_none() { request_quit(window.app_handle()); return; }
                 if let Err(error) = window.hide() {
                     report_error(window.app_handle(), error.to_string());
+                    #[cfg(target_os = "macos")]
                     return;
                 }
                 // Keep services and the menu bar available without a Dock icon.

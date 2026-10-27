@@ -1,20 +1,27 @@
-# Fairway XMP 0.1.0-rc.5
+# Fairway XMP 0.1.0
 
-RC 5 adds optional Node.js management on macOS and Windows and the native fnm CLI on Linux. It carries forward RC 4’s PHP settings, service versions and PHP client extensions.
+Fairway XMP's first stable release brings the PHP development environment to Windows x64, Apple Silicon Macs and Linux x86_64. It carries forward RC 5's features and bundled runtime versions, with improved macOS background behavior.
 
-Published from [candidate run 40288383232](https://github.com/eimg/fairway-xmp/actions/runs/40288383232), source `d8646771670400591b2a5af743aa4b83d6a491da`, using the tested installers and updater payloads without rebuilding. The preview update feed offers RC 5 to installed macOS and Windows beta and RC clients; Linux updates remain manual.
+- **PHP development tools:** switch between PHP 8.2–8.5, manage Nginx, MySQL and Mailpit, use Composer, and keep persistent PHP settings for each bundled version. Services run locally without Docker or a system PHP/MySQL installation.
+- **Sites and local HTTPS:** register project folders with `.test` addresses, configure front-controller routing, and enable local HTTPS. All sites share the selected PHP version.
+- **Desktop workspace:** manage MySQL and SQLite data, run SQL, create database backups, inspect logs, preview captured email, and work in two embedded terminal tabs. phpMyAdmin and MySQL command-line tools are included on every platform.
+- **Optional Node.js tools:** fnm 1.39.0 is bundled on all platforms. macOS and Windows Settings can install, select and remove Node versions in a Fairway-owned store. Downloads are cancellable, and failed activation restores the previous selection. Existing fnm installations and unrecorded populated stores remain read-only. Node versions and their global npm packages live outside the app and survive Fairway updates.
+- **macOS background behavior:** closing the window hides the Dock icon while services and the menu bar remain available. Choose Show Fairway XMP from the menu bar or launch the app again to restore the window and Dock icon. Minimizing keeps the Dock icon. Quit gracefully stops services and exits.
+- **Linux terminal edition:** use the terminal dashboard or CLI for services, sites, backups, PHP selection and logs. Closing the dashboard leaves services running; explicit shutdown stops them. Linux includes native fnm and uses manual installer updates.
 
-- **Native fnm on every platform:** fnm 1.39.0 is bundled as its own CLI tool. Node is downloaded only when requested; existing Node managers remain available. Installed Node versions and their global npm packages live outside the app and survive Fairway updates. The bundled fnm executable updates with Fairway.
-- **Existing fnm stays in control:** existing fnm installations and populated stores are read-only in Fairway, with storage details and CLI guidance. Fairway avoids shadowing an external fnm; an explicit handover removes prior Fairway activation while preserving the default and installed versions.
-- **Node.js settings on macOS and Windows:** see the detected Node version, manager and executable path in a separate settings card above Command-line tools. Install the latest patch of each major from Node 20 onward, including non-LTS majors, activate installed versions for new terminals, or uninstall versions in a Fairway-owned fnm store. Install preserves an existing Node selection; when none is detected, Install & use also activates the new version. No automatic project switching is added.
-- **Cancellable Node downloads and safer selection:** installations show progress with Cancel download, including after returning to Settings. Failed activation restores the previous fnm default; a completed download stays available to retry setup.
-- **System tools in embedded terminals:** macOS terminals import exported settings from the user’s interactive login Zsh environment, including nvm and Homebrew paths. Windows refreshes system and user environment values before opening new terminals. Fairway’s PHP and Composer remain available alongside existing tools.
-- **Reliable Windows Node activation:** Command Prompt and PowerShell select the managed Node version with Unicode characters, spaces and ampersands in storage paths.
-- **Mail preview images:** supported remote images load automatically, with Retry image placeholders for failures. Downloaded images remain available when switching between HTML and Text views.
-- **Clearer desktop update progress:** release notes show a four-line preview with Show more / Show less for longer notes. Download and installation progress stays beside Install update below the notes.
+Bundled tools: PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12 (default), Composer 2.10.3, Nginx 1.30.6, MySQL 9.7.4 LTS, phpMyAdmin 5.2.3, Mailpit 1.32.0 and fnm 1.39.0. PHP includes MySQL, SQLite and PostgreSQL clients, sockets, SOAP and LDAP; macOS/Linux also include PCNTL and POSIX worker support.
 
-Node installation is optional for Fairway’s PHP services, desktop data browser and ordinary CLI. Linux users initialize fnm directly in their shell; Fairway does not add automatic Node activation there. On desktops, choosing Use affects new terminals; existing terminals and development servers retain their current selection until restarted. Uninstalling a Node version also removes its global npm packages.
+## Upgrading
 
-See [Node.js and fnm](https://github.com/eimg/fairway-xmp/blob/main/docs/node-tools.md) for setup, storage and behavior. Linux includes phpMyAdmin and MySQL command-line tools; users can install additional database browsers independently.
+After publication and update-feed promotion, existing macOS and Windows beta/RC clients can update to 0.1.0 through Settings. Stable installations check the stable feed for future releases. Linux users rerun the new installer. Projects, databases, backups, settings and installed Node versions are preserved by normal updates.
 
-Windows installers currently have no Authenticode signature; desktop updates use separate cryptographic signatures. The macOS app and installer are Developer ID signed and notarized by Apple. Automated installer lifecycle checks passed on all three platforms, and desktop updater lifecycle checks passed on macOS and Windows.
+Node installation is optional. Choosing a Node version affects new terminals; existing terminals and development servers retain their selection until restarted. A populated fnm store from an older development build without a Fairway ownership record remains read-only; the stable release does not automatically adopt it. See [Node.js and fnm](https://github.com/eimg/fairway-xmp/blob/main/docs/node-tools.md) for storage and activation details.
+
+## Requirements and limitations
+
+- Windows 10 22H2 or Windows 11, x64; macOS 15 or later on Apple Silicon; Linux x86_64 with glibc 2.35 or newer. Intel Macs, ARM Linux and Alpine/musl are not supported.
+- The release pipeline signs and notarizes the macOS app and installer. Windows installers do not have Authenticode signatures and may show an unknown-publisher warning; desktop updater payloads use separate cryptographic signatures.
+- Windows MySQL requires ANSI-compatible filesystem paths or existing short-name aliases. Non-UTF-8 system code pages restrict identifiers in MySQL CLI backup/export; failed protective backups block the related update or destructive action.
+- PostgreSQL support is through PHP client extensions connecting to a server you provide. Fairway does not manage a PostgreSQL server, and the desktop Data browser supports MySQL and SQLite.
+
+See [current limitations](https://github.com/eimg/fairway-xmp/blob/main/docs/maintenance.md#current-limitations) and the [README](https://github.com/eimg/fairway-xmp#readme) for setup and platform guidance.
