@@ -1,4 +1,4 @@
-//! Stage 1 IPC only. Node registration does not require a usable PHP manager.
+//! Node registry and runtime-preparation IPC, independent of the PHP manager.
 use crate::node_projects::{self, Error, ErrorCode, NodeProjects};
 use std::sync::Arc;
 use tauri::{Emitter, State};
@@ -72,4 +72,25 @@ pub(super) async fn node_project_remove(
         .map_err(task_error)??;
     let _ = app.emit("node-projects-changed", &changed);
     Ok(changed)
+}
+
+#[tauri::command]
+pub(super) async fn node_project_prepare_runtime(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<NodeProjects>>,
+    request: node_projects::PrepareRuntimeRequest,
+) -> node_projects::Result<node_projects::RuntimePreparation> {
+    let _operation =
+        super::begin_operation(&app, "Preparing Node runtime…").map_err(|message| Error {
+            code: ErrorCode::Unavailable,
+            message,
+        })?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state
+            .prepare_runtime(request)
+            .map(|prepared| prepared.summary().clone())
+    })
+    .await
+    .map_err(task_error)?
 }

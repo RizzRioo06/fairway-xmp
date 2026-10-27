@@ -2,7 +2,7 @@ import { invoke, listen } from '../bridge';
 import type {
   InspectNodeProjectRequest, NodeProjectInspection, NodeProjectsChanged,
   NodeProjectsSnapshot, RemoveNodeProjectRequest, SaveNodeProjectRequest,
-  SaveNodeProjectResponse,
+  SaveNodeProjectResponse, PrepareNodeRuntimeRequest, NodeRuntimePreparation,
 } from './types';
 
 export function nodeProjectsSnapshot(): Promise<NodeProjectsSnapshot> {
@@ -28,4 +28,8 @@ export function onNodeProjectsChanged(callback: (event: NodeProjectsChanged) => 
       callback({ revision: payload.revision });
     }
   });
+}
+
+export function prepareNodeRuntime(request: PrepareNodeRuntimeRequest): Promise<NodeRuntimePreparation> {
+  return invoke('node_project_prepare_runtime', { request });
 }

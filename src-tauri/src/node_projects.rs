@@ -4,7 +4,11 @@ use crate::config::Layout;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, sync::Mutex};
 
+mod environment;
+mod isolation;
 mod manifest;
+pub use environment::ChildEnvironment;
+pub use isolation::{NpmRuntime, PreparedRuntime, RuntimePreparation};
 mod runtime;
 mod store;
 
@@ -18,6 +22,11 @@ pub enum ErrorCode {
     InvalidProject,
     InvalidManifest,
     RuntimeUnavailable,
+    RuntimeChanged,
+    NpmUnavailable,
+    EnvironmentUnavailable,
+    RequirementConflict,
+    UnsupportedPackageManager,
     RegistryUnavailable,
     Conflict,
     NotFound,
@@ -169,6 +178,14 @@ pub struct SaveResponse {
 #[serde(rename_all = "camelCase")]
 pub struct RegistryChanged {
     pub revision: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrepareRuntimeRequest {
+    pub id: String,
+    pub expected_revision: String,
+    pub manifest_revision: String,
 }
 
 type Discover = fn(&Layout) -> runtime::Inventory;
@@ -324,6 +341,54 @@ impl NodeProjects {
         store::check_revision(&request.manifest_revision, &latest.manifest_revision)?;
         let revision = store::save(&layout.data, &request.expected_revision, &document)?;
         Ok(SaveResponse { revision, project })
+    }
+
+    /// Validate a saved selection and prepare an in-memory child environment.
+    /// This does not execute an imported package script or persist any settings.
+    pub fn prepare_runtime(&self, request: PrepareRuntimeRequest) -> Result<PreparedRuntime> {
+        let layout = self.layout()?;
+        let project = {
+            let _guard = self.mutation.lock().map_err(|_| {
+                Error::new(ErrorCode::Unavailable, "The Node registry is unavailable.")
+            })?;
+            let (document, current) = store::load(&layout.data)?;
+            store::check_revision(&request.expected_revision, &current)?;
+            document
+                .projects
+                .into_iter()
+                .find(|project| project.id == request.id)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::NotFound,
+                        "This Node project is no longer registered.",
+                    )
+                })?
+        };
+        let inspect = || -> Result<Inspection> {
+            let inspection = manifest::inspect(&project.root)?;
+            store::check_revision(&request.manifest_revision, &inspection.manifest_revision)?;
+            if !inspection.scripts.contains_key(&project.script) {
+                return Err(Error::new(
+                    ErrorCode::InvalidProject,
+                    "The selected script is missing. Inspect the project again.",
+                ));
+            }
+            Ok(inspection)
+        };
+        let inspection = inspect()?;
+        let prepared = isolation::prepare(
+            layout,
+            &project,
+            &inspection,
+            request.expected_revision.clone(),
+        )?;
+        inspect()?;
+        let _guard = self
+            .mutation
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::Unavailable, "The Node registry is unavailable."))?;
+        store::check_revision(&request.expected_revision, &store::load(&layout.data)?.1)?;
+        Ok(prepared)
     }
 
     pub fn remove(&self, request: RemoveRequest) -> Result<RegistryChanged> {

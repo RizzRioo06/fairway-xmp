@@ -1345,6 +1345,7 @@ pub fn run() {
             node_status,
             node_project_commands::node_projects_snapshot,
             node_project_commands::node_project_inspect,
+            node_project_commands::node_project_prepare_runtime,
             node_project_commands::node_project_save,
             node_project_commands::node_project_remove,
             node_versions,

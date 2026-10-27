@@ -15,3 +15,12 @@ test('unrelated failures are not mistaken for typed Node registry errors', () =>
     assert.equal(isNodeProjectsError(value), false);
   }
 });
+
+
+test('runtime preparation failures preserve distinct remediation codes', () => {
+  for (const code of ['runtimeChanged', 'npmUnavailable', 'environmentUnavailable', 'requirementConflict', 'unsupportedPackageManager']) {
+    const failure: unknown = JSON.parse(JSON.stringify({ code, message: 'Refresh or repair this selection.' }));
+    assert.ok(isNodeProjectsError(failure));
+    assert.equal(failure.code, code);
+  }
+});

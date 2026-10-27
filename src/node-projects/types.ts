@@ -1,4 +1,4 @@
-// Stage 1 wire contracts mirror src-tauri/src/node_projects.rs. Runtime choices
+// Node Projects wire contracts mirror src-tauri/src/node_projects.rs. Runtime choices
 // are issued by native discovery; save requests never supply an executable.
 export type NodeProjectRuntime = { nodePath: string; version: string };
 export type NodeRuntimeChoice = NodeProjectRuntime & { id: string; source: string };
@@ -19,6 +19,8 @@ export type NodeProjectView = {
 };
 export type NodeProjectsErrorCode =
   | 'unsupportedPlatform' | 'unavailable' | 'invalidProject' | 'invalidManifest'
+  | 'runtimeChanged' | 'npmUnavailable' | 'environmentUnavailable'
+  | 'requirementConflict' | 'unsupportedPackageManager'
   | 'runtimeUnavailable' | 'registryUnavailable' | 'conflict' | 'notFound' | 'saveFailed';
 export type NodeProjectsError = { code: NodeProjectsErrorCode; message: string };
 export type NodeProjectsSnapshot = {
@@ -58,6 +60,7 @@ export type NodeProjectsChanged = { revision: string };
 
 const errorCodes = new Set<NodeProjectsErrorCode>([
   'unsupportedPlatform', 'unavailable', 'invalidProject', 'invalidManifest',
+  'runtimeChanged', 'npmUnavailable', 'environmentUnavailable', 'requirementConflict', 'unsupportedPackageManager',
   'runtimeUnavailable', 'registryUnavailable', 'conflict', 'notFound', 'saveFailed',
 ]);
 
@@ -68,3 +71,18 @@ export function isNodeProjectsError(value: unknown): value is NodeProjectsError 
   return typeof error.message === 'string' && typeof error.code === 'string'
     && errorCodes.has(error.code as NodeProjectsErrorCode);
 }
+
+export type PrepareNodeRuntimeRequest = {
+  id: string;
+  expectedRevision: string;
+  manifestRevision: string;
+};
+export type NodeRuntimePreparation = {
+  projectId: string;
+  registryRevision: string;
+  manifestRevision: string;
+  runtime: NodeProjectRuntime;
+  npm: { cliPath: string; version: string };
+  // Validation receipt, never an execution token or serialized environment.
+  runtimeRevision: string;
+};
