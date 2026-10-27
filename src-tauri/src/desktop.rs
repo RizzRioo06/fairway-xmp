@@ -17,6 +17,8 @@ use std::{
 use tauri::{Emitter, Manager as _, State};
 use tauri_plugin_updater::UpdaterExt;
 
+mod node_project_commands;
+
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
 
@@ -1273,6 +1275,9 @@ pub fn run() {
                 app.path().resource_dir()?.join("runtime")
             };
             let startup = crate::startup::Startup::new(runtime);
+            app.manage(Arc::new(crate::node_projects::NodeProjects::new(
+                startup.layout.clone(),
+            )));
             if let Some(layout) = &startup.layout { app.manage(crate::logs::LogDirectory::new(layout.data.join("logs"))); }
             app.manage(Arc::new(Mutex::new(startup)));
             app.manage(DesktopControl::default());
@@ -1338,6 +1343,10 @@ pub fn run() {
             read_logs,
             cli_integration,
             node_status,
+            node_project_commands::node_projects_snapshot,
+            node_project_commands::node_project_inspect,
+            node_project_commands::node_project_save,
+            node_project_commands::node_project_remove,
             node_versions,
             node_action,
             cancel_node_installation,

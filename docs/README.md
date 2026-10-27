@@ -10,6 +10,7 @@ Start with the [user guide](../README.md) or [development setup](../CONTRIBUTING
 | [CI performance](ci-build-performance.md) | Cache reuse, build retries and artifact cleanup |
 | [Desktop data browser](data-browser.md) | MySQL/SQLite operations, limits and desktop CLI commands |
 | [Node tools](node-tools.md) | Native fnm, existing Node detection, activation, storage and removal |
+| [Node Projects — Stage 1](node-projects.md) | macOS project inspection, separate registry and typed IPC; execution is not implemented yet |
 | [PostgreSQL clients](postgres-client-support.md) | Connecting PHP applications to a user-supplied server |
 | [PHP settings](php-settings.md) | Per-version controls, persistent overrides and reset |
 | [PHP clients and workers](php-client-support.md) | Sockets, SOAP, LDAP, Redis/Predis and Unix worker support |
