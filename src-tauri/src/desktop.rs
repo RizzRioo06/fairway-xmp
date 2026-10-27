@@ -95,6 +95,8 @@ pub(crate) fn show_window(app: &tauri::AppHandle) {
             return;
         }
         if let Some(window) = handle.get_webview_window("main") {
+            #[cfg(target_os = "macos")]
+            let _ = handle.set_activation_policy(tauri::ActivationPolicy::Regular);
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_focus();
@@ -1348,6 +1350,13 @@ pub fn run() {
                 api.prevent_close();
                 if window.app_handle().try_state::<NativeTray>().is_none() { request_quit(window.app_handle()); return; }
                 if let Err(error) = window.hide() {
+                    report_error(window.app_handle(), error.to_string());
+                    return;
+                }
+                // Keep services and the menu bar available without a Dock icon.
+                // Restore the normal policy in the shared window-show path.
+                #[cfg(target_os = "macos")]
+                if let Err(error) = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory) {
                     report_error(window.app_handle(), error.to_string());
                 }
             }
