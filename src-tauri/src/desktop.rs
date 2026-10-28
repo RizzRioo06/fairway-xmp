@@ -17,6 +17,8 @@ use std::{
 use tauri::{Emitter, Manager as _, State};
 use tauri_plugin_updater::UpdaterExt;
 
+mod node_project_commands;
+
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
 
@@ -148,19 +150,28 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
     }
     let _ = app.emit("fairway-shutdown", ());
     let state = app.state::<Shared>().inner().clone();
+    let nodes = app
+        .state::<Arc<crate::node_projects::NodeProjects>>()
+        .inner()
+        .clone();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let waiting = lifecycle.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
             waiting.wait_for_operation();
-            let mut manager = state.lock().map_err(|_| {
-                "The service manager is unavailable. Restart Fairway XMP.".to_string()
-            })?;
-            let manager = manager.manager()?;
-            manager.stop_all()?;
-            // Terminal processes are owned separately from managed services.
-            // A hidden window keeps them alive; explicit Quit closes them.
-            remove_app_marker(manager)
+            crate::lifecycle::stop_components(
+                || nodes.stop_all_runs().map_err(|error| error.message),
+                || {
+                    let mut startup = state.lock().map_err(|_| {
+                        "The service manager is unavailable. Restart Fairway XMP.".to_string()
+                    })?;
+                    startup.manager()?.stop_all()
+                },
+            )?;
+            let mut startup = state
+                .lock()
+                .map_err(|_| "The service manager is unavailable.".to_string())?;
+            remove_app_marker(startup.manager()?)
         })
         .await
         .map_err(|e| e.to_string())
@@ -175,7 +186,7 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
                 show_window(&app);
                 let handle = app.clone();
-                app.dialog().message(format!("{error}\n\nKeep Fairway XMP open to retry, or quit and leave any remaining services running. Your project and database files will be kept. Embedded terminal sessions will close."))
+                app.dialog().message(format!("{error}\n\nKeep Fairway XMP open to retry, or quit and leave any remaining PHP services running. Managed Node projects and embedded terminal sessions will close. Your project and database files will be kept."))
                     .title("Services could not be stopped")
                     .buttons(MessageDialogButtons::OkCancelCustom("Quit anyway".into(), "Keep open".into()))
                     .show(move |leave| {
@@ -198,6 +209,7 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
                                     report_error(&handle, error);
                                     return;
                                 }
+                                handle.state::<Arc<crate::node_projects::NodeProjects>>().disconnect_runs();
                                 handle.state::<crate::terminal::Terminals>().close_all();
                                 lifecycle.allow_exit();
                                 handle.exit(0);
@@ -910,6 +922,23 @@ async fn node_action(
     }
     let layout = access(state.inner().clone(), |m| Ok(m.layout.clone())).await?;
     #[cfg(any(target_os = "macos", windows))]
+    if ["install", "install-use", "uninstall"].contains(&action.as_str())
+        && crate::node_tools::valid_version(&version)
+    {
+        let node = crate::node_tools::directory(&layout)
+            .join("node-versions")
+            .join(format!("v{}", version.trim_start_matches('v')))
+            .join("installation")
+            .join(if cfg!(windows) {
+                "node.exe"
+            } else {
+                "bin/node"
+            });
+        app.state::<Arc<crate::node_projects::NodeProjects>>()
+            .ensure_runtime_unused(&node)
+            .map_err(|error| error.message)?;
+    }
+    #[cfg(any(target_os = "macos", windows))]
     if action == "install" || action == "install-use" {
         let id = id.ok_or("A Node installation request ID is required.")?;
         let jobs = app.state::<DesktopControl>().node_installations.clone();
@@ -1059,6 +1088,19 @@ async fn install_update(
         serde_json::json!({"phase": "preparing"}),
     );
     access(state.inner().clone(), crate::updates::prepare).await?;
+    let nodes = app
+        .state::<Arc<crate::node_projects::NodeProjects>>()
+        .inner()
+        .clone();
+    tauri::async_runtime::spawn_blocking(move || nodes.stop_all_runs())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| {
+            format!(
+                "Node cleanup failed. The update was not installed: {}",
+                e.message
+            )
+        })?;
     app.state::<crate::terminal::Terminals>().close_all();
     // Windows exits inside install(); post-install cleanup is unreachable.
     access(state.inner().clone(), |m| remove_app_marker(m)).await?;
@@ -1223,6 +1265,15 @@ pub fn maintenance(args: &[String]) -> Result<bool> {
 }
 
 pub fn run() {
+    // Dispatch before Tauri single-instance/plugin initialization.
+    match crate::node_projects::runner_entrypoint() {
+        Ok(true) => return,
+        Err(error) => {
+            eprintln!("{}", error.message);
+            std::process::exit(1);
+        }
+        Ok(false) => (),
+    }
     let args = std::env::args().collect::<Vec<_>>();
     #[cfg(windows)]
     if args
@@ -1273,6 +1324,10 @@ pub fn run() {
                 app.path().resource_dir()?.join("runtime")
             };
             let startup = crate::startup::Startup::new(runtime);
+            let nodes = Arc::new(crate::node_projects::NodeProjects::new(startup.layout.clone()));
+            let event_app = app.handle().clone();
+            nodes.observe_runs(move |status| { let _ = event_app.emit("node-project-run-status", status); });
+            app.manage(nodes);
             if let Some(layout) = &startup.layout { app.manage(crate::logs::LogDirectory::new(layout.data.join("logs"))); }
             app.manage(Arc::new(Mutex::new(startup)));
             app.manage(DesktopControl::default());
@@ -1338,6 +1393,16 @@ pub fn run() {
             read_logs,
             cli_integration,
             node_status,
+            node_project_commands::node_projects_snapshot,
+            node_project_commands::node_project_inspect,
+            node_project_commands::node_project_prepare_runtime,
+            node_project_commands::node_project_start,
+            node_project_commands::node_project_stop,
+            node_project_commands::node_project_restart,
+            node_project_commands::node_project_runs,
+            node_project_commands::node_project_logs,
+            node_project_commands::node_project_save,
+            node_project_commands::node_project_remove,
             node_versions,
             node_action,
             cancel_node_installation,
@@ -1374,6 +1439,8 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => show_window(app),
         tauri::RunEvent::Exit => {
+            app.state::<Arc<crate::node_projects::NodeProjects>>()
+                .disconnect_runs();
             app.state::<crate::terminal::Terminals>().close_all();
             app.state::<DesktopControl>()
                 .monitor_stopped

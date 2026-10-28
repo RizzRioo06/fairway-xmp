@@ -2,13 +2,13 @@ import { useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useModalFocus } from '../modal-focus';
 
-export default function Dialog({ title, busy, onClose, onSubmit, children, submit = 'Save', cancel = 'Cancel', danger = false, valid = true, showSubmit = true, onCancelBusy }: {
+export default function Dialog({ title, busy, onClose, onSubmit, children, submit = 'Save', cancel = 'Cancel', danger = false, valid = true, showSubmit = true, onCancelBusy, returnFocus }: {
   title: string; busy: boolean; onClose: () => void; onSubmit: () => void;
-  children: ReactNode; submit?: string; cancel?: string; danger?: boolean; valid?: boolean; showSubmit?: boolean; onCancelBusy?: () => void;
+  children: ReactNode; submit?: string; cancel?: string; danger?: boolean; valid?: boolean; showSubmit?: boolean; onCancelBusy?: () => void; returnFocus?: HTMLElement | null;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const label = useId();
-  useModalFocus(container, true, onClose, { canClose: !busy });
+  useModalFocus(container, true, onClose, { canClose: !busy, returnFocus });
   return <div className="modal-backdrop"><div ref={container} className="modal db-dialog" role="dialog" aria-modal="true" aria-labelledby={label}>
     <form className="modal-form" onSubmit={event => { event.preventDefault(); if (!busy && valid) onSubmit(); }}>
       <div className="card-title"><h2 id={label}>{title}</h2></div>

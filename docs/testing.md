@@ -84,3 +84,20 @@ Use these when the changed behavior warrants them, without treating unperformed 
 - Check a subsequent-version signed update and restart when investigating updater behavior. The automated same-version reinstall drill has a narrower scope; neither result implies the other was performed.
 
 Before moving/deleting a standalone Mac helper test app, quit it and run its own executable with `--remove-native-hosts-helper`. This unregisters that helper without deleting projects or rewriting sites. Avoid running multiple app copies against the same data/helper registration while diagnosing approval state.
+
+## Node Projects workspace
+
+Stage 4 keeps production Rust contracts unchanged. Pure TypeScript state and
+retention tests accompany `tests/ui/node-projects.spec.ts` component flows in
+Chromium/WebKit at normal and minimum sizes. Simulation fixtures never start real
+processes or touch project files.
+
+For production frontend/native-controller coverage, build `terminal_bridge` with
+`--no-default-features --features terminal`. Run `node-projects-native.spec.ts`
+with `FAIRWAY_NATIVE_ONLY=1`, `FAIRWAY_TEST_RUNTIME` pointing to packaged Fairway
+resources, and `FAIRWAY_TEST_NODE_RUNTIMES` containing two provisioned Node/npm
+executables separated by the platform path-list separator. The example creates
+its own folders and fnm inventory, dispatches the same runner entrypoint, and
+stops owned runs before disposing the fixture. Its test picker returns those
+folders. It does not automate Finder or execute personal project scripts.
+Keep device acceptance separate using the [manual guide](node-projects-manual-testing.md).
