@@ -1,181 +1,213 @@
-# Node project creation — Stage 1: catalog and dry-run plans
+# Node project creation — catalog, local generation and recovery
 
-This is a backend foundation, separate from importing/running existing Node
-projects. It exposes no Create, Install, Cancel Setup or Start Setup command and
-adds no graphical wizard. It neither creates project directories nor installs
-dependencies, registers a project, or executes a project/template script.
+Stages 1–2 provide a backend service separate from importing/running existing
+Node projects. Planning is read-only. Explicitly confirmed Generate writes local
+files, publishes a new folder and registers it. There is no dependency installer,
+framework initializer, registry network access, graphical creation wizard or
+automatic project execution. Existing PHP and Node controls keep their behavior.
 
-## Catalog
+## Versioned local templates
 
-`src-tauri/src/node_project_creation/catalog.json` is compiled into the app. Its
-schema version is 1; each design has an explicit revision. The catalog revision
-returned to callers is SHA-256 of the complete embedded catalog bytes: any change
-invalidates older requests. There is no runtime catalog download or initializer.
+The compiled catalog is schema 1, revision 2. Every template is revision 2,
+`qualification: localGeneration`, `lockfileStatus: notPrepared`. Its content
+revision hashes the catalog, renderer, template sources and MIT license. Plans
+also contain the exact byte size and SHA-256 of each materialized file, so local
+asset changes require a fresh review plan.
 
-| ID | Design | Intended workflow |
+Common generated files:
+
+- `package.json`: private ESM package, catalog scripts, exact direct dependencies,
+  Node/npm engine ranges and exact paired `packageManager: npm@VERSION`.
+- `.node-version`: selected exact Node version; no global defaults change.
+- `.gitignore`: dependencies, builds, logs and real environment files excluded.
+- `README.md`: setup status, workflow, local address, environment and provenance.
+- `LICENSE`: unchanged Fairway MIT license and copyright notice.
+- `.env.example`: nonsecret local defaults; real `.env` is never created.
+- `.fairway-template.json`: random creation ID, catalog/template/asset revisions,
+  design provenance, dependency/license references and not-installed status.
+
+| Template ID | Additional files | Scripts |
 | --- | --- | --- |
-| `node-js` | Plain JavaScript Node HTTP starter | dev/start/test |
-| `node-ts` | Plain TypeScript Node starter | dev/build/start |
-| `hono-ts` | Hono TypeScript API with Node adapter | dev/build/start |
-| `express-js` | Express JavaScript API | dev/start/test |
-| `react-vite-js` | React + Vite JavaScript | dev/build/preview |
-| `react-vite-ts` | React + Vite TypeScript | dev/build/preview |
+| `node-js` | `src/index.js`, `src/server.js`, `test/server.test.js` | dev/start/test |
+| `node-ts` | `src/index.ts`, `tsconfig.json` | dev/build/start |
+| `hono-ts` | `src/index.ts`, `tsconfig.json` | dev/build/start |
+| `express-js` | `src/index.js`, `src/app.js`, `test/api.test.js` | dev/start/test |
+| `react-vite-js` | `index.html`, `src/main.jsx`, `src/App.jsx`, `src/index.css`, `vite.config.js` | dev/build/preview |
+| `react-vite-ts` | `index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `vite.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json` | dev/build/preview |
 
-Entries contain intended relative files, script descriptions, exact direct
-package versions, dependency Node requirements, development/runtime roles,
-package licenses, official version-specific registry metadata URLs, and design
-provenance. Dependencies are proposed pins, not installed application dependencies.
+API starters use loopback port 3000, a health endpoint and signal-aware shutdown.
+They load `.env` only when explicitly started later. Vite defaults to loopback
+5173 with strict port behavior; its example warns that `VITE_` values are public.
+Generation never starts any of these listeners or runs their tests.
 
-These are Fairway-authored **designs**, informed by official Node, TypeScript,
-Hono, Express and Vite references. No upstream template source has been copied;
-`upstreamRevision: null` explicitly avoids claiming a pinned upstream snapshot.
-Every entry is `qualification: planningOnly`, `lockfileStatus: notPrepared`.
-Generated source assets, complete transitive lockfiles, license redistribution
-and install/build qualification must be reviewed in later stages. Stage 1 does
-not claim that these proposed dependency combinations have been installed/tested.
+The sources in `src-tauri/templates/node-projects/` are Fairway-authored under the
+included MIT license, informed by official Node, TypeScript, Hono, Express and
+Vite references. No upstream template archive or scaffolder is copied/executed;
+`upstreamRevision: null` states that honestly. Framework packages retain their
+own licenses when installed. Catalog dependencies remain metadata, not new app
+build dependencies.
 
-The initial planning policy accepts Node `>=22.12.0 <23 || >=24.0.0 <25` and paired
-npm `>=10.0.0 <12`. This deliberately bounds the initial support matrix instead
-of promising every Node version that an individual dependency might tolerate.
-Node 22 type definitions are proposed for TypeScript starters. Future version
-support is a reviewed catalog change, not an automatic selection/upgrade.
+**No template contains a package lockfile or node_modules.** No lockfile is
+fabricated. Installation, full transitive lockfile provenance, dependency/build
+compatibility and any install-script policy require Stage 3 review. The displayed
+prospective npm `ci` policy is disabled (`installationAvailable: false`) and is
+not runnable until an appropriate lockfile/install plan exists. Node-only JS has
+no third-party dependencies, but no npm lockfile is asserted for it either.
 
-## Runtime reuse without shell side effects
+## Runtime and read-only planning
 
-The service uses the existing fnm/nvm/Homebrew inventory scanner, with a new
-read-only entry point that uses process environment and standard installation
-folders. It never loads a login shell/profile, calls fnm, changes a default,
-claims a runtime store, or edits activation markers. Custom stores exported only
-by a login profile may therefore not appear. `discoveryNote` explains this limit;
-existing Node Settings/import discovery keeps its prior behavior.
+Supported selections are Node `>=22.12.0 <23 || >=24.0.0 <25`, paired npm
+`>=10.0.0 <12`. This bounds the initial support matrix. Discovery reuses the
+existing fnm/nvm/Homebrew inventory scanner without loading login-shell startup
+files or invoking fnm. Login-shell-only custom stores may therefore be absent;
+`discoveryNote` reports this limit. Existing import/Settings discovery is unchanged.
 
-Inventory probes clear inherited environment values. Planning accepts only a
-freshly discovered runtime ID; callers cannot supply executable paths. It then
-reuses the existing isolated Node/npm validator, exact version probes,
-fingerprints, npm pairing, semver constraints and ancestor-shim checks. A narrow
-internal adapter validates catalog requirements using the existing destination
-parent as a working directory; no synthetic manifest is written. Tool exclusion
-and shim checks use the intended child destination, so runtimes elsewhere under
-the same parent are not incorrectly treated as project-owned tools.
+Only discovered runtime IDs are accepted. The existing isolated validator checks
+absolute Node/npm paths, exact versions, npm pairing, semver requirements,
+fingerprints and ancestor shims. Fixed metadata probes and `npm --version` run in
+the npm installation directory with a cleaned environment. No project script,
+initializer or install command is executed. No profiles, activation markers,
+defaults, user/global npm config or global Node settings are changed.
 
-Only fixed metadata programs and paired `npm --version` are executed, in the
-npm installation directory and cleaned environment. No `npm create`, `npx`,
-network request, install command or imported script is used by the service.
-Metadata probes have the existing bounded time/output limits. This assumes
-installed Node/npm tools are trusted; tool-selection isolation is not an OS
-sandbox for a malicious executable. Fingerprints are validation receipts, not
-permission to use those files indefinitely.
+Plans are native snapshots retained in memory for ten minutes (monotonic deadline),
+at most 64 live plans. Their random IDs/digests bind the reviewed files, destination,
+parent identity, template/dependency metadata and validated tools. Identical
+request IDs return the same unconsumed plan; changed inputs are rejected. Client
+edits cannot replace the native plan. Plans expire on restart and never reserve a
+folder. Generate consumes a plan once; recovery uses its durable journal instead.
+A digest is a consistency check, not a signature or permission to execute code.
 
-## Destination validation
+Names are 1–64 lowercase ASCII letters/digits/hyphens, starting with a letter and
+ending with a letter/digit, excluding reserved device names. Unicode/spaces are
+supported in parent paths. The parent must exist, canonicalize safely, and be
+writable/searchable. Traversal, control characters, non-UTF-8 paths and PATH
+separators are rejected. Every existing destination is refused, including an
+empty folder, regular file, live symlink or broken symlink.
 
-The request supplies an existing absolute parent directory and a project slug.
-Slugs are 1–64 lowercase ASCII letters/digits/hyphens, start with a letter, end
-with a letter/digit, and exclude reserved device names. Unicode/spaces are
-supported in parent paths; they are intentionally not package slugs.
+## Filesystem ownership and publication
 
-The parent is canonicalized and must be a readable, writable/searchable folder.
-Traversal, control characters, non-UTF-8 paths and PATH delimiters are rejected.
-Its canonical path and Unix device/inode identity are retained internally.
-`symlink_metadata` rejects every existing destination, including empty folders,
-regular files, live symlinks and broken symlinks. Parent aliases resolve to their
-canonical folder; changing an alias/parent invalidates the stored plan.
+macOS operations walk canonical paths with directory descriptors and `openat`
+using `O_DIRECTORY`, `O_NOFOLLOW` and `O_CLOEXEC`. A descriptor holds a specific
+folder; replacing its pathname cannot redirect an open handle to another folder.
+Each nested parent is also checked against its journaled device/inode before
+writing. This specifically prevents a replacement `src` from receiving files.
 
-Validation never tests permissions by writing a file. The destination is checked
-again after tool probes and on later plan validation. **A plan does not reserve
-or lock the destination.** Stage 2 must add anchored filesystem operations and
-exclusive/no-replacement publication rather than relying on these checks alone.
+Generate revalidates native plan authority, destination and tool fingerprints
+before mutation. It claims a private durable journal, then exclusively creates
+`.fairway-node-<random-plan-id>` as a sibling of the destination on the same
+filesystem. Directories use 0700; regular files use exclusive/no-follow creation
+and 0600. Entries must be bounded relative paths, never links or traversal.
+Limits are 128 files, 256 KiB/file and 2 MiB total reviewed content.
 
-## IPC and TypeScript contracts
+The provenance marker is written and receipted first. The journal retains its
+random creation ID, file hashes/sizes, modes/modification times, and inode receipts
+for the root and nested folders. Inodes alone are insufficient evidence after a
+crash because numbers can eventually be reused. The full tree must match the
+reviewed files before publication: no extra/missing/changed/link/special entries.
 
-Contracts are in `src/node-project-creation/types.ts` and `api.ts`.
-Tauri handlers live in `desktop/node_project_creation_commands.rs`; they dispatch
-blocking probes off the UI thread. The service has independent native state and
-does not acquire the PHP manager or Node registry locks. Construction is lazy:
-adding its state performs no discovery/probes during PHP startup.
+Files and directory entries are flushed. Publication uses macOS
+`renameatx_np(..., RENAME_EXCL)` relative to the anchored parent, followed by a
+parent sync. This atomically refuses an existing destination, including one that
+appeared after preflight. There is no overwrite fallback if the filesystem does
+not support this operation. Root/parent identities are checked again afterward;
+unsafe changes block registration and preserve data.
 
-| Command | Request | Response |
+These checks protect normal concurrent path replacement and accidental changes.
+They are not a sandbox against an actively malicious process with the same account
+permissions or administrator access. No permission elevation, recursive ownership
+change or system configuration modification is used.
+
+## Durable journals and explicit recovery
+
+Journals live in `<Layout.data>/node-project-creation/<job-id>.json`, separately
+from `node-projects.json`. The directory is private; regular bounded journals are
+published with unique staging files, flush, atomic replacement and directory sync.
+A nonblocking private file lock serializes generation/recovery across processes;
+normal operations also have an independent service lock. History is bounded to
+256 journals; it is never silently pruned to make room.
+
+Phases: prepared, staging, ready, publishing, needsRegistration, completed,
+cancelled and preserved. Important transitions and each created directory/file
+are journaled. The persisted reviewed manifest is self-contained for recovery;
+it is not replaced by a later template revision. Malformed/future/unsafe journals
+are reported and preserved, never interpreted as an empty history.
+
+Listing jobs is read-only. After restart, nonterminal inactive jobs report
+`recoveryRequired`; nothing resumes, installs, publishes or starts automatically.
+Explicit recovery requires the job ID, current journal revision and confirmation.
+Stale revisions and terminal/duplicate mutations are rejected.
+
+- **Discard Staging:** only for an unpublished, positively identified stage whose
+  complete current contents match recorded ownership receipts. Missing ownership
+  markers, unknown/modified/unjournaled files, hard links, symlinks, replaced folders
+  or uncertain partial writes are preserved. No recursive wildcard removal is used.
+  Cancellation before the publication commit uses the same checks.
+- **Retry Registration:** only for a published folder matching the original stage
+  identity and the entire reviewed manifest. Incomplete trees cannot be adopted.
+  Selected tools are revalidated. The existing registry serializer/atomic writer
+  is reused through an internal handoff without shell discovery. Expected registry
+  revisions protect unrelated edits. A deterministic project ID makes a retry
+  idempotent if the registry save succeeded just before a crash.
+
+Once publication begins, cancellation is too late to promise rollback. A published
+folder is never deleted by this service, even after registry corruption/conflict,
+failed save or requested discard. It remains available for registration retry or
+manual inspection/import. User edits block automatic receipt-based recovery but
+are kept. Recovery of unfinished staging is discard-and-replan, not automatic
+resumption/publication. A failure during cleanup can leave an uncertain remainder
+for manual review; safety takes precedence over removing every temporary file.
+
+Generation/cancellation metadata checks are bounded, but filesystem calls still
+rely on OS/filesystem behavior. Actual disk-full/power-loss/network-volume faults
+and signed-update/device behavior are not claimed by simulated IO/crash fixtures.
+
+## IPC and lifecycle
+
+TypeScript contracts/wrappers are in `src/node-project-creation/`. Blocking work
+runs off the Tauri UI thread. Generate/Recover hold the existing desktop operation
+guard, so Quit/updater installation wait rather than race file publication. Running
+PHP/Node services keep running; their Start All/Stop All semantics are unchanged.
+Cancellation and read-only job listing bypass that guard. Successful registry
+handoffs invalidate Node cards using the existing real registry revision event.
+No GUI creation workflow is added.
+
+| Command | Request | Result |
 | --- | --- | --- |
-| `node_project_templates` | None | Support flag, catalog/digest, runtime choices and discovery note |
-| `node_project_creation_plan` | `{ requestId, catalogRevision, templateId, projectName, parent, runtimeId, packageManager: "npm" }` | Immutable creation plan |
-| `node_project_creation_validate_plan` | `{ planId, digest }` | Same plan after current destination/tool checks |
+| `node_project_templates` | None | Catalog/runtime choices/support |
+| `node_project_creation_plan` | requestId, catalogRevision, templateId, projectName, parent, runtimeId, packageManager: npm | Immutable plan with file hashes |
+| `node_project_creation_validate_plan` | planId, digest | Same valid plan |
+| `node_project_creation_generate` | planId, digest, confirmed | Job status after local generation/registration |
+| `node_project_creation_jobs` | None | Retained jobs and individual journal errors |
+| `node_project_creation_cancel` | jobId | Cancel active job before publication commit |
+| `node_project_creation_recover` | jobId, expectedRevision, action, confirmed | Updated job status |
 
-All request fields use camelCase inside the existing `{ request }` wrapper.
-Unknown request fields are rejected. Errors are typed `{ code, message }` values,
-including destination/name errors, stale catalog, runtime/npm failures, duplicate
-request, unavailable/tampered/stale/expired plan, and capacity errors.
-Unsupported systems return the catalog with `supported: false`; planning and
-validation fail with `unsupportedPlatform`. No creation UI is added.
-
-## Immutable, bounded review plans
-
-Each native plan has an unpredictable 128-bit ID and a digest binding its schema,
-catalog/template revisions, destination/name, intended files/scripts/dependencies,
-Node/npm versions/paths/fingerprint, timestamps and installation policy. Internal
-parent identity also contributes to the digest. IPC returns a copy; client edits
-do not change the stored plan. Validation accepts a reference, not a replacement
-plan body; a mismatched digest is rejected against the native record.
-
-The prospective policy is npm `ci`, install scripts disabled, official registry,
-and an app-owned cache. It explicitly says `dependencyLock: notPrepared` and
-`installationAvailable: false`. It is a review description, not a runnable command
-or a promise of working dependencies. Any change to files, dependency graph or
-script policy in later stages requires a fresh plan and explicit confirmation.
-
-Plans are retained only in memory, at most 64 live plans for ten minutes, using a
-monotonic expiration deadline. Wall-clock timestamps are display metadata. Expired
-entries are reclaimed on new requests. App restart loses every plan, preserving
-all existing configuration. Revalidation returns the original plan rather than
-silently extending its expiry or changing its contents.
-
-A 32-hex `requestId` makes repeat/concurrent identical submissions idempotent:
-they return the same plan. Reusing that ID with different inputs is rejected.
-Expired/unavailable plans require a fresh request ID. Validation is read-only and
-non-consuming; there is no execution submission in Stage 1. Later job creation
-must atomically consume a confirmed plan and reject duplicate execution requests.
-A digest is not a signature or an authorization token; native storage is the
-authority. Missing runtimes, changed npm fingerprints, occupied destinations and
-replaced parents prevent reuse. There is no auto-repair or automatic retry.
+Requests use the existing `{ request }` wrapper and camelCase DTOs. Unknown fields
+are rejected. Mutations expose typed errors; a job may also return `preserved` or
+`needsRegistration` with an error and explicit recovery requirements. Do not treat
+those statuses as completion. Unsupported systems compile guarded stubs and report
+unsupported operations. Production macOS IPC is compile-checked; no device GUI
+automation or installed-app mutation was performed.
 
 ## Verification and next stage
 
-Rust fixtures test invalid names/paths, permissions, Unicode/spaces, occupied
-files/folders/live or broken links, unsupported/missing runtimes and npm, invalid
-catalog/template IDs, tampering, stale parent/tools, expiration, restart, bounded
-storage and concurrent duplicate requests. Filesystem snapshots verify planning
-leaves fixtures unchanged and creates no registry/data directory.
+Fixtures cover every template's exact reviewed files/manifests, no installs/runs,
+Unicode/spaces, permissions, traversal, live/broken symlinks, late destinations,
+root/nested replacements, consumed/expired/tampered plans, partial files, journal
+corruption, cancellation, failed registration and retry, registry-save replay,
+interrupted staging and actual SIGKILL host death at staging/publication boundaries.
+The nested-directory reproducer failed before identity checks and passed afterward.
+Syntax-only TypeScript compiler parsing caught and fixed both React entry-point
+quotes; it never imports/executes template code. Installation/build qualification
+of framework projects remains intentionally pending.
 
-The opt-in real test exercises all six designs with two externally provisioned
-Node/npm installations, poisoned inherited runtime settings, a personal-style
-npm config and a shell profile containing a marker command. It checks inventory,
-exact paired versions, plan revalidation, incompatible requirements and unchanged
-scratch files/defaults. It downloads nothing and creates no project server.
+Opt-in `real_local_generation_uses_selected_runtime_without_installation` uses
+provisioned Node 22/24 and their paired npm to generate/register all six projects.
+`real_creation_planning_uses_inventory` proves shell-free planning does not write
+fixtures or execute profiles. Both download/install/start nothing. The existing
+native PHP/Node lifecycle coexistence fixture is also run against disposable data
+and read-only packaged tools. See [Testing](testing.md) for commands and evidence.
 
-```sh
-FAIRWAY_TEST_NODE_RUNTIMES=/absolute/node22/bin/node:/absolute/node24/bin/node \
-  cargo test --manifest-path src-tauri/Cargo.toml --lib --all-features --locked \
-  real_creation_planning_uses_inventory -- --ignored --test-threads=1
-```
-
-Run this alone/serially: its discovery variables belong to its disposable test
-process and are restored afterward. TypeScript tests check error/DTO boundaries
-and catalog policy. Existing runtime isolation/process/PHP coexistence tests cover
-the shared validation/scanner reuse. See [Testing](testing.md).
-
-Stage 2 remains unimplemented: materialized local assets, complete lockfiles,
-private staging, durable recovery journals, exclusive filesystem publication,
-explicit consent/plan consumption and safe registration handoff. Dependency
-installation/supervision and the wizard remain later work. No global environment,
-PHP behavior, installed application, release feed/signing identity or service is
-changed by this foundation.
-
-Stage 1 verification on macOS (2026-10-28): the all-features Rust suite completed
-with 190 passes before one final IPC-shape test was added; the focused final
-planner run passed all 13 fast cases (the real-runtime case is opt-in) and covers
-that additional assertion. All eight opt-in real tests passed
-separately, including planning on Node 22.23.4/24.20.0 and the existing owned-run,
-crash cleanup, logs, runtime isolation and PHP independence fixtures. Terminal
-feature tests passed (166), TypeScript tests passed (24), and the frontend build,
-Clippy, CLI check and formatting passed. Full browser/Python/optimized release
-suites were not repeated: no UI, Python, packaging or release behavior changed.
-Windows/Linux native compilation and device IPC interactions remain unverified.
-No dependencies were installed to qualify the catalog designs.
+Stage 3 remains unimplemented: owned dependency installation, qualified lockfiles,
+network/script-policy review, install progress/logs and installer process supervision.
+Stage 4's graphical wizard is also outside this work. No PostgreSQL, Redis, Caddy,
+additional package managers, templates or generic plugin framework are introduced.

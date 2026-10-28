@@ -30,7 +30,7 @@ fn prepare(
     npm_range: &str,
 ) -> node_projects::Result<RuntimePreparation> {
     assert!(parent.is_dir());
-    assert!(!destination.exists());
+    assert!(destination.is_absolute());
     assert_eq!(node_range, ">=22.12.0 <23 || >=24.0.0 <25");
     assert_eq!(npm_range, ">=10.0.0 <12");
     if runtime.version == "v18.0.0" {
@@ -127,18 +127,18 @@ fn tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     result
 }
 #[test]
-fn catalog_has_six_versioned_planning_only_designs_and_exact_dependencies() {
+fn catalog_has_six_versioned_local_templates_and_exact_dependencies() {
     let catalog = catalog::catalog();
     assert_eq!(catalog.schema_version, 1);
     assert_eq!(catalog.templates.len(), 6);
     let mut ids = std::collections::HashSet::new();
     for template in catalog.templates {
         assert!(ids.insert(template.id));
-        assert_eq!(template.revision, "1");
-        assert_eq!(template.qualification, "planningOnly");
+        assert_eq!(template.revision, "2");
+        assert_eq!(template.qualification, "localGeneration");
         assert_eq!(template.lockfile_status, "notPrepared");
         assert_eq!(template.package_manager.name, "npm");
-        assert_eq!(template.provenance.kind, "fairwayAuthoredDesign");
+        assert_eq!(template.provenance.kind, "fairwayAuthoredTemplate");
         assert!(template.provenance.upstream_revision.is_none());
         assert!(template.provenance.reference_url.starts_with("https://"));
         let mut files = std::collections::HashSet::new();
@@ -641,7 +641,7 @@ fn ipc_shapes_are_camel_case_strict_and_exclude_environment_values() {
     assert!(catalog["runtimes"][0].get("nodePath").is_some());
     let plan = serde_json::to_value(f.state.plan(f.request()).unwrap()).unwrap();
     assert_eq!(plan["installation"]["installationAvailable"], false);
-    assert_eq!(plan["template"]["qualification"], "planningOnly");
+    assert_eq!(plan["template"]["qualification"], "localGeneration");
     assert!(plan["tools"].get("revision").is_some());
     assert!(plan["tools"].get("environment").is_none());
     for code in [
@@ -656,3 +656,7 @@ fn ipc_shapes_are_camel_case_strict_and_exclude_environment_values() {
         assert!(!value["code"].as_str().unwrap().contains('_'));
     }
 }
+
+#[cfg(target_os = "macos")]
+#[path = "generation_tests.rs"]
+mod generation_tests;

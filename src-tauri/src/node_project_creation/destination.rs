@@ -14,7 +14,7 @@ pub(super) struct Destination {
 fn invalid(message: &str) -> Error {
     Error::new(ErrorCode::InvalidDestination, message)
 }
-pub(super) fn validate(parent: &str, name: &str) -> Result<Destination> {
+pub(super) fn validate_name(name: &str) -> Result<()> {
     if name.is_empty()
         || name.len() > 64
         || !name.as_bytes()[0].is_ascii_lowercase()
@@ -51,6 +51,10 @@ pub(super) fn validate(parent: &str, name: &str) -> Result<Destination> {
     {
         return Err(Error::new(ErrorCode::InvalidName, "Use 1–64 lowercase ASCII letters, digits or hyphens, starting with a letter and ending with a letter/digit; avoid reserved device names."));
     }
+    Ok(())
+}
+pub(super) fn validate(parent: &str, name: &str) -> Result<Destination> {
+    validate_name(name)?;
     let path = Path::new(parent);
     if !path.is_absolute()
         || parent.len() > 8192

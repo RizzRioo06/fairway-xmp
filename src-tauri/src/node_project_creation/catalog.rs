@@ -54,5 +54,11 @@ pub fn catalog() -> Catalog {
     serde_json::from_str(include_str!("catalog.json")).expect("tested built-in catalog")
 }
 pub fn revision() -> String {
-    super::digest(include_bytes!("catalog.json"))
+    super::digest(
+        &[
+            include_bytes!("catalog.json").as_slice(),
+            super::assets::revision().as_bytes(),
+        ]
+        .concat(),
+    )
 }

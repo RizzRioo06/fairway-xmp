@@ -1,4 +1,4 @@
-//! Metadata-only Node project creation planning. No filesystem mutation or setup runner.
+//! Reviewed planning and explicitly confirmed local generation, without dependency installation.
 use crate::{
     config::Layout,
     node_projects::{self, ProjectRuntime, RuntimeChoice, RuntimePreparation},
@@ -10,7 +10,17 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+mod assets;
 mod catalog;
+#[cfg(target_os = "macos")]
+mod filesystem;
+mod generation;
+#[cfg(target_os = "macos")]
+mod journal;
+pub use assets::IntendedFile;
+pub use generation::{
+    CancelRequest, GenerateRequest, JobStatus, JobsSnapshot, RecoverRequest, RecoveryAction,
+};
 mod destination;
 pub use catalog::{Catalog, Dependency, PackageManager, Provenance, Template};
 
@@ -50,6 +60,18 @@ pub enum ErrorCode {
     PlanExpired,
     PlanStale,
     PlanLimit,
+    GenerationCancelled,
+    RegistrationFailed,
+    PlanConsumed,
+    ConfirmationRequired,
+    GenerationBusy,
+    UnsafeTemplate,
+    FilesystemFailed,
+    JournalUnavailable,
+    StaleJob,
+    JobUnavailable,
+    RecoveryUnsafe,
+    CancellationTooLate,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -159,6 +181,7 @@ pub struct CreationPlan {
     pub tools: ValidatedTools,
     pub installation: InstallationPolicy,
     pub warnings: Vec<String>,
+    pub files: BTreeMap<String, IntendedFile>,
 }
 struct StoredPlan {
     plan: CreationPlan,
@@ -166,14 +189,20 @@ struct StoredPlan {
     request_digest: String,
     location: destination::Destination,
     deadline: Instant,
+    consumed: bool,
 }
-/// Independent optional Tauri state; it does not read/write the project registry.
+/// Independent optional Tauri state. Planning stays read-only; confirmed generation
+/// hands registration to the existing Node registry without involving PHP startup.
 pub struct NodeProjectCreation {
     layout: Option<Layout>,
     supported: bool,
     discover: Discover,
     prepare: Prepare,
     plans: Mutex<BTreeMap<String, StoredPlan>>,
+    #[cfg(target_os = "macos")]
+    operations: Mutex<()>,
+    #[cfg(target_os = "macos")]
+    active: Mutex<Option<generation::Control>>,
 }
 impl NodeProjectCreation {
     pub fn new(layout: Option<Layout>) -> Self {
@@ -183,6 +212,10 @@ impl NodeProjectCreation {
             discover: node_projects::discover_planning,
             prepare: node_projects::prepare_creation_runtime,
             plans: Mutex::new(BTreeMap::new()),
+            #[cfg(target_os = "macos")]
+            operations: Mutex::new(()),
+            #[cfg(target_os = "macos")]
+            active: Mutex::new(None),
         }
     }
     fn layout(&self) -> Result<&Layout> {
@@ -307,13 +340,14 @@ impl NodeProjectCreation {
             schema_version: 1, id: format!("{:032x}", rand::random::<u128>()), digest: String::new(), catalog_revision: catalog::revision(),
             created_at: unix_ms, expires_at: unix_ms.saturating_add(PLAN_TTL.as_millis() as u64), project_name: request.project_name.clone(),
             parent: location.parent.to_str().expect("validated UTF-8").into(), destination: location.root.to_str().expect("validated UTF-8").into(),
-            template, tools,
+            template, tools, files: BTreeMap::new(),
             installation: InstallationPolicy { package_manager: "npm".into(), intended_command: "ci".into(), ignore_scripts: true,
                 registry: "https://registry.npmjs.org/".into(), cache_scope: "appOwned".into(), dependency_lock: "notPrepared".into(), installation_available: false },
             warnings: vec!["Dry run only: no project files, dependencies or registrations were created; no setup or project scripts were executed.".into(),
-                "Template assets and full dependency lockfiles are not prepared or install-qualified in Stage 1.".into(),
+                "Local template assets are reviewed; dependencies and lockfiles remain unqualified until Stage 3.".into(),
                 "A plan neither reserves a destination nor grants execution permission. Later stages must revalidate and request explicit approval.".into()],
         };
+        plan.files = assets::describe(&assets::render(&plan)?);
         plan.digest =
             digest(&serde_json::to_vec(&(&plan, &location.identity)).expect("serializable plan"));
         plans.insert(
@@ -324,6 +358,7 @@ impl NodeProjectCreation {
                 request_digest,
                 location,
                 deadline: now + PLAN_TTL,
+                consumed: false,
             },
         );
         Ok(plan)
@@ -354,6 +389,12 @@ impl NodeProjectCreation {
         self.validate_stored(stored, now)
     }
     fn validate_stored(&self, stored: &StoredPlan, now: Instant) -> Result<CreationPlan> {
+        if stored.consumed {
+            return Err(Error::new(
+                ErrorCode::PlanConsumed,
+                "This plan was already submitted for generation. Use its journal for recovery.",
+            ));
+        }
         if now >= stored.deadline {
             return Err(Error::new(
                 ErrorCode::PlanExpired,

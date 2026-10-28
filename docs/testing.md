@@ -102,16 +102,53 @@ stops owned runs before disposing the fixture. Its test picker returns those
 folders. It does not automate Finder or execute personal project scripts.
 Keep device acceptance separate using the [manual guide](node-projects-manual-testing.md).
 
-## Node project creation planning
-
-Run the fast planner fixtures with:
+## Node project creation planning and local generation
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml --lib --all-features --locked node_project_creation
 ```
 
-The opt-in `real_creation_planning_uses_inventory` test requires
-two provisioned Node/npm runtimes and must run serially; see
-[Node project creation](node-project-creation.md). It checks all six catalog
-designs with actual tool probes, not dependency installation or generated apps.
-No UI automation is needed for this backend-only stage.
+Fast fixtures generate every local template without installing or executing it.
+They include actual SIGKILL host death during staging and after publication;
+`generation_crash_child` is an internal ignored transport invoked by that parent
+test, not a separate skipped compatibility claim. Parser tests inspect JS/JSX/TS
+syntax without importing generated code.
+
+The opt-in `real_creation_planning_uses_inventory` and
+`real_local_generation_uses_selected_runtime_without_installation` tests require
+two provisioned runtimes in `FAIRWAY_TEST_NODE_RUNTIMES`. Run each alone/serially:
+
+```sh
+FAIRWAY_TEST_NODE_RUNTIMES=/absolute/node22/bin/node:/absolute/node24/bin/node \
+  cargo test --manifest-path src-tauri/Cargo.toml --lib --all-features --locked \
+  real_local_generation -- --ignored --test-threads=1
+```
+
+These validate paired tools, files and registration; they do not qualify dependency
+installation or execute generated projects. See [Node project creation](node-project-creation.md)
+for filesystem/recovery boundaries. No UI automation is needed for this backend stage.
+
+Stage 2 verification on macOS (2026-10-28):
+
+| Check | Result |
+| --- | --- |
+| All-features Rust library | 205 passed, 10 opt-in/internal cases excluded from that normal run |
+| Terminal/no-default-feature Rust tests | 181 passed, same 10 excluded; 0 doc-tests |
+| Creation/recovery subset | 27 fast cases covered, including actual SIGKILL and nested replacement regression |
+| Real Node 22.23.4 / 24.20.0 local generation | Passed for all six templates; no dependency installation or generated script execution |
+| Real shell-free creation planning | Passed separately |
+| Native PHP/Node quit/update/coexistence fixture | Passed separately with read-only packaged tools and disposable data |
+| TypeScript units and syntax-only template parsing | 25 passed |
+| TypeScript/Vite production frontend build | Passed |
+| All-target/all-feature Clippy, warnings denied | Passed |
+| CLI feature check and cargo formatting | Passed |
+
+Of the ten normally excluded cases, three relevant opt-in tests were explicitly
+run as above. The internal crash-child transport is exercised twice by its parent
+SIGKILL test. Six older Node execution/isolation opt-in cases were not repeated;
+their execution/isolation implementations were unchanged by this stage. Full browser/Python/optimized
+release suites were not repeated for this backend-only change. Windows/Linux
+native builds, device IPC, signed installers/updater replacement, actual disk-full
+and power-loss behavior remain unverified. Framework dependency installation,
+semantic dependency builds and generated servers were intentionally not tested:
+those require Stage 3 approval and an installation/lockfile policy.

@@ -17,6 +17,10 @@ mod isolation;
 mod manifest;
 pub use environment::ChildEnvironment;
 pub use isolation::{NpmRuntime, PreparedRuntime, RuntimePreparation};
+#[cfg(target_os = "macos")]
+pub(crate) fn inspect_generated_manifest(root: &str) -> Result<Inspection> {
+    manifest::inspect(root)
+}
 mod runtime;
 pub(crate) use isolation::prepare_creation_runtime;
 pub(crate) use runtime::{discover_planning, Inventory};
@@ -521,6 +525,74 @@ impl NodeProjects {
             ));
         }
         Ok(project.script)
+    }
+
+    /// Internal handoff from an explicitly confirmed local generation job.
+    /// Uses the existing registry serializer/atomic writer, without shell discovery.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn register_generated(
+        &self,
+        config: ProjectConfig,
+        expected: Option<&str>,
+        manifest_revision: &str,
+    ) -> Result<SaveResponse> {
+        let layout = self.layout()?;
+        let _guard = self
+            .mutation
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::Unavailable, "The Node registry is unavailable."))?;
+        let (mut document, current) = store::load(&layout.data)?;
+        if let Some(existing) = document
+            .projects
+            .iter()
+            .find(|project| project.id == config.id)
+        {
+            if serde_json::to_vec(existing).ok() != serde_json::to_vec(&config).ok() {
+                return Err(Error::new(
+                    ErrorCode::Conflict,
+                    "The generated project ID belongs to another registration.",
+                ));
+            }
+            return Ok(SaveResponse {
+                revision: current,
+                project: existing.clone(),
+            });
+        }
+        let expected = expected.ok_or_else(|| {
+            Error::new(
+                ErrorCode::RegistryUnavailable,
+                "Reload the registry and retry registration; the published project was kept.",
+            )
+        })?;
+        store::check_revision(expected, &current)?;
+        if document
+            .projects
+            .iter()
+            .any(|project| manifest::same_root(&project.root, &config.root))
+        {
+            return Err(Error::new(
+                ErrorCode::Conflict,
+                "This root is already registered. Its existing settings were kept.",
+            ));
+        }
+        self.executions.ensure_stopped(&config.id)?;
+        let inspection = manifest::inspect(&config.root)?;
+        store::check_revision(manifest_revision, &inspection.manifest_revision)?;
+        if inspection.root != config.root
+            || !inspection.scripts.contains_key(&config.script)
+            || !runtime::available(&config.runtime)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidProject,
+                "The generated root, script or selected runtime changed.",
+            ));
+        }
+        document.projects.push(config.clone());
+        let revision = store::save(&layout.data, expected, &document)?;
+        Ok(SaveResponse {
+            revision,
+            project: config,
+        })
     }
 
     pub fn remove(&self, request: RemoveRequest) -> Result<RegistryChanged> {

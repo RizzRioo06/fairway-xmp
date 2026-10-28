@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "revision": "1",
+  "revision": "2",
   "templates": [
     {
       "id": "node-js",
-      "revision": "1",
+      "revision": "2",
       "title": "Plain Node.js JavaScript",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -12,13 +12,17 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
+        "src/server.js",
         "src/index.js",
         "test/server.test.js"
       ],
@@ -29,16 +33,16 @@
       },
       "dependencies": [],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://nodejs.org/api/http.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     },
     {
       "id": "node-ts",
-      "revision": "1",
+      "revision": "2",
       "title": "Plain Node.js TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -46,13 +50,16 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
         "src/index.ts",
         "tsconfig.json"
       ],
@@ -88,16 +95,16 @@
         }
       ],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://www.typescriptlang.org/docs/",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     },
     {
       "id": "hono-ts",
-      "revision": "1",
+      "revision": "2",
       "title": "Hono API TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -105,13 +112,16 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
         "src/index.ts",
         "tsconfig.json"
       ],
@@ -163,16 +173,16 @@
         }
       ],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://hono.dev/docs/getting-started/nodejs",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     },
     {
       "id": "express-js",
-      "revision": "1",
+      "revision": "2",
       "title": "Express API",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -180,13 +190,17 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
+        "src/app.js",
         "src/index.js",
         "test/api.test.js"
       ],
@@ -206,16 +220,16 @@
         }
       ],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://expressjs.com/en/starter/hello-world.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     },
     {
       "id": "react-vite-js",
-      "revision": "1",
+      "revision": "2",
       "title": "React + Vite JavaScript",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -223,13 +237,16 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
         "index.html",
         "src/main.jsx",
         "src/App.jsx",
@@ -276,16 +293,16 @@
         }
       ],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     },
     {
       "id": "react-vite-ts",
-      "revision": "1",
+      "revision": "2",
       "title": "React + Vite TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -293,13 +310,16 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "planningOnly",
+      "qualification": "localGeneration",
       "lockfileStatus": "notPrepared",
       "intendedFiles": [
         "package.json",
         ".node-version",
         ".gitignore",
         "README.md",
+        "LICENSE",
+        ".env.example",
+        ".fairway-template.json",
         "index.html",
         "src/main.tsx",
         "src/App.tsx",
@@ -381,11 +401,11 @@
         }
       ],
       "provenance": {
-        "kind": "fairwayAuthoredDesign",
+        "kind": "fairwayAuthoredTemplate",
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
       }
     }
   ]
