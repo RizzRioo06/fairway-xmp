@@ -653,3 +653,97 @@ fn real_two_runtime_isolation_and_requirements() {
     assert!(!fixture.layout.data.join("fnm-enabled").exists());
     assert!(!fixture.layout.data.join("fnm-store.json").exists());
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "Requires a real runtime; owns discovery variables and a deliberately slow scratch Zsh profile"]
+fn real_discovery_timeout_preserves_inventory_and_recovers() {
+    use std::time::{Duration, Instant};
+    let node = std::env::split_paths(
+        &std::env::var_os("FAIRWAY_TEST_NODE_RUNTIMES").expect("Supply installed Node paths"),
+    )
+    .next()
+    .map(|path| fs::canonicalize(path).unwrap())
+    .unwrap();
+    let output = Command::new(&node)
+        .env_remove("NODE_OPTIONS")
+        .env_remove("NODE_PATH")
+        .args(["-p", "process.version"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let version = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+    let fixture = Fixture::new();
+    let store = fixture.base.join("timeout-store");
+    let installation = store.join("node-versions").join(&version);
+    fs::create_dir_all(&installation).unwrap();
+    std::os::unix::fs::symlink(
+        node.parent().unwrap().parent().unwrap(),
+        installation.join("installation"),
+    )
+    .unwrap();
+    struct Restore(Vec<(&'static str, Option<OsString>)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                if let Some(value) = value {
+                    std::env::set_var(key, value);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+    let _restore = Restore(
+        ["HOME", "ZDOTDIR", "FNM_DIR", "PATH"]
+            .into_iter()
+            .map(|key| (key, std::env::var_os(key)))
+            .collect(),
+    );
+    std::env::set_var("HOME", &fixture.layout.home);
+    std::env::set_var("ZDOTDIR", &fixture.layout.home);
+    std::env::set_var("FNM_DIR", &store);
+    std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+    let profile = fixture.layout.home.join(".zshrc");
+    let slow =
+        "# Only a disposable test profile\n/bin/sleep 20\n/usr/bin/touch SHOULD_NOT_FINISH\n";
+    fs::write(&profile, slow).unwrap();
+    let state = NodeProjects::new(Some(fixture.layout.clone()));
+    let request = || InspectRequest {
+        root: fixture.project.root.clone(),
+    };
+    let started = Instant::now();
+    let delayed = state.inspect(request()).unwrap();
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed >= Duration::from_secs(16) && elapsed < Duration::from_secs(25),
+        "{elapsed:?}"
+    );
+    assert!(delayed
+        .runtime_error
+        .as_deref()
+        .is_some_and(|error| error.contains("timed out")));
+    assert!(delayed
+        .runtimes
+        .iter()
+        .any(|choice| choice.runtime.node_path == node.to_str().unwrap()));
+    assert_eq!(fs::read_to_string(&profile).unwrap(), slow);
+    assert!(!fixture.layout.home.join("SHOULD_NOT_FINISH").exists());
+    fs::write(&profile, "# Repaired scratch profile\n").unwrap();
+    let started = Instant::now();
+    let recovered = state.inspect(request()).unwrap();
+    assert!(started.elapsed() < Duration::from_secs(8));
+    assert!(recovered
+        .runtimes
+        .iter()
+        .any(|choice| choice.runtime.node_path == node.to_str().unwrap()));
+    assert!(!recovered
+        .runtime_error
+        .as_deref()
+        .is_some_and(|error| error.contains("timed out")));
+    assert!(!Path::new(&fixture.project.root)
+        .join("IMPORTED_SCRIPT_RAN")
+        .exists());
+    assert!(!fixture.layout.data.join("fnm-enabled").exists());
+    assert!(!store.join("aliases/default").exists());
+}

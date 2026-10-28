@@ -74,6 +74,41 @@ pub(super) fn directory(data: &Path, project: &str) -> Result<PathBuf> {
     Ok(directory)
 }
 
+/// Publish status without following a leftover predictable temporary link.
+/// Metadata is advisory history, never authority to adopt or signal a process.
+pub(super) fn persist_metadata(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let directory = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("Missing metadata directory"))?;
+    if !fs::symlink_metadata(directory)?.is_dir() {
+        return Err(std::io::Error::other(
+            "Metadata directory must not be linked",
+        ));
+    }
+    struct Staged(PathBuf);
+    impl Drop for Staged {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+    let staged =
+        Staged(directory.join(format!(".last-run-{:032x}.partial", rand::random::<u128>())));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&staged.0)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    drop(file);
+    // rename replaces a destination link itself; it never writes through it.
+    super::store::replace(&staged.0, path)?;
+    crate::durability::sync_directory(directory).map_err(std::io::Error::other)
+}
+
 fn open_log(path: &Path) -> std::io::Result<File> {
     let mut options = OpenOptions::new();
     options.create(true).append(true);
@@ -361,6 +396,75 @@ mod tests {
         assert!(batch.truncated);
         fs::remove_dir_all(data).unwrap();
     }
+    #[cfg(unix)]
+    #[test]
+    fn metadata_publication_never_follows_old_staging_links() {
+        use std::os::unix::{fs::symlink, fs::PermissionsExt};
+        let data =
+            std::env::temp_dir().join(format!("fw-metadata-{:032x}", rand::random::<u128>()));
+        let directory = directory(&data, &"a".repeat(32)).unwrap();
+        let imported = data.join("imported-project-file");
+        fs::write(&imported, "keep project contents").unwrap();
+        fs::set_permissions(&imported, fs::Permissions::from_mode(0o644)).unwrap();
+        let metadata = directory.join("last-run.json");
+        symlink(&imported, metadata.with_extension("fairway-tmp")).unwrap();
+        persist_metadata(&metadata, br#"{"state":"running"}"#).unwrap();
+        assert_eq!(
+            fs::read_to_string(&imported).unwrap(),
+            "keep project contents"
+        );
+        assert_eq!(
+            fs::metadata(&imported).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), br#"{"state":"running"}"#);
+        assert_eq!(
+            fs::metadata(&metadata).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::remove_file(&metadata).unwrap();
+        symlink(&imported, &metadata).unwrap();
+        persist_metadata(&metadata, br#"{"state":"stopped"}"#).unwrap();
+        assert_eq!(fs::read(&metadata).unwrap(), br#"{"state":"stopped"}"#);
+        assert_eq!(
+            fs::read_to_string(&imported).unwrap(),
+            "keep project contents"
+        );
+        assert_eq!(
+            fs::metadata(&imported).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let linked_directory = data.join("linked-directory");
+        symlink(&directory, &linked_directory).unwrap();
+        assert!(
+            persist_metadata(&linked_directory.join("last-run.json"), b"must not write").is_err()
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), br#"{"state":"stopped"}"#);
+        assert!(!fs::read_dir(&directory).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".partial")));
+        fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn failed_metadata_publication_preserves_existing_target_and_cleans_staging() {
+        let data =
+            std::env::temp_dir().join(format!("fw-metadata-fail-{:032x}", rand::random::<u128>()));
+        let directory = directory(&data, &"a".repeat(32)).unwrap();
+        let target = directory.join("last-run.json");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("keep"), "preserve this target").unwrap();
+        assert!(persist_metadata(&target, b"new metadata").is_err());
+        assert_eq!(
+            fs::read_to_string(target.join("keep")).unwrap(),
+            "preserve this target"
+        );
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_dir_all(data).unwrap();
+    }
+
     #[test]
     fn malformed_utf8_and_path_traversal_are_bounded() {
         let data = std::env::temp_dir().join(format!("fw-log-{:032x}", rand::random::<u128>()));

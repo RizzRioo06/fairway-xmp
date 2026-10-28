@@ -123,7 +123,7 @@ impl Run {
     }
     fn persist(&self, status: &RunStatus) {
         if let Ok(bytes) = serde_json::to_vec(status) {
-            let _ = crate::config::atomic_write(&self.metadata, &bytes);
+            let _ = run_logs::persist_metadata(&self.metadata, &bytes);
         }
     }
     fn fail(&self, error: Error) {

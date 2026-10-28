@@ -393,7 +393,11 @@ and controlled Node 22/24 fixtures, including UI reload, Restart, Stop and file
 preservation. These command-line browser tests do not control the user's desktop.
 
 See [manual acceptance testing](node-projects-manual-testing.md) for safe MacBook
-checks and issue reporting. Signed packaging, Windows/Linux device checks and
-final user acceptance remain separate. Reverse proxies, dependency installation,
+checks and issue reporting. Stage 4 manual acceptance was completed successfully
+by the owner. See
+[Stage 5 integration verification](node-projects-stage5-verification.md) for the
+metadata-publication fix, automated evidence and release limitations. Signed
+packaging and Windows/Linux device checks remain separate. Reverse proxies,
+dependency installation,
 automatic restarts, PostgreSQL, Redis and other services are outside this work.
 The Node backend stays separate from PHP without a generic plugin framework.

@@ -118,12 +118,12 @@ impl Drop for Staged {
 }
 
 #[cfg(not(windows))]
-fn replace(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(super) fn replace(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::rename(from, to)
 }
 
 #[cfg(windows)]
-fn replace(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(super) fn replace(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     unsafe extern "system" {
         fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
