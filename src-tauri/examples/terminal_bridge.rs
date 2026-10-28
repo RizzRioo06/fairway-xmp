@@ -4,6 +4,7 @@ use fairway_core::{
     config::{Layout, Ports},
     data_browser,
     manager::Manager,
+    node_projects::{self, NodeProjects},
     terminal::{self, Terminals},
 };
 use serde_json::{json, Value};
@@ -15,6 +16,9 @@ use std::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if node_projects::runner_entrypoint().map_err(|e| io::Error::other(e.message))? {
+        return Ok(());
+    }
     let args: Vec<_> = std::env::args_os().collect();
     let root = PathBuf::from(
         args.get(1)
@@ -31,6 +35,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         root.join("data 日本"),
         runtime,
     );
+    let nodes = Arc::new(NodeProjects::new(Some(layout.clone())));
+    nodes.observe_runs(|run| {
+        let mut stdout = io::stdout().lock();
+        let _ = writeln!(
+            stdout,
+            "{}",
+            json!({"event":"node-project-run-status", "payload":run})
+        );
+        let _ = stdout.flush();
+    });
+    #[cfg(target_os = "macos")]
+    if let Some(versions) = std::env::var_os("FAIRWAY_TEST_NODE_RUNTIMES") {
+        let store = root.join("fnm-store");
+        for executable in std::env::split_paths(&versions) {
+            let executable = std::fs::canonicalize(executable)?;
+            let version = std::process::Command::new(&executable)
+                .env_remove("NODE_OPTIONS")
+                .arg("--version")
+                .output()?;
+            if !version.status.success() {
+                return Err("Fixture runtime probe failed".into());
+            }
+            let version = String::from_utf8(version.stdout)?.trim().to_string();
+            let parent = store.join("node-versions").join(version);
+            std::fs::create_dir_all(&parent)?;
+            std::os::unix::fs::symlink(
+                executable.parent().unwrap().parent().unwrap(),
+                parent.join("installation"),
+            )?;
+        }
+        std::env::set_var("FNM_DIR", store);
+        for index in 0..2 {
+            let directory = root.join(format!("node fixture {index} 日本"));
+            std::fs::create_dir_all(&directory)?;
+            std::fs::write(
+                directory.join("package.json"),
+                r#"{"name":"native-node-fixture","scripts":{"dev":"node server.cjs","fail":"node failure.cjs"},"engines":{"node":">=22"}}"#,
+            )?;
+            std::fs::write(directory.join("server.cjs"), "console.log('NATIVE_NODE '+process.version+' café 日本');console.error('native stderr\\nsecond line');setInterval(()=>{},1000);setTimeout(()=>process.exit(0),90000);")?;
+            std::fs::write(
+                directory.join("failure.cjs"),
+                "console.error('NATIVE_FAILURE');process.exit(7);",
+            )?;
+        }
+    }
     let mut manager = Manager::new(layout).map_err(io::Error::other)?;
     let project = manager.layout.www.join("Project with spaces 日本");
     std::fs::create_dir_all(&project)?;
@@ -72,10 +121,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let manager = manager.clone();
         let terminals = terminals.clone();
         let jobs = jobs.clone();
+        let nodes = nodes.clone();
         // Tauri dispatches PTY read/write/resize independently. A serial test
         // transport can deadlock ConPTY waiting for its cursor-query response.
         workers.push(std::thread::spawn(move || {
-            respond(request, &manager, &terminals, &jobs)
+            respond(request, &manager, &terminals, &jobs, &nodes)
         }));
     }
     terminals.close_all();
@@ -85,6 +135,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|_| io::Error::other("Bridge worker failed"))??;
     }
     terminals.close_all();
+    nodes
+        .stop_all_runs()
+        .map_err(|e| io::Error::other(e.message))?;
     manager
         .lock()
         .unwrap()
@@ -98,7 +151,14 @@ fn respond(
     manager: &Mutex<Manager>,
     terminals: &Terminals,
     jobs: &data_browser::Jobs,
+    nodes: &NodeProjects,
 ) -> io::Result<()> {
+    if request["command"]
+        .as_str()
+        .is_some_and(|command| command.starts_with("node_project"))
+    {
+        return respond_nodes(request, nodes);
+    }
     let args = &request["args"];
     let id = args["id"].as_str().unwrap_or_default();
     let result: Result<Value, String> = (|| {
@@ -198,6 +258,20 @@ fn respond(
                 &manager.lock().unwrap().layout.data.join("logs"),
             ))
             .unwrap(),
+            "pick_folder" => {
+                if std::env::var_os("FAIRWAY_TEST_NODE_RUNTIMES").is_none() {
+                    return Err("Enable controlled Node fixtures for the test picker.".into());
+                }
+                let index = nodes.snapshot().projects.len().min(1);
+                json!(manager
+                    .lock()
+                    .unwrap()
+                    .layout
+                    .home
+                    .parent()
+                    .unwrap()
+                    .join(format!("node fixture {index} 日本")))
+            }
             "snapshot" => serde_json::to_value(manager.lock().unwrap().snapshot()).unwrap(),
             "plugin:event|listen" => json!(1),
             "plugin:event|unlisten" => Value::Null,
@@ -240,4 +314,76 @@ fn respond(
     writeln!(stdout, "{response}")?;
     stdout.flush()?;
     Ok(())
+}
+
+fn respond_nodes(request: Value, nodes: &NodeProjects) -> io::Result<()> {
+    let args = &request["args"]["request"];
+    let parse_error = |error: serde_json::Error| node_projects::Error {
+        code: node_projects::ErrorCode::InvalidProject,
+        message: error.to_string(),
+    };
+    let result: node_projects::Result<Value> = (|| {
+        let value = match request["command"].as_str().unwrap_or_default() {
+            "node_projects_snapshot" => serde_json::to_value(nodes.snapshot()).unwrap(),
+            "node_project_runs" => serde_json::to_value(nodes.runs()).unwrap(),
+            "node_project_inspect" => serde_json::to_value(
+                nodes.inspect(serde_json::from_value(args.clone()).map_err(parse_error)?)?,
+            )
+            .unwrap(),
+            "node_project_prepare_runtime" => serde_json::to_value(
+                nodes
+                    .prepare_runtime(serde_json::from_value(args.clone()).map_err(parse_error)?)?
+                    .summary(),
+            )
+            .unwrap(),
+            "node_project_save" => {
+                let saved =
+                    nodes.save(serde_json::from_value(args.clone()).map_err(parse_error)?)?;
+                println!(
+                    "{}",
+                    json!({"event":"node-projects-changed", "payload":{"revision":saved.revision}})
+                );
+                serde_json::to_value(saved).unwrap()
+            }
+            "node_project_remove" => {
+                let removed =
+                    nodes.remove(serde_json::from_value(args.clone()).map_err(parse_error)?)?;
+                println!(
+                    "{}",
+                    json!({"event":"node-projects-changed", "payload":removed})
+                );
+                serde_json::to_value(removed).unwrap()
+            }
+            "node_project_start" => serde_json::to_value(
+                nodes.start(serde_json::from_value(args.clone()).map_err(parse_error)?)?,
+            )
+            .unwrap(),
+            "node_project_stop" => serde_json::to_value(
+                nodes.stop(serde_json::from_value(args.clone()).map_err(parse_error)?)?,
+            )
+            .unwrap(),
+            "node_project_restart" => serde_json::to_value(
+                nodes.restart(serde_json::from_value(args.clone()).map_err(parse_error)?)?,
+            )
+            .unwrap(),
+            "node_project_logs" => serde_json::to_value(
+                nodes.logs(serde_json::from_value(args.clone()).map_err(parse_error)?)?,
+            )
+            .unwrap(),
+            _ => {
+                return Err(node_projects::Error {
+                    code: node_projects::ErrorCode::InvalidProject,
+                    message: "Unsupported Node fixture command".into(),
+                })
+            }
+        };
+        Ok(value)
+    })();
+    let response = match result {
+        Ok(value) => json!({"requestId":request["requestId"],"value":value}),
+        Err(error) => json!({"requestId":request["requestId"],"error":error}),
+    };
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "{response}")?;
+    stdout.flush()
 }

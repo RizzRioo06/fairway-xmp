@@ -1,8 +1,8 @@
 # Node Projects — registry, runtime isolation and owned execution
 
 This personal extension provides registry, inspection, runtime preparation and
-owned foreground npm-script execution on macOS. The graphical Node Projects page
-belongs to Stage 4 and is not implemented. PHP sites, Start All/Stop All, ports,
+owned foreground npm-script execution on macOS. Stage 4 adds the **Node Projects**
+workspace in the Tools navigation group. PHP sites, Start All/Stop All, ports,
 hosts and certificates retain their existing behavior. Node Settings refuses to
 remove or replace an installation while a managed Node project owns it. Other platforms report `supported: false`; mutations
 and inspection return a typed `unsupportedPlatform` error.
@@ -337,8 +337,63 @@ stacks are attempted if either fails. Browser regression checks exercise the
 existing PHP UI; native tray hiding, OS dialogs and a signed updater replacement
 remain separate device-level checks.
 
-Stage 4 can now add the Node Projects graphical workspace using these contracts,
-explicit execution confirmation, status revisions and cursor-based logs. No
-workspace is added in Stage 3. Reverse proxies, dependency installation, automatic
-restarts, PostgreSQL, Redis and other optional services remain outside this work.
+## Stage 4: graphical workspace
+
+Open **Node Projects** in the Tools navigation group. Import uses the existing
+native folder picker, inspects scripts/requirements/runtime inventory, and saves
+through the typed registry API. Saving never starts a script or installs packages.
+npm selections are validated after saving; incompatible selections stay saved
+with an actionable warning so the user can choose Edit and correct them. Other
+package managers can be registered but cannot be launched by the npm runner.
+
+Start and Restart inspect the folder and show the selected script in an explicit
+execution confirmation. They submit the reviewed registry/manifest revisions and
+`confirmed: true`. Stale run IDs and conflicts require another user review; the
+UI never automatically retries execution against a different run. Editing and
+removal require a stopped project. Remove preserves project files. Open URL uses
+the existing native HTTP-link opener; the configured URL is not a readiness check.
+
+Frontend responsibilities:
+
+- `NodeProjectsPage.tsx`: registration cards, confirmations, controls and recovery.
+  Active runs without a loaded registration still expose Stop and Logs; registry
+  errors also expose retained run history. Normal removal hides inactive metadata
+  retained by the backend.
+- `ProjectEditor.tsx`: import/edit drafts and native inspection. A failed
+  inspection clears the previous result; request generations discard delayed
+  results from an older folder. Shared `data/Dialog.tsx` supplies focus trapping
+  and optional explicit return focus for WebKit.
+- `useProjects.ts`: awaits registry/run subscriptions before initial snapshots,
+  serializes refreshes, and rejects stale snapshots using event epochs. Within a
+  run only higher revisions replace state. Across runs timestamps distinguish
+  generations; equal timestamps require an authoritative snapshot. Three-second
+  visible-page refreshes and focus/visibility refreshes recover missed events.
+- `ProjectLogs.tsx`: keyed by project/run ID, retrieves one cursor batch at a
+  time, at most every 500 ms, while the page/document is visible. EOF stops
+  polling; errors offer Retry from the last cursor. React owns no native process.
+- `model.ts`: pure, tested merge/URL/error/log-retention rules. The console keeps
+  at most 1,024 records and 256 KiB UTF-8 text, deduplicates cursors and renders
+  React text nodes. It identifies timestamps and stdout/stderr/system. Clear view
+  keeps the cursor and native files; manual scrolling disables Follow output.
+  The console reuses the maximizable workspace and existing log styling.
+
+Navigation pauses/unsubscribes UI work without stopping native projects. Reentry
+obtains current snapshots. A complete WebView reload reconstructs status; select
+Logs again to read retained output. Unsupported platforms show an explanatory
+page with disabled import/execution controls. PHP navigation, dashboard and
+service contracts remain unchanged. Stage 4 changed no production Rust backend
+module; the example bridge was extended only for disposable frontend tests.
+
+TypeScript tests cover revision/generation ordering, local URLs, Unicode/log
+bounds and recovery instructions. `node-projects.spec.ts` covers dialogs,
+import/edit/remove, concurrent runs, conflicts/errors, console scrolling/retry,
+hidden-page polling and PHP independence in Chromium/WebKit at both window sizes.
+`node-projects-native.spec.ts` uses the production frontend, real Rust controller
+and controlled Node 22/24 fixtures, including UI reload, Restart, Stop and file
+preservation. These command-line browser tests do not control the user's desktop.
+
+See [manual acceptance testing](node-projects-manual-testing.md) for safe MacBook
+checks and issue reporting. Signed packaging, Windows/Linux device checks and
+final user acceptance remain separate. Reverse proxies, dependency installation,
+automatic restarts, PostgreSQL, Redis and other services are outside this work.
 The Node backend stays separate from PHP without a generic plugin framework.

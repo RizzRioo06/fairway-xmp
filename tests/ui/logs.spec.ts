@@ -103,7 +103,7 @@ test('service shortcuts share the searchable viewer and Logs follows Terminal in
   await page.goto('/');
   const core = page.getByRole('group', { name: 'Core', exact: true });
   await expect(core.getByRole('button')).toHaveText(['Environment', 'Terminal', 'Logs']);
-  await expect(page.getByRole('group', { name: 'Tools', exact: true }).getByRole('button')).toHaveText(['Manage Sites', 'View Mail', 'Browse Data']);
+  await expect(page.getByRole('group', { name: 'Tools', exact: true }).getByRole('button')).toHaveText(['Node Projects', 'Manage Sites', 'View Mail', 'Browse Data']);
   for (const [service, source] of [['PHP', 'php'], ['Nginx', 'nginx'], ['MySQL', 'mysql'], ['phpMyAdmin', 'nginx'], ['Mail', 'mail']]) {
     await page.getByRole('button', { name: 'Environment', exact: true }).click();
     await page.getByRole('button', { name: `View ${service} logs`, exact: true }).click();

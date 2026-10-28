@@ -28,7 +28,7 @@ export async function nativeBridge(page: Page, info: TestInfo) {
     const item = pending.get(response.requestId); pending.delete(response.requestId);
     if (item && !item.command.startsWith('terminal_read')) timings.push({ command: item.command, operation: item.operation, elapsedMs: Date.now() - item.started, failed: typeof response.error === 'string' });
     if (item?.command === 'terminal_external' && typeof response.value?.directory === 'string') externalDirectories.push(response.value.directory);
-    if (typeof response.error === 'string') item?.reject(new Error(response.error)); else item?.resolve(response.value);
+    if ('error' in response) item?.reject(typeof response.error === 'string' ? new Error(response.error) : response.error); else item?.resolve(response.value);
   });
   child.on('exit', code => {
     pending.forEach(item => item.reject(new Error(`Native bridge exited ${code}: ${stderr}`))); pending.clear();

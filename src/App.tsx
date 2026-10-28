@@ -9,6 +9,7 @@ import type { NodeStatus, PhpSettingsView, Ports, Project, ProjectConfig, Servic
 import HelpTip from './HelpTip';
 import PhpSettingsCard from './PhpSettings';
 import NodeTools from './NodeTools';
+import NodeProjectsPage from './node-projects/NodeProjectsPage';
 import DataBrowser from './data/DataBrowser';
 import SitesPage from './SitesPage';
 import MailPage from './MailPage';
@@ -31,8 +32,9 @@ const meta = {
   mail: { name: 'Mail', description: 'Catches emails your apps send', icon: Mail, version: 'mailpit', color: 'teal' },
 } as const;
 
-type View = 'environment' | 'projects' | 'mail' | 'settings' | 'updates' | 'data' | 'terminal' | 'logs';
+type View = 'nodes' | 'environment' | 'projects' | 'mail' | 'settings' | 'updates' | 'data' | 'terminal' | 'logs';
 const viewTitle: Record<View, string> = {
+  nodes: 'Node Projects',
   environment: 'Environment',
   projects: 'Manage Sites',
   mail: 'View Mail',
@@ -324,6 +326,7 @@ function AppContent() {
           <button className={view === 'logs' ? 'nav-item active' : 'nav-item'} title={foldTitle('Logs')} onClick={() => setView('logs')}><ScrollText size={18} /><span className="nav-label">Logs</span></button>
         </div>
         <div className="nav-group" role="group" aria-label="Tools">
+          <button className={view === 'nodes' ? 'nav-item active' : 'nav-item'} title={foldTitle('Node Projects')} onClick={() => setView('nodes')}><Code2 size={18} /><span className="nav-label">Node Projects</span></button>
           <button className={view === 'projects' ? 'nav-item active' : 'nav-item'} title={foldTitle('Manage Sites')} onClick={() => setView('projects')}><AppWindow size={18} /><span className="nav-label">Manage Sites</span></button>
           <button className={view === 'mail' ? 'nav-item active' : 'nav-item'} title={foldTitle('View Mail')} onClick={() => setView('mail')}><Mail size={18} /><span className="nav-label">View Mail</span></button>
           {dataBrowserAvailable && <button className={view === 'data' ? 'nav-item active' : 'nav-item'} title={foldTitle('Browse Data')} disabled={!!busy && !databaseBusy} onClick={() => setView('data')}><Database size={18} /><span className="nav-label">Browse Data</span></button>}
@@ -359,6 +362,8 @@ function AppContent() {
         {dataBrowserAvailable && <Activity mode={view === 'data' ? 'visible' : 'hidden'}><RecoveryBoundary onError={maximized === 'data' ? restoreWorkspace : undefined} name="Data browser"><DataBrowser ready={data.services.some(service => service.id === 'mysql' && service.ready)} busy={!!busy && !databaseBusy} start={() => serviceAction('start', 'mysql')} open={open} /></RecoveryBoundary></Activity>}
 
         <div hidden={view !== 'logs'}><RecoveryBoundary onError={maximized === 'logs' ? restoreWorkspace : undefined} name="Logs"><LogsPage active={view === 'logs'} busy={!!busy} services={data.services} projects={data.projects} request={logRequest} openFolder={() => open('logs')} /></RecoveryBoundary></div>
+
+        <div hidden={view !== 'nodes'}><RecoveryBoundary onError={maximized === 'node-logs' ? restoreWorkspace : undefined} name="Node Projects"><NodeProjectsPage active={view === 'nodes'} busy={!!busy} /></RecoveryBoundary></div>
 
         {view === 'environment' && <>
           <div className="page-heading"><div><h1>Environment</h1><p>Start and stop local services.</p></div><button className="primary" disabled={anyRunning ? !canControl || !!busy : !usable} onClick={() => serviceAction(anyRunning ? 'stop_all' : 'start_all')}>{busy ? <LoaderCircle className="spin" size={16} /> : anyRunning ? <Square size={14} /> : <Play size={15} fill="currentColor" />}{anyRunning ? 'Stop all' : 'Start all'}</button></div>

@@ -1,3 +1,4 @@
+import { nodeRequest, resetNodeProjects } from './node-projects';
 import { preview } from '../bridge';
 import { terminalRequest } from './terminal';
 import type { MailMessage, NodeStatus, PhpSettings, PhpSettingsView, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
@@ -105,6 +106,7 @@ function running(id: ServiceId, value: boolean) {
 }
 
 export function select(next: Scenario, os: Platform) {
+  resetNodeProjects();
   resetData();
   phpOverrides = {};
   seedMail();
@@ -179,6 +181,8 @@ function syncNode() {
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
+  if (command.startsWith('node_project')) return structuredClone(await nodeRequest(command, args, emit, platform)) as T;
+  if (command === 'pick_folder' && document.querySelector('.node-projects-page [role=dialog]')) return ((await import('./node-projects')).options.root ?? '/Users/Student May/Code/Node café 日本') as T;
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;
   if (command === 'get_php_settings') return phpSettings(String(args.version)) as T;
   if (command === 'node_status') return structuredClone({ ...nodeFixture, installation: nodeInstallation ? { id: nodeInstallation.id, version: nodeInstallation.version, phase: nodeInstallation.phase } : null }) as T;
