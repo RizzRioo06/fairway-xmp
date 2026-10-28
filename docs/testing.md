@@ -101,3 +101,17 @@ its own folders and fnm inventory, dispatches the same runner entrypoint, and
 stops owned runs before disposing the fixture. Its test picker returns those
 folders. It does not automate Finder or execute personal project scripts.
 Keep device acceptance separate using the [manual guide](node-projects-manual-testing.md).
+
+## Node project creation planning
+
+Run the fast planner fixtures with:
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml --lib --all-features --locked node_project_creation
+```
+
+The opt-in `real_creation_planning_uses_inventory` test requires
+two provisioned Node/npm runtimes and must run serially; see
+[Node project creation](node-project-creation.md). It checks all six catalog
+designs with actual tool probes, not dependency installation or generated apps.
+No UI automation is needed for this backend-only stage.

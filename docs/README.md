@@ -11,6 +11,7 @@ Start with the [user guide](../README.md) or [development setup](../CONTRIBUTING
 | [Desktop data browser](data-browser.md) | MySQL/SQLite operations, limits and desktop CLI commands |
 | [Node tools](node-tools.md) | Native fnm, existing Node detection, activation, storage and removal |
 | [Node Projects](node-projects.md) | macOS Node workspace, registry, runtime isolation, owned execution and bounded logs |
+| [Node project creation](node-project-creation.md) | Versioned catalog, read-only plans, runtime compatibility and Stage 1 limits |
 | [Node Projects Stage 5 verification](node-projects-stage5-verification.md) | Integration evidence, metadata fix, discovery timeout investigation and release limitations |
 | [Node Projects manual testing](node-projects-manual-testing.md) | Isolated macOS launch, disposable fixtures, acceptance checks and issue reporting |
 | [PostgreSQL clients](postgres-client-support.md) | Connecting PHP applications to a user-supplied server |

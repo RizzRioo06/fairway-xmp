@@ -44,6 +44,12 @@ pub(crate) fn inspect(layout: &Layout) -> Context {
     context
 }
 
+/// Dry-run discovery must not execute user shell startup files.
+#[cfg(target_os = "macos")]
+pub(crate) fn inspect_process_environment(layout: &Layout) -> Context {
+    from_environment(layout, &std::env::vars_os().collect::<Vec<_>>())
+}
+
 fn from_environment(layout: &Layout, environment: &[(OsString, OsString)]) -> Context {
     let directory = value(environment, "FNM_DIR").unwrap_or_else(|| {
         #[cfg(windows)]

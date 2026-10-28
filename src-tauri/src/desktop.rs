@@ -18,6 +18,7 @@ use tauri::{Emitter, Manager as _, State};
 use tauri_plugin_updater::UpdaterExt;
 
 mod node_project_commands;
+mod node_project_creation_commands;
 
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
@@ -1328,6 +1329,7 @@ pub fn run() {
             let event_app = app.handle().clone();
             nodes.observe_runs(move |status| { let _ = event_app.emit("node-project-run-status", status); });
             app.manage(nodes);
+            app.manage(Arc::new(crate::node_project_creation::NodeProjectCreation::new(startup.layout.clone())));
             if let Some(layout) = &startup.layout { app.manage(crate::logs::LogDirectory::new(layout.data.join("logs"))); }
             app.manage(Arc::new(Mutex::new(startup)));
             app.manage(DesktopControl::default());
@@ -1393,6 +1395,9 @@ pub fn run() {
             read_logs,
             cli_integration,
             node_status,
+            node_project_creation_commands::node_project_templates,
+            node_project_creation_commands::node_project_creation_plan,
+            node_project_creation_commands::node_project_creation_validate_plan,
             node_project_commands::node_projects_snapshot,
             node_project_commands::node_project_inspect,
             node_project_commands::node_project_prepare_runtime,

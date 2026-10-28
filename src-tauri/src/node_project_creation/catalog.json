@@ -1,0 +1,392 @@
+{
+  "schemaVersion": 1,
+  "revision": "1",
+  "templates": [
+    {
+      "id": "node-js",
+      "revision": "1",
+      "title": "Plain Node.js JavaScript",
+      "language": "javascript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "src/index.js",
+        "test/server.test.js"
+      ],
+      "scripts": {
+        "dev": "node --watch src/index.js",
+        "start": "node src/index.js",
+        "test": "node --test"
+      },
+      "dependencies": [],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://nodejs.org/api/http.html",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    },
+    {
+      "id": "node-ts",
+      "revision": "1",
+      "title": "Plain Node.js TypeScript",
+      "language": "typescript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "src/index.ts",
+        "tsconfig.json"
+      ],
+      "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+      },
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "5.9.3",
+          "development": true,
+          "nodeRange": ">=14.17",
+          "license": "Apache-2.0",
+          "metadataUrl": "https://registry.npmjs.org/typescript/5.9.3"
+        },
+        {
+          "name": "tsx",
+          "version": "4.23.15",
+          "development": true,
+          "nodeRange": ">=18.0.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/tsx/4.23.15"
+        },
+        {
+          "name": "@types/node",
+          "version": "22.13.10",
+          "development": true,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@types%2fnode/22.13.10"
+        }
+      ],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://www.typescriptlang.org/docs/",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    },
+    {
+      "id": "hono-ts",
+      "revision": "1",
+      "title": "Hono API TypeScript",
+      "language": "typescript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "src/index.ts",
+        "tsconfig.json"
+      ],
+      "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+      },
+      "dependencies": [
+        {
+          "name": "hono",
+          "version": "4.13.14",
+          "development": false,
+          "nodeRange": ">=16.9.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/hono/4.13.14"
+        },
+        {
+          "name": "@hono/node-server",
+          "version": "2.1.5",
+          "development": false,
+          "nodeRange": ">=20",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@hono%2fnode-server/2.1.5"
+        },
+        {
+          "name": "typescript",
+          "version": "5.9.3",
+          "development": true,
+          "nodeRange": ">=14.17",
+          "license": "Apache-2.0",
+          "metadataUrl": "https://registry.npmjs.org/typescript/5.9.3"
+        },
+        {
+          "name": "tsx",
+          "version": "4.23.15",
+          "development": true,
+          "nodeRange": ">=18.0.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/tsx/4.23.15"
+        },
+        {
+          "name": "@types/node",
+          "version": "22.13.10",
+          "development": true,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@types%2fnode/22.13.10"
+        }
+      ],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://hono.dev/docs/getting-started/nodejs",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    },
+    {
+      "id": "express-js",
+      "revision": "1",
+      "title": "Express API",
+      "language": "javascript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "src/index.js",
+        "test/api.test.js"
+      ],
+      "scripts": {
+        "dev": "node --watch src/index.js",
+        "start": "node src/index.js",
+        "test": "node --test"
+      },
+      "dependencies": [
+        {
+          "name": "express",
+          "version": "5.3.0",
+          "development": false,
+          "nodeRange": ">=18",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/express/5.3.0"
+        }
+      ],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://expressjs.com/en/starter/hello-world.html",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    },
+    {
+      "id": "react-vite-js",
+      "revision": "1",
+      "title": "React + Vite JavaScript",
+      "language": "javascript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "index.html",
+        "src/main.jsx",
+        "src/App.jsx",
+        "src/index.css",
+        "vite.config.js"
+      ],
+      "scripts": {
+        "dev": "vite --host 127.0.0.1",
+        "build": "vite build",
+        "preview": "vite preview --host 127.0.0.1"
+      },
+      "dependencies": [
+        {
+          "name": "react",
+          "version": "19.2.8",
+          "development": false,
+          "nodeRange": ">=0.10.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/react/19.2.8"
+        },
+        {
+          "name": "react-dom",
+          "version": "19.2.8",
+          "development": false,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/react-dom/19.2.8"
+        },
+        {
+          "name": "vite",
+          "version": "7.3.6",
+          "development": true,
+          "nodeRange": "^20.19.0 || >=22.12.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/vite/7.3.6"
+        },
+        {
+          "name": "@vitejs/plugin-react",
+          "version": "5.2.0",
+          "development": true,
+          "nodeRange": "^20.19.0 || >=22.12.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@vitejs%2fplugin-react/5.2.0"
+        }
+      ],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    },
+    {
+      "id": "react-vite-ts",
+      "revision": "1",
+      "title": "React + Vite TypeScript",
+      "language": "typescript",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "packageManager": {
+        "name": "npm",
+        "versionRange": ">=10.0.0 <12"
+      },
+      "qualification": "planningOnly",
+      "lockfileStatus": "notPrepared",
+      "intendedFiles": [
+        "package.json",
+        ".node-version",
+        ".gitignore",
+        "README.md",
+        "index.html",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/index.css",
+        "vite.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json"
+      ],
+      "scripts": {
+        "dev": "vite --host 127.0.0.1",
+        "build": "tsc -b && vite build",
+        "preview": "vite preview --host 127.0.0.1"
+      },
+      "dependencies": [
+        {
+          "name": "react",
+          "version": "19.2.8",
+          "development": false,
+          "nodeRange": ">=0.10.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/react/19.2.8"
+        },
+        {
+          "name": "react-dom",
+          "version": "19.2.8",
+          "development": false,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/react-dom/19.2.8"
+        },
+        {
+          "name": "vite",
+          "version": "7.3.6",
+          "development": true,
+          "nodeRange": "^20.19.0 || >=22.12.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/vite/7.3.6"
+        },
+        {
+          "name": "@vitejs/plugin-react",
+          "version": "5.2.0",
+          "development": true,
+          "nodeRange": "^20.19.0 || >=22.12.0",
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@vitejs%2fplugin-react/5.2.0"
+        },
+        {
+          "name": "typescript",
+          "version": "5.9.3",
+          "development": true,
+          "nodeRange": ">=14.17",
+          "license": "Apache-2.0",
+          "metadataUrl": "https://registry.npmjs.org/typescript/5.9.3"
+        },
+        {
+          "name": "@types/react",
+          "version": "19.2.18",
+          "development": true,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@types%2freact/19.2.18"
+        },
+        {
+          "name": "@types/react-dom",
+          "version": "19.2.7",
+          "development": true,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@types%2freact-dom/19.2.7"
+        },
+        {
+          "name": "@types/node",
+          "version": "22.13.10",
+          "development": true,
+          "nodeRange": null,
+          "license": "MIT",
+          "metadataUrl": "https://registry.npmjs.org/@types%2fnode/22.13.10"
+        }
+      ],
+      "provenance": {
+        "kind": "fairwayAuthoredDesign",
+        "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
+        "upstreamRevision": null,
+        "license": "MIT",
+        "note": "Catalog design only; no upstream template files are vendored. Generated assets and full dependency lock require separate review before generation/installation."
+      }
+    }
+  ]
+}

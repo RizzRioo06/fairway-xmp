@@ -13,6 +13,7 @@ pub mod mail;
 #[cfg(feature = "desktop")]
 pub mod mail_images;
 pub mod manager;
+pub mod node_project_creation;
 pub mod node_projects;
 #[cfg(any(target_os = "macos", windows))]
 pub mod node_tools;

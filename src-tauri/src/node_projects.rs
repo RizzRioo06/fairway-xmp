@@ -18,6 +18,8 @@ mod manifest;
 pub use environment::ChildEnvironment;
 pub use isolation::{NpmRuntime, PreparedRuntime, RuntimePreparation};
 mod runtime;
+pub(crate) use isolation::prepare_creation_runtime;
+pub(crate) use runtime::{discover_planning, Inventory};
 mod store;
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -217,6 +217,35 @@ fn inventory(
     detected: Option<&NodeBinary>,
     store: &std::path::Path,
 ) -> Vec<NodeInstallation> {
+    inventory_using(layout, detected, store, probe)
+}
+
+/// Reuse the inventory scanner, without a login shell or fnm invocation.
+#[cfg(target_os = "macos")]
+pub(crate) fn planning_inventory(layout: &Layout) -> Vec<NodeInstallation> {
+    let context = crate::fnm_setup::inspect_process_environment(layout);
+    inventory_using(layout, None, &context.directory, |path| {
+        let mut command = crate::process::command(path);
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+            .env("HOME", &layout.home)
+            .current_dir(&layout.home)
+            .args([
+                "-p",
+                "JSON.stringify({version:process.version,path:process.execPath})",
+            ]);
+        serde_json::from_str(&output(command, 5, &|| false).ok()?).ok()
+    })
+}
+
+#[cfg(unix)]
+fn inventory_using(
+    layout: &Layout,
+    detected: Option<&NodeBinary>,
+    store: &std::path::Path,
+    mut probe: impl FnMut(PathBuf) -> Option<NodeBinary>,
+) -> Vec<NodeInstallation> {
     fn children(path: PathBuf) -> Vec<PathBuf> {
         fs::read_dir(path)
             .into_iter()

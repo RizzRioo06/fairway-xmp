@@ -5,7 +5,7 @@ use crate::config::Layout;
 use std::path::Path;
 
 #[derive(Default)]
-pub(super) struct Inventory {
+pub(crate) struct Inventory {
     pub choices: Vec<RuntimeChoice>,
     pub preferred_id: Option<String>,
     pub error: Option<String>,
@@ -109,6 +109,27 @@ pub(super) fn discover(layout: &Layout) -> Inventory {
 #[cfg(not(target_os = "macos"))]
 pub(super) fn discover(_: &Layout) -> Inventory {
     Inventory::default()
+}
+
+pub(crate) fn discover_planning(layout: &Layout) -> Inventory {
+    #[cfg(target_os = "macos")]
+    {
+        let mut choices: Vec<_> = crate::node_tools::planning_inventory(layout)
+            .into_iter()
+            .filter_map(|node| choice(node.node.path, node.node.version, node.source))
+            .collect();
+        choices.sort_by(|a, b| a.id.cmp(&b.id));
+        choices.dedup_by(|a, b| a.id == b.id);
+        Inventory {
+            choices,
+            ..Default::default()
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = layout;
+        Inventory::default()
+    }
 }
 
 pub(super) fn suggestion(hints: &VersionHints, inventory: &Inventory) -> Option<String> {

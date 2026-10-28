@@ -335,8 +335,80 @@ fn prepare_with(
     inspection: &Inspection,
     registry_revision: String,
     inherited: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    probe: impl FnMut(Command) -> Result<String>,
+) -> Result<PreparedRuntime> {
+    prepare_at_with(
+        layout,
+        project,
+        inspection,
+        (registry_revision, None),
+        inherited,
+        probe,
+    )
+}
+
+/// An uncreated destination has no manifest or working directory. Validate the
+/// same tools against catalog constraints using its existing parent as cwd.
+pub(crate) fn prepare_creation_runtime(
+    layout: &Layout,
+    runtime: ProjectRuntime,
+    parent: &Path,
+    destination: &Path,
+    node_range: &str,
+    npm_range: &str,
+) -> Result<RuntimePreparation> {
+    let root = parent
+        .to_str()
+        .ok_or_else(|| npm_error("The parent path must be UTF-8."))?
+        .to_owned();
+    let project = ProjectConfig {
+        id: String::new(),
+        name: String::new(),
+        root: root.clone(),
+        script: String::new(),
+        runtime,
+        open_url: None,
+    };
+    let inspection = Inspection {
+        root,
+        name: String::new(),
+        scripts: Default::default(),
+        package_manager: super::PackageManagerHint {
+            name: "npm".into(),
+            declaration: Some(format!("npm@{npm_range}")),
+            lockfiles: Vec::new(),
+            npm_supported: true,
+        },
+        version_hints: super::VersionHints {
+            engines_node: Some(node_range.into()),
+            ..Default::default()
+        },
+        manifest_revision: String::new(),
+        warnings: Vec::new(),
+        runtimes: Vec::new(),
+        suggested_runtime_id: None,
+        runtime_error: None,
+    };
+    prepare_at_with(
+        layout,
+        &project,
+        &inspection,
+        (String::new(), Some(destination)),
+        std::env::vars_os(),
+        capture,
+    )
+    .map(|prepared| prepared.summary)
+}
+
+fn prepare_at_with(
+    layout: &Layout,
+    project: &ProjectConfig,
+    inspection: &Inspection,
+    context: (String, Option<&Path>),
+    inherited: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
     mut probe: impl FnMut(Command) -> Result<String>,
 ) -> Result<PreparedRuntime> {
+    let (registry_revision, uncreated_root) = context;
     if !inspection.package_manager.npm_supported {
         return Err(Error::new(
             ErrorCode::UnsupportedPackageManager,
@@ -363,16 +435,17 @@ fn prepare_with(
             "The saved Node path now resolves to a different executable.",
         ));
     }
-    if node.starts_with(&root) {
+    let tool_boundary = uncreated_root.unwrap_or(&root);
+    if node.starts_with(tool_boundary) {
         return Err(Error::new(
             ErrorCode::RuntimeUnavailable,
             "Select a runtime installed outside the imported project.",
         ));
     }
     let node_before = fingerprint(&node)?;
-    let npm = npm_pair(&node, &root)?;
+    let npm = npm_pair(&node, tool_boundary)?;
     let files_before = [fingerprint(&npm.cli)?, fingerprint(&npm.metadata)?];
-    reject_project_shims(&root, &node, &npm.cli)?;
+    reject_project_shims(tool_boundary, &node, &npm.cli)?;
     let env = environment::build(&layout.home, &root, &node, &npm.cli, inherited)?;
     let mut requirements = vec![Requirement {
         source: "npm engines.node",
@@ -418,7 +491,9 @@ fn prepare_with(
         node_path: &project.runtime.node_path,
         version: &project.runtime.version,
         npm_version: &npm.version,
-        root: &project.root,
+        root: tool_boundary
+            .to_str()
+            .ok_or_else(|| npm_error("The project boundary must be UTF-8."))?,
         requirements,
     };
     let mut command = environment::command(&node, &npm.root, &env);
@@ -463,12 +538,12 @@ fn prepare_with(
             "The npm installation changed during preparation.",
         ));
     }
-    if npm_pair(&node, &root)? != npm {
+    if npm_pair(&node, tool_boundary)? != npm {
         return Err(npm_error(
             "The paired npm link or metadata changed during preparation.",
         ));
     }
-    reject_project_shims(&root, &node, &npm.cli)?;
+    reject_project_shims(tool_boundary, &node, &npm.cli)?;
     let receipt = format!("{node_before:?}{files_before:?}");
     Ok(PreparedRuntime {
         summary: RuntimePreparation {
