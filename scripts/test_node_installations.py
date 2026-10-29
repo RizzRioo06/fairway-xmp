@@ -2,7 +2,7 @@
 """Offline native npm regressions using genuine tarballs from qualification caches.
 
 This server never fetches from the network. Supply a disposable cache produced
-by explicit public-registry qualification, two installed Node executables, and
+by explicit public-registry qualification, two or more installed Node executables, and
 an already-built node_projects_runner example (with node-install-fixtures).
 No personal npm configuration/cache or installed Fairway bundle is changed.
 """
@@ -81,8 +81,8 @@ def main():
     parser.add_argument('--node', type=Path, action='append', required=True)
     parser.add_argument('--test-filter', default='node_project_creation::installation')
     args = parser.parse_args()
-    if len(args.node) != 2:
-        parser.error('Supply Node 22 and Node 24 with two --node arguments')
+    if len(args.node) < 2:
+        parser.error('Supply at least two qualified Node runtimes with --node arguments')
     capabilities = json.loads(subprocess.check_output([args.runner.resolve(), "--fixture-capabilities"], text=True, timeout=10))
     if not capabilities.get("nodeInstallationMirrors"):
         parser.error("Rebuild node_projects_runner with --features node-install-fixtures; copy it outside Cargo output before builds with other features")
@@ -103,7 +103,7 @@ def main():
     try:
         subprocess.run(['cargo', 'test', '--manifest-path', 'src-tauri/Cargo.toml', '--lib',
                         '--features', 'node-install-fixtures', args.test_filter,
-                        '--', '--include-ignored', '--nocapture', *excluded], cwd=repo, env=env, check=True, timeout=600)
+                        '--', '--include-ignored', '--nocapture', '--test-threads=1', *excluded], cwd=repo, env=env, check=True, timeout=600)
     finally:
         unavailable.close()
         for http in servers.values():

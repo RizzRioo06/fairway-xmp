@@ -5,5 +5,11 @@ import { app } from './app.js';
 if (existsSync('.env')) loadEnvFile('.env');
 const host = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 3000);
-const server = app.listen(port, host, () => console.log(`Express listening at http://${host}:${port}`));
+const server = app.listen(port, host, () => {
+  const address = server.address();
+  if (address && typeof address === 'object') {
+    const hostname = address.address.includes(':') ? `[${address.address}]` : address.address;
+    console.log(`Express listening at http://${hostname}:${address.port}`);
+  }
+});
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close());

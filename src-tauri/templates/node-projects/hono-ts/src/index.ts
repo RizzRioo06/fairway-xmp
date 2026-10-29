@@ -9,5 +9,8 @@ app.get('/', c => c.json({ message: 'Hello from Hono' }));
 app.get('/health', c => c.json({ status: 'ok' }));
 const hostname = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 3000);
-const server = serve({ fetch: app.fetch, hostname, port }, info => console.log(`Hono listening at http://${hostname}:${info.port}`));
+const server = serve({ fetch: app.fetch, hostname, port }, info => {
+  const host = info.address.includes(':') ? `[${info.address}]` : info.address;
+  console.log(`Hono listening at http://${host}:${info.port}`);
+});
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close());

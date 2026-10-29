@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "revision": "3",
+  "revision": "4",
   "templates": [
     {
       "id": "node-js",
-      "revision": "3",
+      "revision": "4",
       "title": "Plain Node.js JavaScript",
       "language": "javascript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -39,16 +39,16 @@
         "referenceUrl": "https://nodejs.org/api/http.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "A small HTTP server with no framework dependencies. Learn Node.js and JavaScript basics."
     },
     {
       "id": "node-ts",
-      "revision": "3",
+      "revision": "4",
       "title": "Plain Node.js TypeScript",
       "language": "typescript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -104,16 +104,16 @@
         "referenceUrl": "https://www.typescriptlang.org/docs/",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "A small HTTP server with TypeScript, type checking and a development watcher."
     },
     {
       "id": "hono-ts",
-      "revision": "3",
+      "revision": "4",
       "title": "Hono API TypeScript",
       "language": "typescript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -185,16 +185,16 @@
         "referenceUrl": "https://hono.dev/docs/getting-started/nodejs",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "A lightweight typed API with Hono, routing and a health endpoint."
     },
     {
       "id": "express-js",
-      "revision": "3",
+      "revision": "4",
       "title": "Express API",
       "language": "javascript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -235,16 +235,16 @@
         "referenceUrl": "https://expressjs.com/en/starter/hello-world.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "A familiar JavaScript API starter with Express routing and a health endpoint."
     },
     {
       "id": "react-vite-js",
-      "revision": "3",
+      "revision": "4",
       "title": "React + Vite JavaScript",
       "language": "javascript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -311,16 +311,16 @@
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "An interactive React website with Vite's fast development server, using JavaScript."
     },
     {
       "id": "react-vite-ts",
-      "revision": "3",
+      "revision": "4",
       "title": "React + Vite TypeScript",
       "language": "typescript",
-      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
+      "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27",
       "packageManager": {
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
@@ -422,7 +422,7 @@
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
+        "note": "Fairway-authored local assets, revision 4, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       },
       "description": "An interactive React website with Vite and TypeScript for typed components."
     }

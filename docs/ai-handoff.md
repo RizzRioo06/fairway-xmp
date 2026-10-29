@@ -1,54 +1,33 @@
 # AI handoff
 
-- Repository: `/Users/rioo/projects/fairway-xmp-personal`; personal fork
-  `RizzRioo06/fairway-xmp`.
-- Current branch: `feature/node-project-templates`.
-- Latest implementation commit: `822c54334eaca48af137136c26d59d8f7afaf2ca`
-  (Stage 4). This documentation-only handoff follows it; use `git log -1` for
-  the latest checkout commit.
-- **Automatic Node Project Creation Stages 1–4 are complete. Stage 5 has not started.**
-  This is separate from the earlier completed Node Projects integration.
+- Repository: `/Users/rioo/projects/fairway-xmp-personal`, personal fork
+  `RizzRioo06/fairway-xmp`; branch `feature/node-project-templates`.
+- Stage 5 follows checkpoint `c9e614c`. Use `git log -1` for the latest commit.
+- **Automatic Node Project Creation Stages 1–5 implementation and automated
+  verification are complete; real Mac acceptance remains partial.**
 
-The six-template catalog supports plain Node JavaScript/TypeScript, Hono
-TypeScript, Express JavaScript, and React + Vite JavaScript/TypeScript. Native
-plans validate names, destinations and paired Node/npm without creating files.
-Confirmed jobs generate privately, install pinned dependencies with lifecycle
-scripts disabled, verify, publish without overwrite and register. Journals support
-safe recovery. The wizard includes consent, actual progress, bounded logs,
-cancellation, reload continuity and stopped-card handoff; servers never auto-start.
+Actual retained manual logs confirmed `my-react-vite` failed because port 5173
+was already occupied by the other Vite app. Revision 4 templates allow Vite
+available-port fallback. Native run metadata reports the emitted loopback URL;
+cards open that current address, label readiness unchecked, and retain stopped
+manual URL editing. API starters report actual socket ports, including port zero.
+Existing projects/configs are never rewritten. All six variants qualified with
+Node 22.23.4/npm 10.9.9, 24.20.0/npm 11.19.0 and 26.12.1/npm 11.20.0 on macOS arm64.
+Pinned dependency graphs and security/filesystem/process ownership rules remain.
 
-Relevant locations:
+- Backend: `src-tauri/src/node_project_creation/`, `node_projects/local_url.rs`,
+  `node_projects/execution.rs`; assets: `src-tauri/templates/node-projects/`.
+- UI: `src/node-projects/`; wizard: `src/node-project-creation/`.
+- [Stage 5 evidence/limits](node-creation-stage5-verification.md),
+  [architecture/safety](node-project-creation.md),
+  [manual acceptance](node-creation-manual-testing.md).
 
-- Backend: `src-tauri/src/node_project_creation.rs` and `node_project_creation/`;
-  assets/locks: `src-tauri/templates/node-projects/`.
-- IPC: `src-tauri/src/desktop/node_project_creation_commands.rs`.
-- Wizard/contracts: `src/node-project-creation/`; existing import/runtime/execution:
-  `src/node-projects/` and `src-tauri/src/node_projects/`.
-- [Architecture and safety](node-project-creation.md),
-  [Stage 3 evidence](node-installation-verification.md),
-  [Stage 4 evidence and file inventory](node-creation-wizard-verification.md).
+One install runs at a time. Uncertain partial stages remain; retry needs a fresh
+reviewed workspace. No automatic script execution, project migration or readiness
+claim was added. Windows/Linux native behavior, other architectures, signing,
+installer/updater replacement, power loss and remaining Mac GUI cases are unverified.
+No GUI automation or installed-app/personal-project mutation was performed.
 
-Native creation/installation is macOS-first. Windows/Linux native behavior, other
-CPU architectures, signed installers, actual updater replacement and power-loss
-behavior remain unverified. One installation runs at a time; uncertain partial
-staging is retained and retries require a fresh reviewed workspace. Automated
-browser fixtures do not establish real native-dialog behavior.
-
-**Mac acceptance is partial:** the user generated and ran Hono + TypeScript and
-React + Vite TypeScript with Node 24.20.0. Remaining acceptance uses
-[the isolated manual guide](node-creation-manual-testing.md).
-
-Recorded Stage 5 priorities (not implemented or investigated yet):
-
-- Automatic editable Local URLs and clickable card Open actions must reflect
-  actual configured/detected host and port; Running is not application Ready.
-- `my-react-vite` exited 1 while `my-vite-typescript` ran. A port conflict is
-  suspected, not confirmed. Inspect configuration/scripts/logs; test simultaneous
-  Vite projects on different available ports without killing other applications.
-- Node 26 was rejected by the current template range; qualify each template's
-  dependencies/build before considering support. Node 24.20.0 worked.
-
-See [detailed manual findings](node-creation-wizard-verification.md#manual-feedback-for-stage-5).
-Next: collect remaining manual results; once Stage 5 is authorized, reproduce
-reported issues, confirm causes and make minimal tested fixes. Do not begin
-Stage 5 or merge main now. Read [AGENTS.md](../AGENTS.md) first.
+Next: user performs remaining isolated Mac acceptance and reports observations.
+Do not merge main, push upstream, start PostgreSQL integration or advance scope
+without a new request. Read [AGENTS.md](../AGENTS.md) first.

@@ -250,6 +250,8 @@ impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = self.service.stop_installations();
         self.service.disconnect_installations();
+        let _ = self.nodes.stop_all_runs();
+        self.nodes.disconnect_runs();
         let _ = fs::remove_dir_all(&self.root);
     }
 }
@@ -534,10 +536,10 @@ fn copy_tree(source: &Path, target: &Path) {
 #[cfg(feature = "node-install-fixtures")]
 #[test]
 #[ignore = "Requires explicit offline genuine tarball mirror, two real runtimes and runner"]
-fn genuine_npm_ci_all_six_templates_node22_node24_and_registry_failures() {
+fn genuine_npm_ci_all_six_templates_qualified_runtimes_and_registry_failures() {
     let nodes: Vec<_> =
         std::env::split_paths(&std::env::var_os("FAIRWAY_TEST_NODE_RUNTIMES").unwrap()).collect();
-    assert_eq!(nodes.len(), 2);
+    assert!(nodes.len() >= 2);
     for node in &nodes {
         for template in creation::catalog::catalog().templates {
             let f = Fixture::new(node, None);
@@ -547,13 +549,10 @@ fn genuine_npm_ci_all_six_templates_node22_node24_and_registry_failures() {
             let start = f.start(&plan);
             let done = f.wait(&start, true);
             if done.state != InstallState::Completed {
-                let logs = f
-                    .service
-                    .installation_logs(InstallLogRequest {
-                        job_id: done.job_id.clone(),
-                        after_cursor: 0,
-                    })
-                    .unwrap();
+                let logs = f.service.installation_logs(InstallLogRequest {
+                    job_id: done.job_id.clone(),
+                    after_cursor: 0,
+                });
                 panic!(
                     "{} {}: {done:?} {logs:?}",
                     template.id, done.runtime.version
@@ -570,6 +569,7 @@ fn genuine_npm_ci_all_six_templates_node22_node24_and_registry_failures() {
             // Existing Node controller executes only these reviewed disposable fixtures,
             // after explicit confirmation; installation itself starts no application.
             qualify_generated(&f, &plan);
+            println!("Qualified {} on {}", template.id, done.runtime.version);
         }
     }
     for mode in ["INTEGRITY", "ERROR"] {
@@ -715,11 +715,60 @@ fn qualify_generated(f: &Fixture, plan: &CreationPlan) {
     }
     f.nodes
         .stop(StopRequest {
-            id,
+            id: id.clone(),
             run_id: run.run_id,
         })
         .unwrap();
     assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
+    // API start scripts must run built output too. Port zero verifies reporting
+    // the kernel-assigned port rather than echoing a configured zero/default.
+    if plan.template.scripts.contains_key("start") {
+        fs::write(
+            Path::new(&plan.destination).join(".env"),
+            "HOST=127.0.0.1\nPORT=0\n",
+        )
+        .unwrap();
+        script(f, &id, "start");
+        let run = f.nodes.start(request()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let address = loop {
+            let status = f
+                .nodes
+                .runs()
+                .runs
+                .into_iter()
+                .find(|r| r.run_id == run.run_id)
+                .unwrap();
+            assert!(
+                !matches!(status.state, RunState::Failed | RunState::Exited),
+                "{status:?}"
+            );
+            if let Some(url) = status.reported_url {
+                break url;
+            }
+            assert!(Instant::now() < deadline, "No actual port reported");
+            thread::sleep(Duration::from_millis(25));
+        };
+        let authority = address.strip_prefix("http://127.0.0.1:").unwrap();
+        assert!(authority.parse::<u16>().unwrap() > 0);
+        let mut stream = TcpStream::connect(format!("127.0.0.1:{authority}")).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        stream
+            .write_all(b"GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n")
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.contains("\"status\":\"ok\""), "{response}");
+        f.nodes
+            .stop(StopRequest {
+                id,
+                run_id: run.run_id,
+            })
+            .unwrap();
+        assert!(TcpStream::connect(format!("127.0.0.1:{authority}")).is_err());
+    }
 }
 
 #[test]
@@ -1214,5 +1263,181 @@ fn progress_contract_is_optional_for_old_jobs_and_names_only_native_phases() {
         (InstallProgress::Complete, "complete"),
     ] {
         assert_eq!(serde_json::to_value(phase).unwrap(), name);
+    }
+}
+
+#[cfg(feature = "node-install-fixtures")]
+#[test]
+#[ignore = "Requires genuine offline tarballs and explicitly authorized generated Vite execution"]
+fn generated_vite_concurrency_reports_actual_ports_and_stops_independently() {
+    use node_projects::{RunState, StartRequest, StopRequest};
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    fn start(f: &Fixture, plan: &CreationPlan) -> node_projects::RunStatus {
+        f.nodes
+            .test_creation_runner(std::env::var_os("FAIRWAY_TEST_NODE_RUNNER").unwrap().into());
+        let initial = f
+            .nodes
+            .start(StartRequest {
+                id: plan.id.clone(),
+                expected_revision: f.nodes.snapshot().revision.unwrap(),
+                manifest_revision: node_projects::inspect_generated_manifest(&plan.destination)
+                    .unwrap()
+                    .manifest_revision,
+                confirmed: true,
+            })
+            .unwrap();
+        assert!(initial.reported_url.is_none());
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let run = f
+                .nodes
+                .runs()
+                .runs
+                .into_iter()
+                .find(|r| r.run_id == initial.run_id)
+                .unwrap();
+            assert!(
+                !matches!(run.state, RunState::Failed | RunState::Exited),
+                "{run:?}"
+            );
+            if run.reported_url.is_some() {
+                return run;
+            }
+            assert!(Instant::now() < deadline, "No URL: {run:?}");
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+    fn response(url: &str) -> String {
+        let authority = url.strip_prefix("http://").unwrap().trim_end_matches('/');
+        let mut stream = TcpStream::connect(authority).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        stream
+            .write_all(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+            .unwrap();
+        let mut text = String::new();
+        stream.read_to_string(&mut text).unwrap();
+        assert!(text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200"));
+        text
+    }
+    for node in std::env::split_paths(&std::env::var_os("FAIRWAY_TEST_NODE_RUNTIMES").unwrap()) {
+        let first = Fixture::new(&node, None);
+        let mut second = Fixture::new(&node, None);
+        // Both registrations/runs belong to one Fairway Node controller.
+        second.nodes = first.nodes.clone();
+        let mut plans = Vec::new();
+        for (f, id, name) in [
+            (&first, "react-vite-ts", "parallel-typescript"),
+            (&second, "react-vite-js", "parallel-javascript"),
+        ] {
+            *f.service.installation.fixture_registry.lock().unwrap() =
+                Some(std::env::var("FAIRWAY_TEST_NPM_SUCCESS").unwrap());
+            let plan = f.plan(id, name);
+            let done = f.wait(&f.start(&plan), true);
+            assert_eq!(done.state, InstallState::Completed, "{done:?}");
+            plans.push(plan);
+        }
+        assert_eq!(first.nodes.snapshot().projects.len(), 2);
+        // Unmodified generated scripts/configs compete for the same preferred port.
+        let a = start(&first, &plans[0]);
+        // Reproduce the previous strict-port failure without touching other listeners.
+        let path = Path::new(&plans[1].destination).join("package.json");
+        let original = fs::read(&path).unwrap();
+        let mut package: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        let port = a
+            .reported_url
+            .as_ref()
+            .unwrap()
+            .trim_end_matches('/')
+            .rsplit(':')
+            .next()
+            .unwrap();
+        package["scripts"]["dev"] =
+            format!("vite --host 127.0.0.1 --port {port} --strictPort").into();
+        fs::write(&path, serde_json::to_vec(&package).unwrap()).unwrap();
+        second
+            .nodes
+            .test_creation_runner(std::env::var_os("FAIRWAY_TEST_NODE_RUNNER").unwrap().into());
+        let failed = second
+            .nodes
+            .start(StartRequest {
+                id: plans[1].id.clone(),
+                expected_revision: second.nodes.snapshot().revision.unwrap(),
+                manifest_revision: node_projects::inspect_generated_manifest(&plans[1].destination)
+                    .unwrap()
+                    .manifest_revision,
+                confirmed: true,
+            })
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            let status = second
+                .nodes
+                .runs()
+                .runs
+                .into_iter()
+                .find(|r| r.run_id == failed.run_id)
+                .unwrap();
+            if status.state == RunState::Failed {
+                assert_eq!(status.exit_code, Some(1));
+                assert!(status.reported_url.is_none());
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(25));
+        }
+        let logs = second
+            .nodes
+            .logs(node_projects::LogRequest {
+                id: failed.project_id,
+                run_id: failed.run_id,
+                after_cursor: 0,
+            })
+            .unwrap();
+        assert!(logs
+            .records
+            .iter()
+            .any(|r| r.text.contains(&format!("Port {port} is already in use"))));
+        fs::write(path, original).unwrap();
+        let b = start(&second, &plans[1]);
+        let url_a = a.reported_url.as_ref().unwrap();
+        let url_b = b.reported_url.as_ref().unwrap();
+        assert_ne!(url_a, url_b);
+        assert!(response(url_a).contains("parallel-typescript"));
+        assert!(response(url_b).contains("parallel-javascript"));
+        first
+            .nodes
+            .stop(StopRequest {
+                id: a.project_id.clone(),
+                run_id: a.run_id,
+            })
+            .unwrap();
+        assert!(
+            TcpStream::connect(url_a.strip_prefix("http://").unwrap().trim_end_matches('/'))
+                .is_err()
+        );
+        assert!(response(url_b).contains("parallel-javascript"));
+        let restarted = start(&first, &plans[0]);
+        assert!(response(restarted.reported_url.as_ref().unwrap()).contains("parallel-typescript"));
+        first
+            .nodes
+            .stop(StopRequest {
+                id: restarted.project_id,
+                run_id: restarted.run_id,
+            })
+            .unwrap();
+        second
+            .nodes
+            .stop(StopRequest {
+                id: b.project_id,
+                run_id: b.run_id,
+            })
+            .unwrap();
+        assert!(
+            TcpStream::connect(url_b.strip_prefix("http://").unwrap().trim_end_matches('/'))
+                .is_err()
+        );
     }
 }

@@ -30,3 +30,21 @@ test('typed native failures keep useful recovery instructions', () => {
   assert.match(nodeError({ code: 'requirementConflict', message: 'Mismatch.' }), /satisfying/);
   assert.equal(nodeError(new Error('network')), 'network');
 });
+
+test('local addresses belong to the current running generation and never imply readiness', async () => {
+  const { projectUrl } = await import('../src/node-projects/model.ts');
+  const project = { openUrl: null };
+  const run = { state: 'running', reportedUrl: 'http://127.0.0.1:5174/' } as NodeRunStatus;
+  assert.equal(projectUrl(project), null);
+  assert.equal(projectUrl(project, { ...run, reportedUrl: null }), null);
+  assert.equal(projectUrl(project, run)?.url, run.reportedUrl);
+  assert.match(projectUrl(project, run)!.source, /readiness has not been checked/);
+  for (const state of ['starting', 'stopping', 'stopped', 'exited', 'failed'] as const) {
+    assert.equal(projectUrl(project, { ...run, state }), null);
+  }
+  assert.equal(projectUrl(project, { ...run, reportedUrl: 'https://example.com/' }), null);
+  const manual = { openUrl: 'http://localhost:4200/' };
+  assert.equal(projectUrl(manual)?.url, manual.openUrl);
+  assert.equal(projectUrl(manual, run)?.url, run.reportedUrl);
+  assert.equal(projectUrl(manual, { ...run, state: 'stopped' })?.url, manual.openUrl);
+});

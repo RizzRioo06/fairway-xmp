@@ -51,6 +51,9 @@ pub struct RunStatus {
     pub error: Option<Error>,
     pub forced_cleanup: bool,
     pub runtime: ProjectRuntime,
+    /// Current run's reported loopback address; no HTTP readiness check is implied.
+    #[serde(default)]
+    pub reported_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -464,6 +467,7 @@ impl Executions {
             error: None,
             forced_cleanup: false,
             runtime,
+            reported_url: None,
         };
         let log = RunLog::new(&launch.data, &launch.id, &launch.run_id)?;
         let metadata = run_logs::directory(&launch.data, &launch.id)?.join("last-run.json");
@@ -590,6 +594,7 @@ fn native_worker(run: Arc<Run>, executable: PathBuf, launch: Launch) {
         let mut reader = BufReader::new(socket);
         let mut finished = false;
         let mut forced = false;
+        let mut reported = super::local_url::ReportedUrl::default();
         loop {
             let event = runner::receive::<Event>(&mut reader).map_err(exec_error)?;
             let Some(event) = event else {
@@ -608,6 +613,13 @@ fn native_worker(run: Arc<Run>, executable: PathBuf, launch: Launch) {
                             ErrorCode::ExecutionFailed,
                             "Invalid runner output frame.",
                         ));
+                    }
+                    if stream == LogStream::Stdout {
+                        if let Some(url) = reported.output(&data) {
+                            if run.status().reported_url.as_ref() != Some(&url) {
+                                run.change(|s| s.reported_url = Some(url));
+                            }
+                        }
                     }
                     run.log
                         .lock()
@@ -708,6 +720,7 @@ mod finite_completion_tests {
                     },
                     forced_cleanup: false,
                     runtime: runtime.clone(),
+                    reported_url: None,
                 }),
                 active: AtomicBool::new(true),
                 stopping: AtomicBool::new(false),

@@ -31,7 +31,7 @@ fn prepare(
 ) -> node_projects::Result<RuntimePreparation> {
     assert!(parent.is_dir());
     assert!(destination.is_absolute());
-    assert_eq!(node_range, ">=22.12.0 <23 || >=24.0.0 <25");
+    assert_eq!(node_range, ">=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27");
     assert_eq!(npm_range, ">=10.0.0 <12");
     if runtime.version == "v18.0.0" {
         return Err(node_projects::Error {
@@ -134,7 +134,7 @@ fn catalog_has_six_versioned_local_templates_and_exact_dependencies() {
     let mut ids = std::collections::HashSet::new();
     for template in catalog.templates {
         assert!(ids.insert(template.id));
-        assert_eq!(template.revision, "3");
+        assert_eq!(template.revision, "4");
         assert_eq!(template.qualification, "scriptDisabledInstall");
         assert_eq!(template.lockfile_status, "npmGenerated");
         assert_eq!(template.package_manager.name, "npm");

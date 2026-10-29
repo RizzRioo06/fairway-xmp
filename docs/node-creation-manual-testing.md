@@ -1,8 +1,8 @@
 # Node creation wizard — isolated Mac acceptance
 
 Use only a disposable debug profile. Do not replace or update installed Fairway,
-change a global Node default, or select a normal project folder. Stage 5 is not
-started by these checks.
+change a global Node default, or select a normal project folder. These checks
+complete real Mac acceptance after Stage 5 automated verification.
 
 ## Prepare and launch
 
@@ -11,7 +11,8 @@ started by these checks.
    `feature/node-project-templates` and the working tree is clean.
 2. Use the build prerequisites in [Contributing](../CONTRIBUTING.md). Node 24 is
    the frontend build tool; the wizard separately supports installed Node
-   22.12+ in major 22 or Node 24 with paired npm 10/11. Do not change fnm defaults
+   22.12+ in major 22, Node 24 or Node 26 with paired npm 10/11. Do not change
+   fnm defaults
    to make a missing runtime appear. If Cargo is missing, the optional temporary
    toolchain instructions in [the earlier manual guide](node-projects-manual-testing.md)
    can be used if those directories still exist.
@@ -65,8 +66,8 @@ in the native picker (Command+Shift+G accepts the absolute printed path).
 1. Open **Node Projects → Create New Project**. Confirm six descriptions and the
    correct JavaScript/TypeScript labels. Choose the row, then Configure project.
 2. Enter its name, choose the disposable parent and an installed supported Node
-   runtime. Alternate Node 22/24 if both are available; otherwise record the one
-   tested. **Check setup** must show the selected exact Node and paired npm.
+   runtime. Alternate available qualified Node 22/24/26 versions and record the
+   exact one tested. **Check setup** must show the selected exact Node and paired npm.
 3. Review the final folder, files, template revision, dependencies and notes.
    Confirm Create and install is disabled until you check the approval box.
    npm downloads packages, so this step needs network access; installation scripts
@@ -77,11 +78,12 @@ in the native picker (Command+Shift+G accepts the absolute printed path).
 5. Inspect the generated folder: source, manifest, lockfile, README and dependencies
    should exist. Confirm it is inside the disposable parent, never an old project.
 6. Explicitly click the card's **Start**, review the existing script confirmation,
-   and confirm Start project. Open the row's HTTP address yourself and inspect
-   logs. Running means the process is alive; the HTTP response checks readiness.
+   and confirm Start project. Use the card's reported Local URL and Open URL
+   action; compare it with the logs and check the HTTP response. Running means
+   the process is alive; the HTTP response checks readiness.
 7. Stop the card before starting the next row (API templates share port 3000;
-   Vite templates share 5173). Confirm the address becomes unreachable. Do not
-   stop unrelated listeners if a port is already occupied.
+   Vite templates prefer 5173 and fall back to an available port). Confirm the
+   address becomes unreachable. Do not stop unrelated listeners if a port is already occupied.
 
 ## Consent, continuity and failure checks
 
@@ -114,3 +116,21 @@ Record template, exact Node/npm, creation result, explicit HTTP/Stop result and
 any error text. Report unobserved cancellation, reload or expiration separately.
 Do not delete uncertain staging folders while the debug app is running. Keep the
 disposable root for diagnosis; no automatic cleanup command is required.
+
+## Stage 5 acceptance follow-up
+
+- Generate fresh React/Vite JavaScript and TypeScript projects in the disposable
+  parent. Start both together. Compare each card URL to its own `Local:` log line,
+  open both, Stop one and verify the other still responds. Restart and compare
+  again; do not assume the port stays the same. Repeat with Node 26 if available.
+- A fresh stopped project has no reported URL. After Start, the card must still
+  say **Running**, with readiness explicitly unchecked. Stop must hide that run's
+  reported link. While stopped, configure a manual Local URL in Edit and check
+  that its Open action uses exactly that address and labels it configured.
+- Older generated projects keep their existing files. To retest the reported
+  strict-port failure, manually choose another port or set `server.strictPort`
+  to `false` in the older project's Vite config. Do this only in a disposable
+  fixture; no automatic migration edits personal projects.
+- Check native folder picker, keyboard/focus, reload continuity, cancellation and
+  Quit/relaunch. Automated browser tests cover simulations, not Mac WebView or
+  native dialog behavior. Record any unobserved case.

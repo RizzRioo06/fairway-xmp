@@ -7,6 +7,8 @@ use std::{collections::BTreeMap, path::Path, sync::Mutex};
 mod environment;
 mod execution;
 pub(crate) use execution::Executions;
+#[cfg(any(target_os = "macos", test))]
+mod local_url;
 mod run_logs;
 mod runner;
 pub use execution::{

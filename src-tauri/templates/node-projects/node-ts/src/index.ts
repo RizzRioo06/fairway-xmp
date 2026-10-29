@@ -9,5 +9,11 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
   response.end(JSON.stringify(request.url === '/health' ? { status: 'ok' } : { message: 'Hello from TypeScript' }));
 });
-server.listen(port, host, () => console.log(`Node.js listening at http://${host}:${port}`));
+server.listen(port, host, () => {
+  const address = server.address();
+  if (address && typeof address === 'object') {
+    const hostname = address.address.includes(':') ? `[${address.address}]` : address.address;
+    console.log(`Node.js listening at http://${hostname}:${address.port}`);
+  }
+});
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close());

@@ -9,7 +9,7 @@ require the existing explicit Start confirmation. Existing PHP and Node controls
 
 ## Versioned local templates
 
-The compiled catalog is schema 1, revision 3. Every template is revision 3,
+The compiled catalog is schema 1, revision 4. Every template is revision 4,
 `qualification: scriptDisabledInstall`, `lockfileStatus: npmGenerated`. Its content
 revision hashes the catalog, renderer, template sources and MIT license. Plans
 also contain the exact byte size and SHA-256 of each materialized file, so local
@@ -41,7 +41,7 @@ Common generated files:
 
 API starters use loopback port 3000, a health endpoint and signal-aware shutdown.
 They load `.env` only when explicitly started later. Vite defaults to loopback
-5173 with strict port behavior; its example warns that `VITE_` values are public.
+5173 and selects another available port if occupied; its example warns that `VITE_` values are public.
 Generation never starts any of these listeners or runs their tests.
 
 The sources in `src-tauri/templates/node-projects/` are Fairway-authored under the
@@ -53,7 +53,7 @@ build dependencies.
 
 Each template bundles a genuine npm v3 lockfile; no `node_modules` is bundled.
 `locks/provenance.json` records raw SHA-256, generator Node/npm versions, registry,
-and package counts. Generation normalizes only root package names. Version and
+and package counts. Generation normalizes root package names and engine metadata. Version and
 integrity entries remain npm-generated. The renderer checks exact root dependencies,
 registry URLs, integrity structure and path bounds. Install rechecks the exact
 reviewed file hash before invoking npm. The immutable plan's `installationAvailable`
@@ -62,8 +62,8 @@ is true; the separate Install request must include both `confirmed` and
 
 ## Runtime and read-only planning
 
-Supported selections are Node `>=22.12.0 <23 || >=24.0.0 <25`, paired npm
-`>=10.0.0 <12`. This bounds the initial support matrix. Discovery reuses the
+Supported selections are Node `>=22.12.0 <23 || >=24.0.0 <25 || >=26.0.0 <27`, paired npm
+`>=10.0.0 <12`. All six templates are qualified on macOS arm64 with Node 22.23.4, 24.20.0 and 26.12.1; other platforms remain unverified. Discovery reuses the
 existing fnm/nvm/Homebrew inventory scanner without loading login-shell startup
 files or invoking fnm. Login-shell-only custom stores may therefore be absent;
 `discoveryNote` reports this limit. Existing import/Settings discovery is unchanged.
@@ -414,3 +414,30 @@ The dialog reuses Fairway's modal focus trap, restores trigger/card focus, uses
 native controls and app color variables, and scrolls at the 820×650 minimum size.
 No installed application or normal user settings are needed for automated tests.
 See [manual acceptance](node-creation-manual-testing.md) for isolated Mac testing.
+
+## Stage 5 local addresses and acceptance
+
+Current native runs expose optional `reportedUrl` metadata from bounded stdout
+lines emitted by the API starters or Vite (`listening at` / `Local:`). ANSI colors
+and split frames are handled without changing log retention. Only HTTP(S) loopback
+origins pass the existing URL validation; external addresses, credentials, query
+strings and arbitrary log links do not become actions. API starters report the
+actual socket address/port, including `PORT=0`. No URLs are synthesized from a
+template's default port, and no imported config/script is executed for discovery.
+
+Cards show a clickable reported URL only for the current Running generation.
+Stopped/failed/restarted runs cannot supply an old reported address. A manually
+configured URL remains editable while stopped and is labelled configured. Both
+labels say readiness has not been checked: process output is advisory, not HTTP
+health or listener-ownership verification. Unknown output formats require manual
+configuration. Generation/installation still never starts an application.
+
+Revision 4 enables Vite's available-port fallback for dev and preview. Existing
+projects, manifests and Vite configs are never rewritten. For an older strict-port
+project, the owner can choose a different port or set `server.strictPort: false`
+in its config; new revision-4 projects already include this behavior. API projects
+retain explicit `.env` port configuration and clear native bind errors.
+
+See [Stage 5 evidence and release limits](node-creation-stage5-verification.md) and
+[remaining manual acceptance](node-creation-manual-testing.md). No PostgreSQL
+integration or merge is part of this stage.

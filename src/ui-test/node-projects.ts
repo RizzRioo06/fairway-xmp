@@ -2,7 +2,7 @@
 import type { NodeProjectConfig, NodeProjectInspection, NodeRunStatus, NodeLogRecord, NodeProjectsErrorCode } from '../node-projects/types';
 import { activeRun } from '../node-projects/model';
 type Emit = (event: string, payload: unknown) => void;
-export let options: { root?: string; manager?: string; missingRoot?: boolean; missingRuntime?: boolean; noRuntimes?: boolean; registryError?: boolean; inspectionError?: boolean; logsError?: boolean; truncated?: boolean; staleStop?: boolean; requirementConflict?: boolean } = {};
+export let options: { reportedUrl?: string; root?: string; manager?: string; missingRoot?: boolean; missingRuntime?: boolean; noRuntimes?: boolean; registryError?: boolean; inspectionError?: boolean; logsError?: boolean; truncated?: boolean; staleStop?: boolean; requirementConflict?: boolean } = {};
 let projects: NodeProjectConfig[] = [], runs: Record<string, NodeRunStatus> = {};
 let history = new Map<string, NodeLogRecord[]>();
 let revision = 1, serial = 0;
@@ -74,7 +74,7 @@ export async function nodeRequest(command: string, args: Record<string, unknown>
     const initial = structuredClone(run), currentGeneration = generation;
     setTimeout(() => {
       if (generation !== currentGeneration || run.state !== 'starting') return;
-      run.startedAt = Date.now(); update(run, 'running');
+      run.startedAt = Date.now(); run.reportedUrl = options.reportedUrl ?? null; update(run, 'running');
       append(run, 'stdout', `Node ${run.runtime.version} café 日本\n<script>plain text</script>\nline two\n`); append(run, 'stderr', 'controlled stderr\n');
       if (['fail', 'exit'].includes(project.script)) { run.exitCode = project.script === 'fail' ? 7 : 0; run.endedAt = Date.now(); update(run, project.script === 'fail' ? 'failed' : 'exited'); }
     }, 140);

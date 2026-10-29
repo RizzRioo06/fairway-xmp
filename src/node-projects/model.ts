@@ -1,5 +1,5 @@
 import { isNodeProjectsError } from './types.ts';
-import type { NodeLogRecord, NodeRunStatus } from './types.ts';
+import type { NodeLogRecord, NodeRunStatus, NodeProjectConfig } from './types.ts';
 
 export function nodeError(error: unknown): string {
   const help: Record<string, string> = {
@@ -34,6 +34,16 @@ export function localUrl(value: string): boolean {
       && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) && url.port !== '0'
       && !/[\s\\]/.test(value);
   } catch { return false; }
+}
+export function projectUrl(project: Pick<NodeProjectConfig, 'openUrl'>, run?: NodeRunStatus) {
+  // Never reuse a previous run's address after Stop, failure or restart.
+  if (run?.state === 'running' && run.reportedUrl && localUrl(run.reportedUrl)) {
+    return { url: run.reportedUrl, source: 'Reported by this run; readiness has not been checked.' };
+  }
+  if (project.openUrl && localUrl(project.openUrl)) {
+    return { url: project.openUrl, source: 'Configured URL; readiness has not been checked.' };
+  }
+  return null;
 }
 export function appendLogs(current: NodeLogRecord[], incoming: NodeLogRecord[], runId: string, cursor: number) {
   const fresh = incoming.filter(row => row.runId === runId && row.cursor > cursor);

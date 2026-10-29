@@ -200,3 +200,30 @@ test('missing inventory and incompatible requirements never start a project or s
   expect((await runs(page)).runs).toHaveLength(0);
   expect((await snapshot(page)).projects[0].config.runtime.version).toBe('v22.1.0');
 });
+
+test('opens the current reported address without claiming readiness and drops it after stop', async ({ page }) => {
+  await importProject(page);
+  const card = page.getByRole('listitem', { name: 'First app', exact: true });
+  await expect(card.getByRole('button', { name: 'Open URL for First app' })).toHaveCount(0);
+  await fixture(page, { reportedUrl: 'http://127.0.0.1:5174/' });
+  await start(page, 'First app');
+  await expect(card).toContainText('http://127.0.0.1:5174/');
+  await expect(card).toContainText('Reported by this run; readiness has not been checked.');
+  await expect(card.getByRole('status')).toHaveText('Running');
+  await card.getByRole('button', { name: 'Open URL for First app' }).click();
+  await expect(page.getByRole('alert').first()).toContainText('would open http://127.0.0.1:5174/');
+  await card.getByRole('button', { name: 'Stop First app', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Open URL for First app' })).toHaveCount(0);
+  await fixture(page, { reportedUrl: 'http://127.0.0.1:5180/' });
+  await start(page, 'First app');
+  await expect(card).toContainText('http://127.0.0.1:5180/');
+  await expect(card).not.toContainText('http://127.0.0.1:5174/');
+  await card.getByRole('button', { name: 'Stop First app', exact: true }).click();
+  await card.getByRole('button', { name: 'Edit First app', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await editor.getByLabel('Local URL (optional)', { exact: true }).fill('http://localhost:4200/');
+  await editor.getByRole('button', { name: 'Save project', exact: true }).click();
+  await expect(card).toContainText('Configured URL; readiness has not been checked.');
+  await card.getByRole('button', { name: 'Open URL for First app' }).click();
+  await expect(page.getByRole('alert').first()).toContainText('would open http://localhost:4200/');
+});

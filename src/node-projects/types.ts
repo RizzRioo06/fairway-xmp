@@ -103,6 +103,7 @@ export type NodeRunStatus = {
   error: NodeProjectsError | null;
   forcedCleanup: boolean;
   runtime: NodeProjectRuntime;
+  reportedUrl?: string | null;
 };
 export type StartNodeProjectRequest = PrepareNodeRuntimeRequest & { confirmed: true };
 export type StopNodeProjectRequest = { id: string; runId: string };
@@ -125,6 +126,7 @@ export function isNodeRunStatus(value: unknown): value is NodeRunStatus {
     && typeof run.state === 'string' && ['starting', 'running', 'stopping', 'stopped', 'exited', 'failed'].includes(run.state)
     && timestamp(run.createdAt) && optionalTime(run.startedAt) && optionalTime(run.endedAt)
     && optionalInteger(run.exitCode) && optionalInteger(run.signal)
+    && (run.reportedUrl === undefined || run.reportedUrl === null || (typeof run.reportedUrl === 'string' && run.reportedUrl.length <= 2048))
     && (run.error === null || isNodeProjectsError(run.error)) && typeof run.forcedCleanup === 'boolean'
     && !!runtime && typeof runtime === 'object' && typeof runtime.nodePath === 'string' && typeof runtime.version === 'string';
 }

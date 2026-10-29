@@ -37,10 +37,11 @@ pub fn revision() -> String {
 pub fn render(plan: &CreationPlan, package: &serde_json::Value) -> Result<Vec<u8>> {
     let mut lock: serde_json::Value =
         serde_json::from_slice(raw(&plan.template.id)?).map_err(|_| invalid())?;
-    // Only package naming metadata changes. All resolved versions and integrity
+    // Only root naming/engine metadata changes. All resolved versions and integrity
     // entries remain exactly npm-generated; npm ci qualifies the normalized form.
     lock["name"] = plan.project_name.clone().into();
     lock["packages"][""]["name"] = plan.project_name.clone().into();
+    lock["packages"][""]["engines"] = package["engines"].clone();
     validate(package, &lock)?;
     let mut bytes = serde_json::to_vec_pretty(&lock).map_err(|_| invalid())?;
     bytes.push(b'\n');

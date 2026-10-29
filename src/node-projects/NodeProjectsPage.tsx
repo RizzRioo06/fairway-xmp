@@ -3,7 +3,7 @@ import { Code2, ExternalLink, FolderOpen, Pencil, Play, Plus, RefreshCw, ScrollT
 import Dialog from '../data/Dialog';
 import { canControl, invoke } from '../bridge';
 import * as api from './api';
-import { activeRun, localUrl, nodeError } from './model';
+import { activeRun, projectUrl, nodeError } from './model';
 import { useProjects } from './useProjects';
 import ProjectEditor from './ProjectEditor';
 import ProjectLogs from './ProjectLogs';
@@ -100,11 +100,12 @@ export default function NodeProjectsPage({ active, busy }: { active: boolean; bu
     {supported && !snapshot.registryError && !snapshot.projects.length && <section className="sites-empty"><FolderOpen size={26} /><h2>No Node projects yet</h2><p>Create a project from a template or import a folder containing package.json. Choose an installed Node version and an npm script, then start it when you are ready.</p></section>}
     {supported && <ul className="sites-list node-project-list" aria-label="Registered Node projects">{snapshot.projects.map(({ config: project, rootAvailable, manifestAvailable, runtimeAvailable }) => {
       const run = runs[project.id], running = activeRun(run);
+      const address = projectUrl(project, run);
       return <li id={`node-project-${project.id}`} tabIndex={-1} className="site-item node-project-card" key={project.id} aria-label={project.name}>
         <div className="site-title"><h2>{project.name}</h2><span role="status" className={`site-status${run?.state === 'running' ? ' ready' : ''}`}>{run ? states[run.state] : 'Stopped'}</span></div>
         <p className="site-root"><span>Folder</span><code>{project.root}</code></p>
         <div className="node-project-meta"><span>Node <strong>{project.runtime.version}</strong></span><span>npm script <code>{project.script}</code></span></div>
-        {project.openUrl && <p className="node-project-url"><code>{project.openUrl}</code><button className="text-link" disabled={blocked || !localUrl(project.openUrl)} aria-label={`Open URL for ${project.name}`} onClick={() => { void perform(async () => { await invoke('open_mail_link', { url: project.openUrl }); }); }}><ExternalLink size={13} />Open URL</button></p>}
+        {address ? <div className="node-project-url"><p>Local URL: <button className="text-link" disabled={blocked} aria-label={`Open URL for ${project.name}`} onClick={() => { void perform(async () => { await invoke('open_mail_link', { url: address.url }); }); }}><code>{address.url}</code><ExternalLink size={13} />Open URL</button></p><p>{address.source}</p></div> : <p>No Local URL reported. Start the server and check its logs, or configure a URL in Edit while stopped.</p>}
         {(!rootAvailable || !manifestAvailable || !runtimeAvailable) && <p className="site-warning">{!rootAvailable ? 'Project folder is missing. Edit to choose its new location.' : !manifestAvailable ? 'package.json is missing. Restore it or choose another folder in Edit.' : 'Selected runtime is missing. Edit and choose an installed version.'}</p>}
         {run?.error && <p className="site-warning" role="alert">{nodeError(run.error)}</p>}
         {run && ['exited', 'failed'].includes(run.state) && run.exitCode !== null && <p className="site-warning">Process exited with code {run.exitCode}.</p>}
