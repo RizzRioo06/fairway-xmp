@@ -34,7 +34,21 @@ behavior remain unverified. One installation runs at a time; uncertain partial
 staging is retained and retries require a fresh reviewed workspace. Automated
 browser fixtures do not establish real native-dialog behavior.
 
-**Real Mac wizard acceptance is still pending.** Next: collect the user's results
-from [the isolated six-template manual guide](node-creation-manual-testing.md),
-then perform Stage 5 verification when requested. Do not start Stage 5, merge main,
-or add features as part of this handoff. Read [AGENTS.md](../AGENTS.md) first.
+**Mac acceptance is partial:** the user generated and ran Hono + TypeScript and
+React + Vite TypeScript with Node 24.20.0. Remaining acceptance uses
+[the isolated manual guide](node-creation-manual-testing.md).
+
+Recorded Stage 5 priorities (not implemented or investigated yet):
+
+- Automatic editable Local URLs and clickable card Open actions must reflect
+  actual configured/detected host and port; Running is not application Ready.
+- `my-react-vite` exited 1 while `my-vite-typescript` ran. A port conflict is
+  suspected, not confirmed. Inspect configuration/scripts/logs; test simultaneous
+  Vite projects on different available ports without killing other applications.
+- Node 26 was rejected by the current template range; qualify each template's
+  dependencies/build before considering support. Node 24.20.0 worked.
+
+See [detailed manual findings](node-creation-wizard-verification.md#manual-feedback-for-stage-5).
+Next: collect remaining manual results; once Stage 5 is authorized, reproduce
+reported issues, confirm causes and make minimal tested fixes. Do not begin
+Stage 5 or merge main now. Read [AGENTS.md](../AGENTS.md) first.

@@ -77,14 +77,49 @@ Logs/build/browser artifacts are disposable and are not committed.
 
 ## Remaining limitations
 
-Real Mac wizard/folder-picker acceptance is intentionally left to the user using
-[the isolated manual guide](node-creation-manual-testing.md), including all six
-variants, actual downloads, explicit server starts and shutdown/relaunch.
+Real Mac acceptance is performed by the user using
+[the isolated manual guide](node-creation-manual-testing.md). The user has now
+reported successful generation and execution of Hono + TypeScript and React + Vite
+TypeScript with Node 24.20.0; this is partial acceptance, not qualification of all
+six variants or every cancellation/recovery/shutdown path. See the findings below.
 Windows/Linux native generation/install and other CPU architectures are not
 qualified. Signed installers, actual updater replacement, OS power loss and GUI
 interaction were not tested. No Stage 5 release verification or new services were
 started. The documented one-install-at-a-time, retained partial stages and explicit
 fresh-plan retry policy from Stage 3 remain in force.
+
+## Manual feedback for Stage 5
+
+User-reported MacBook results, recorded 2026-10-29. These observations have not
+been independently reproduced or investigated in this documentation-only update.
+Stage 5 remains unstarted; fixes require subsequent authorization.
+
+1. **Automatic Local URL.** Generated projects should receive a correct Local URL
+   and a clickable Open action on their Node Projects cards. Derive it from the
+   actual configured or detected host and port, not a universal assumed port.
+   Preserve manual URL editing while stopped. A Running process does not establish
+   application readiness; an Open action must not imply that readiness was verified.
+2. **Concurrent Vite projects.** With `my-vite-typescript` running, starting
+   `my-react-vite` exited with code 1. The user suspects a port conflict; logs have
+   not confirmed the cause. When Stage 5 is authorized, inspect the generated Vite
+   configuration, dev scripts, `server.port`, `server.strictPort` and failure logs.
+   Reproduce with disposable fixtures before attributing the failure. Verify two
+   generated Vite projects run concurrently on different available ports and each
+   displayed Local URL matches its actual listener. Prefer clear conflict errors
+   and safe configuration; never kill another application to free a port. Add
+   focused regression tests for the confirmed cause and URL/port behavior.
+3. **Node 26 compatibility.** Node 26 was rejected by the current template range
+   `>=22.12.0 <23 || >=24.0.0 <25`; Node 24.20.0 successfully generated and ran the
+   two tested variants. Rejection matches the current support policy and is not
+   evidence that Node 26 is incompatible. Review each template separately and
+   qualify dependency installation, builds and execution before relaxing engine
+   restrictions. Keep compatibility errors understandable; do not advertise
+   unqualified support or weaken dependency/runtime validation.
+
+Priority once authorized: reproduce reported failures, distinguish confirmed bugs
+from hypotheses and requested improvements, then implement minimal tested fixes.
+The user retains real Mac GUI acceptance. No Computer Use, installed-app changes,
+global runtime changes or personal-project execution is authorized by this record.
 
 ## Changed files
 
