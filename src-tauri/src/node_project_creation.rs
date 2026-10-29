@@ -1,7 +1,11 @@
-//! Reviewed planning and explicitly confirmed local generation, without dependency installation.
+//! Reviewed plans, safe local generation, and explicitly authorized owned npm installation.
 use crate::{
     config::Layout,
     node_projects::{self, ProjectRuntime, RuntimeChoice, RuntimePreparation},
+};
+pub use installation::{
+    InstallLogRequest, InstallQuery, InstallRecoveryAction, InstallRecoveryRequest,
+    InstallReference, InstallRequest, InstallState, InstallStatus,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,8 +19,10 @@ mod catalog;
 #[cfg(target_os = "macos")]
 mod filesystem;
 mod generation;
+pub(crate) mod installation;
 #[cfg(target_os = "macos")]
 mod journal;
+mod locks;
 pub use assets::IntendedFile;
 pub use generation::{
     CancelRequest, GenerateRequest, JobStatus, JobsSnapshot, RecoverRequest, RecoveryAction,
@@ -62,6 +68,10 @@ pub enum ErrorCode {
     PlanLimit,
     GenerationCancelled,
     RegistrationFailed,
+    InvalidLockfile,
+    InstallationFailed,
+    InstallBusy,
+    StaleInstallation,
     PlanConsumed,
     ConfirmationRequired,
     GenerationBusy,
@@ -203,9 +213,15 @@ pub struct NodeProjectCreation {
     operations: Mutex<()>,
     #[cfg(target_os = "macos")]
     active: Mutex<Option<generation::Control>>,
+    installation: installation::Installations,
 }
 impl NodeProjectCreation {
     pub fn new(layout: Option<Layout>) -> Self {
+        let installation = installation::Installations::new(
+            layout
+                .as_ref()
+                .map(|layout| layout.data.join("node-installations")),
+        );
         Self {
             layout,
             supported: cfg!(target_os = "macos"),
@@ -216,6 +232,7 @@ impl NodeProjectCreation {
             operations: Mutex::new(()),
             #[cfg(target_os = "macos")]
             active: Mutex::new(None),
+            installation,
         }
     }
     fn layout(&self) -> Result<&Layout> {
@@ -342,9 +359,9 @@ impl NodeProjectCreation {
             parent: location.parent.to_str().expect("validated UTF-8").into(), destination: location.root.to_str().expect("validated UTF-8").into(),
             template, tools, files: BTreeMap::new(),
             installation: InstallationPolicy { package_manager: "npm".into(), intended_command: "ci".into(), ignore_scripts: true,
-                registry: "https://registry.npmjs.org/".into(), cache_scope: "appOwned".into(), dependency_lock: "notPrepared".into(), installation_available: false },
+                registry: "https://registry.npmjs.org/".into(), cache_scope: "appOwned".into(), dependency_lock: "npmGenerated".into(), installation_available: true },
             warnings: vec!["Dry run only: no project files, dependencies or registrations were created; no setup or project scripts were executed.".into(),
-                "Local template assets are reviewed; dependencies and lockfiles remain unqualified until Stage 3.".into(),
+                "Pinned npm lockfiles are reviewed. Installing requires separate explicit authorization; lifecycle scripts remain disabled.".into(),
                 "A plan neither reserves a destination nor grants execution permission. Later stages must revalidate and request explicit approval.".into()],
         };
         plan.files = assets::describe(&assets::render(&plan)?);

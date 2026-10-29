@@ -150,6 +150,11 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
         let _ = tray.set_busy(true);
     }
     let _ = app.emit("fairway-shutdown", ());
+    let creation = app
+        .state::<Arc<crate::node_project_creation::NodeProjectCreation>>()
+        .inner()
+        .clone();
+    creation.cancel_installations_for_shutdown();
     let state = app.state::<Shared>().inner().clone();
     let nodes = app
         .state::<Arc<crate::node_projects::NodeProjects>>()
@@ -161,7 +166,12 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
         let result = tauri::async_runtime::spawn_blocking(move || {
             waiting.wait_for_operation();
             crate::lifecycle::stop_components(
-                || nodes.stop_all_runs().map_err(|error| error.message),
+                || {
+                    crate::lifecycle::stop_components(
+                        || creation.stop_installations().map_err(|error| error.message),
+                        || nodes.stop_all_runs().map_err(|error| error.message),
+                    )
+                },
                 || {
                     let mut startup = state.lock().map_err(|_| {
                         "The service manager is unavailable. Restart Fairway XMP.".to_string()
@@ -935,6 +945,9 @@ async fn node_action(
             } else {
                 "bin/node"
             });
+        app.state::<Arc<crate::node_project_creation::NodeProjectCreation>>()
+            .ensure_install_runtime_unused(&node)
+            .map_err(|error| error.message)?;
         app.state::<Arc<crate::node_projects::NodeProjects>>()
             .ensure_runtime_unused(&node)
             .map_err(|error| error.message)?;
@@ -1093,15 +1106,20 @@ async fn install_update(
         .state::<Arc<crate::node_projects::NodeProjects>>()
         .inner()
         .clone();
-    tauri::async_runtime::spawn_blocking(move || nodes.stop_all_runs())
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| {
-            format!(
-                "Node cleanup failed. The update was not installed: {}",
-                e.message
-            )
-        })?;
+    let creation = app
+        .state::<Arc<crate::node_project_creation::NodeProjectCreation>>()
+        .inner()
+        .clone();
+    creation.cancel_installations_for_shutdown();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::lifecycle::stop_components(
+            || creation.stop_installations().map_err(|error| error.message),
+            || nodes.stop_all_runs().map_err(|error| error.message),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("Node cleanup failed. The update was not installed: {}", e))?;
     app.state::<crate::terminal::Terminals>().close_all();
     // Windows exits inside install(); post-install cleanup is unreachable.
     access(state.inner().clone(), |m| remove_app_marker(m)).await?;
@@ -1399,6 +1417,11 @@ pub fn run() {
             node_project_creation_commands::node_project_creation_recover,
             node_project_creation_commands::node_project_creation_jobs,
             node_project_creation_commands::node_project_creation_cancel,
+            node_project_creation_commands::node_project_install_start,
+            node_project_creation_commands::node_project_install_status,
+            node_project_creation_commands::node_project_install_logs,
+            node_project_creation_commands::node_project_install_cancel,
+            node_project_creation_commands::node_project_install_recover,
             node_project_creation_commands::node_project_templates,
             node_project_creation_commands::node_project_creation_plan,
             node_project_creation_commands::node_project_creation_validate_plan,
@@ -1448,6 +1471,8 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => show_window(app),
         tauri::RunEvent::Exit => {
+            app.state::<Arc<crate::node_project_creation::NodeProjectCreation>>()
+                .disconnect_installations();
             app.state::<Arc<crate::node_projects::NodeProjects>>()
                 .disconnect_runs();
             app.state::<crate::terminal::Terminals>().close_all();

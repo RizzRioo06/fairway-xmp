@@ -32,7 +32,7 @@ fn busy() -> Error {
         "A local creation/recovery operation is already in progress.",
     )
 }
-fn parent(journal: &Journal) -> Result<Dir> {
+pub(in crate::node_project_creation) fn parent(journal: &Journal) -> Result<Dir> {
     let dir = Dir::absolute(Path::new(&journal.plan.parent))?;
     if dir.identity_text()? != journal.parent_identity {
         return Err(Error::new(
@@ -42,7 +42,11 @@ fn parent(journal: &Journal) -> Result<Dir> {
     }
     Ok(dir)
 }
-fn stage(parent: &Dir, journal: &Journal, name: &str) -> Result<Dir> {
+pub(in crate::node_project_creation) fn stage(
+    parent: &Dir,
+    journal: &Journal,
+    name: &str,
+) -> Result<Dir> {
     let dir = parent.child(name)?;
     dir.private()?;
     if Some(dir.id()?) != journal.stage_identity {
@@ -54,7 +58,10 @@ fn stage(parent: &Dir, journal: &Journal, name: &str) -> Result<Dir> {
     parent.verify_child(name, &dir)?;
     Ok(dir)
 }
-fn discard(store: &Store, journal: &mut Journal) -> Result<()> {
+pub(in crate::node_project_creation) fn discard(
+    store: &Store,
+    journal: &mut Journal,
+) -> Result<()> {
     let parent = parent(journal)?;
     parent.assert_path(Path::new(&journal.plan.parent))?;
     if let Some((id, _)) = parent.entry(&journal.plan.project_name)? {
@@ -88,7 +95,7 @@ fn discard(store: &Store, journal: &mut Journal) -> Result<()> {
     journal.error = None;
     store.save(journal)
 }
-fn register(
+pub(in crate::node_project_creation) fn register(
     service: &NodeProjectCreation,
     nodes: &NodeProjects,
     store: &Store,
@@ -103,7 +110,7 @@ fn register(
             "An incomplete project cannot be registered by publication recovery.",
         ));
     }
-    filesystem::verify_tree(&root, &journal.files, &journal.directories)?;
+    super::super::installation::verify_project(&root, journal)?;
     let runtime = node_projects::ProjectRuntime {
         node_path: journal.plan.tools.node_path.clone(),
         version: journal.plan.tools.node_version.clone(),
@@ -124,7 +131,7 @@ fn register(
     }
     parent.assert_path(Path::new(&journal.plan.parent))?;
     parent.verify_child(&journal.plan.project_name, &root)?;
-    filesystem::verify_tree(&root, &journal.files, &journal.directories)?;
+    super::super::installation::verify_project(&root, journal)?;
     let inspection = node_projects::inspect_generated_manifest(&journal.plan.destination)?;
     let config = ProjectConfig {
         id: journal.plan.id.clone(),
@@ -151,6 +158,23 @@ impl NodeProjectCreation {
         &self,
         nodes: &NodeProjects,
         request: GenerateRequest,
+        hook: impl FnMut(&str, &mut Journal) -> Result<()>,
+    ) -> Result<JobStatus> {
+        self.generate_flow(nodes, request, None, hook)
+    }
+    pub(in crate::node_project_creation) fn stage_install(
+        &self,
+        nodes: &NodeProjects,
+        request: GenerateRequest,
+        status: super::super::installation::InstallStatus,
+    ) -> Result<JobStatus> {
+        self.generate_flow(nodes, request, Some(status), |_, _| Ok(()))
+    }
+    fn generate_flow(
+        &self,
+        nodes: &NodeProjects,
+        request: GenerateRequest,
+        installation: Option<super::super::installation::InstallStatus>,
         mut hook: impl FnMut(&str, &mut Journal) -> Result<()>,
     ) -> Result<JobStatus> {
         self.layout()?;
@@ -211,6 +235,7 @@ impl NodeProjectCreation {
         let store = Store::open(self.layout()?, true)?.expect("create store");
         let _lock = store.lock()?;
         let mut journal = Journal::new(plan, location.identity.clone(), nodes.snapshot().revision);
+        journal.installation = installation;
         store.claim(&journal)?;
         stored.consumed = true;
         let deadline = stored.deadline;
@@ -282,7 +307,7 @@ impl NodeProjectCreation {
                 store.save(&mut journal)?;
                 hook("file", &mut journal)?;
             }
-            filesystem::verify_tree(&root, &journal.files, &journal.directories)?;
+            super::super::installation::verify_project(&root, &journal)?;
             journal.phase = Phase::Ready;
             store.save(&mut journal)?;
             hook("ready", &mut journal)?;
@@ -292,6 +317,9 @@ impl NodeProjectCreation {
                     ErrorCode::RuntimeChanged,
                     "Selected tools changed during generation.",
                 ));
+            }
+            if journal.installation.is_some() {
+                return Ok(());
             }
             hook("beforePublish", &mut journal)?;
             guard(&journal)?;
@@ -310,7 +338,7 @@ impl NodeProjectCreation {
             hook("atPublish", &mut journal)?;
             guard(&journal)?;
             parent.verify_child(&journal.stage_name, &root)?;
-            filesystem::verify_tree(&root, &journal.files, &journal.directories)?;
+            super::super::installation::verify_project(&root, &journal)?;
             parent.no_replace(&journal.stage_name, &journal.plan.project_name)?;
             hook("afterPublish", &mut journal)?;
             parent.assert_path(Path::new(&journal.plan.parent))?;
@@ -374,11 +402,38 @@ impl NodeProjectCreation {
                 "Recovery requires explicit confirmation.",
             ));
         }
+        self.installation.ensure_creation_idle(&request.job_id)?;
         let _operation = self.operations.try_lock().map_err(|_| busy())?;
         let store = Store::open(self.layout()?, false)?
             .ok_or_else(|| Error::new(ErrorCode::JobUnavailable, "No creation journal exists."))?;
         let _lock = store.lock()?;
         let mut journal = store.load(&request.job_id)?;
+        let _installer_lock = if journal.installation.is_some() {
+            let parent = parent(&journal)?;
+            let published = parent
+                .entry(&journal.plan.project_name)?
+                .is_some_and(|(id, _)| Some(id) == journal.stage_identity);
+            let root = stage(
+                &parent,
+                &journal,
+                if published {
+                    &journal.plan.project_name
+                } else {
+                    &journal.stage_name
+                },
+            )?;
+            Some(root.lock_existing(".fairway-install.lock")?)
+        } else {
+            None
+        };
+        if journal
+            .installation
+            .as_ref()
+            .is_some_and(|status| !status.ci_completed)
+            && request.action == RecoveryAction::RetryRegistration
+        {
+            return Err(Error::new(ErrorCode::RecoveryUnsafe,"An unfinished installation cannot be published. Use installation recovery or a new reviewed plan."));
+        }
         if request.expected_revision != journal.revision {
             return Err(Error::new(
                 ErrorCode::StaleJob,
@@ -405,7 +460,7 @@ impl NodeProjectCreation {
                     return Err(Error::new(ErrorCode::RecoveryUnsafe,"Unpublished staging remains. It cannot be registered or automatically published during recovery."));
                 }
                 let root = stage(&parent, &journal, &journal.plan.project_name)?;
-                filesystem::verify_tree(&root, &journal.files, &journal.directories)?;
+                super::super::installation::verify_project(&root, &journal)?;
                 journal.expected_registry_revision = nodes.snapshot().revision;
                 journal.phase = Phase::NeedsRegistration;
                 store.save(&mut journal)?;
@@ -437,7 +492,25 @@ impl NodeProjectCreation {
                     let running = active
                         .as_ref()
                         .is_some_and(|active| active.id == job.plan.id);
-                    job.status(running)
+                    let mut status = job.status(running);
+                    if let Some(installation) = &job.installation {
+                        if let Some((current, active)) =
+                            self.installation.creation_status(&job.plan.id)
+                        {
+                            status.installation = Some(current);
+                            status.active |= active;
+                        } else if matches!(
+                            installation.state,
+                            super::super::InstallState::Starting
+                                | super::super::InstallState::Installing
+                        ) {
+                            status.installation.as_mut().unwrap().state =
+                                super::super::InstallState::Interrupted;
+                        }
+                        status.recovery_required = !status.active
+                            && !matches!(status.phase, Phase::Completed | Phase::Cancelled);
+                    }
+                    status
                 })
                 .collect();
             Ok(())

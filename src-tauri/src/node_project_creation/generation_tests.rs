@@ -70,7 +70,7 @@ fn every_template_generates_exact_reviewed_files_and_registers_without_execution
         assert_eq!(package["packageManager"], "npm@10.9.0");
         assert_eq!(package["private"], true);
         assert!(!Path::new(&plan.destination).join("node_modules").exists());
-        assert!(!Path::new(&plan.destination)
+        assert!(Path::new(&plan.destination)
             .join("package-lock.json")
             .exists());
         let snapshot = nodes.snapshot();

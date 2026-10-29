@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "revision": "2",
+  "revision": "3",
   "templates": [
     {
       "id": "node-js",
-      "revision": "2",
+      "revision": "3",
       "title": "Plain Node.js JavaScript",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -12,8 +12,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -24,7 +24,9 @@
         ".fairway-template.json",
         "src/server.js",
         "src/index.js",
-        "test/server.test.js"
+        "test/server.test.js",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "node --watch src/index.js",
@@ -37,12 +39,12 @@
         "referenceUrl": "https://nodejs.org/api/http.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     },
     {
       "id": "node-ts",
-      "revision": "2",
+      "revision": "3",
       "title": "Plain Node.js TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -50,8 +52,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -61,7 +63,9 @@
         ".env.example",
         ".fairway-template.json",
         "src/index.ts",
-        "tsconfig.json"
+        "tsconfig.json",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "tsx watch src/index.ts",
@@ -99,12 +103,12 @@
         "referenceUrl": "https://www.typescriptlang.org/docs/",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     },
     {
       "id": "hono-ts",
-      "revision": "2",
+      "revision": "3",
       "title": "Hono API TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -112,8 +116,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -123,7 +127,9 @@
         ".env.example",
         ".fairway-template.json",
         "src/index.ts",
-        "tsconfig.json"
+        "tsconfig.json",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "tsx watch src/index.ts",
@@ -177,12 +183,12 @@
         "referenceUrl": "https://hono.dev/docs/getting-started/nodejs",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     },
     {
       "id": "express-js",
-      "revision": "2",
+      "revision": "3",
       "title": "Express API",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -190,8 +196,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -202,7 +208,9 @@
         ".fairway-template.json",
         "src/app.js",
         "src/index.js",
-        "test/api.test.js"
+        "test/api.test.js",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "node --watch src/index.js",
@@ -224,12 +232,12 @@
         "referenceUrl": "https://expressjs.com/en/starter/hello-world.html",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     },
     {
       "id": "react-vite-js",
-      "revision": "2",
+      "revision": "3",
       "title": "React + Vite JavaScript",
       "language": "javascript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -237,8 +245,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -251,7 +259,9 @@
         "src/main.jsx",
         "src/App.jsx",
         "src/index.css",
-        "vite.config.js"
+        "vite.config.js",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "vite --host 127.0.0.1",
@@ -297,12 +307,12 @@
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     },
     {
       "id": "react-vite-ts",
-      "revision": "2",
+      "revision": "3",
       "title": "React + Vite TypeScript",
       "language": "typescript",
       "nodeRange": ">=22.12.0 <23 || >=24.0.0 <25",
@@ -310,8 +320,8 @@
         "name": "npm",
         "versionRange": ">=10.0.0 <12"
       },
-      "qualification": "localGeneration",
-      "lockfileStatus": "notPrepared",
+      "qualification": "scriptDisabledInstall",
+      "lockfileStatus": "npmGenerated",
       "intendedFiles": [
         "package.json",
         ".node-version",
@@ -327,7 +337,9 @@
         "vite.config.ts",
         "tsconfig.json",
         "tsconfig.app.json",
-        "tsconfig.node.json"
+        "tsconfig.node.json",
+        "package-lock.json",
+        ".fairway-install.lock"
       ],
       "scripts": {
         "dev": "vite --host 127.0.0.1",
@@ -405,7 +417,7 @@
         "referenceUrl": "https://github.com/vitejs/vite/tree/v7.3.6/packages/create-vite",
         "upstreamRevision": null,
         "license": "MIT",
-        "note": "Fairway-authored local assets, revision 2, distributed with the Fairway MIT license. Official references inform API usage; no upstream scaffolder or template archive is executed/copied. Installation and full dependency locks are unqualified until Stage 3."
+        "note": "Fairway-authored local assets, revision 3, under the included MIT license. Genuine npm lockfile and resolution provenance are bundled separately. Install-time scripts remain disabled; no remote initializer is used."
       }
     }
   ]

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-28",
+  "records": [
+    {
+      "templateId": "node-js",
+      "sha256": "b4433642609b1749eea103d4d182f99449e43f2cc8975a631d77b7a65e82ade6",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 0,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    },
+    {
+      "templateId": "node-ts",
+      "sha256": "dc5cdf74d5aba2ce9df7af1ce1d0b317063b778d7ead346bb7cd7c8b85f931a5",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 32,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    },
+    {
+      "templateId": "hono-ts",
+      "sha256": "d66c8768b703d9afa270e4d8c25ce6820b166390ed9c53c7e381eb43c0e5bb27",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 34,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    },
+    {
+      "templateId": "express-js",
+      "sha256": "869244ce64cb4289b3a06205d7dc82656aecaf4580de031167000e815d160a56",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 65,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    },
+    {
+      "templateId": "react-vite-js",
+      "sha256": "2163035df1e9ad998d5bd67410ff04d07b1a16f33f1c7841ef237b4a1e071020",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 115,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    },
+    {
+      "templateId": "react-vite-ts",
+      "sha256": "d472d37cbcfdf427c2573ac4cad9b9bd270fce777221dd11701e2bf44e577e75",
+      "generatorNode": "v22.23.4",
+      "generatorNpm": "10.9.9",
+      "registry": "https://registry.npmjs.org/",
+      "scriptsDisabled": true,
+      "packages": 121,
+      "license": "Dependency licenses remain with their respective packages; this file contains npm-generated resolution metadata only."
+    }
+  ]
+}

@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, path::Path, sync::Mutex};
 
 mod environment;
 mod execution;
+pub(crate) use execution::Executions;
 mod run_logs;
 mod runner;
 pub use execution::{
@@ -13,6 +14,7 @@ pub use execution::{
 };
 pub use run_logs::{LogBatch, LogRecord, LogStream};
 pub use runner::entrypoint as runner_entrypoint;
+pub(crate) use runner::{InstallLaunch, Launch};
 mod isolation;
 mod manifest;
 pub use environment::ChildEnvironment;
@@ -22,7 +24,7 @@ pub(crate) fn inspect_generated_manifest(root: &str) -> Result<Inspection> {
     manifest::inspect(root)
 }
 mod runtime;
-pub(crate) use isolation::prepare_creation_runtime;
+pub(crate) use isolation::{prepare_creation_runtime, prepare_creation_tools};
 pub(crate) use runtime::{discover_planning, Inventory};
 mod store;
 
@@ -451,6 +453,7 @@ impl NodeProjects {
                 run_id: format!("{:032x}", rand::random::<u128>()),
                 expected_revision: request.expected_revision,
                 manifest_revision: request.manifest_revision,
+                installation: None,
             },
             project.runtime,
         )
@@ -487,6 +490,10 @@ impl NodeProjects {
     pub fn logs(&self, request: LogRequest) -> Result<LogBatch> {
         self.layout()?;
         self.executions.logs(request)
+    }
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn test_creation_runner(&self, path: std::path::PathBuf) {
+        self.executions.test_runner(path);
     }
     pub fn stop_all_runs(&self) -> Result<()> {
         self.executions.stop_all()

@@ -51,6 +51,8 @@ pub struct JobStatus {
     pub error: Option<Error>,
     pub active: bool,
     pub recovery_required: bool,
+    #[serde(default)]
+    pub installation: Option<super::InstallStatus>,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,7 +69,7 @@ pub(super) struct Control {
 }
 #[cfg(target_os = "macos")]
 #[path = "generation_native.rs"]
-mod native;
+pub(super) mod native;
 #[cfg(not(target_os = "macos"))]
 impl super::NodeProjectCreation {
     pub fn generate(

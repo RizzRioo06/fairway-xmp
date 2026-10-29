@@ -357,6 +357,17 @@ pub(crate) fn prepare_creation_runtime(
     node_range: &str,
     npm_range: &str,
 ) -> Result<RuntimePreparation> {
+    prepare_creation_tools(layout, runtime, parent, destination, node_range, npm_range)
+        .map(|prepared| prepared.summary)
+}
+pub(crate) fn prepare_creation_tools(
+    layout: &Layout,
+    runtime: ProjectRuntime,
+    parent: &Path,
+    destination: &Path,
+    node_range: &str,
+    npm_range: &str,
+) -> Result<PreparedRuntime> {
     let root = parent
         .to_str()
         .ok_or_else(|| npm_error("The parent path must be UTF-8."))?
@@ -397,7 +408,6 @@ pub(crate) fn prepare_creation_runtime(
         std::env::vars_os(),
         capture,
     )
-    .map(|prepared| prepared.summary)
 }
 
 fn prepare_at_with(

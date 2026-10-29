@@ -207,7 +207,7 @@ impl Run {
     }
 }
 
-pub(super) struct Executions {
+pub(crate) struct Executions {
     data: Option<PathBuf>,
     runs: Mutex<BTreeMap<String, VecDeque<Arc<Run>>>>,
     observer: Mutex<Option<Observer>>,
@@ -329,6 +329,12 @@ impl Executions {
             ));
         }
         Ok(run.clone())
+    }
+    // A MainExit event precedes the helper's final descendant cleanup. Finite
+    // installers must wait for reaping, without changing Exited into Stopped.
+    pub fn wait_for_exit(&self, request: StopRequest) -> Result<RunStatus> {
+        self.current(&request.id, &request.run_id)?
+            .wait(Instant::now() + Duration::from_secs(22))
     }
     pub fn stop(&self, request: StopRequest) -> Result<RunStatus> {
         let run = self.current(&request.id, &request.run_id)?;
@@ -577,7 +583,7 @@ fn native_worker(run: Arc<Run>, executable: PathBuf, launch: Launch) {
             armed: true,
         };
         *run.control.lock().unwrap_or_else(|e| e.into_inner()) = Some(control_socket);
-        runner::send(&mut socket, &Control::Launch(launch)).map_err(exec_error)?;
+        runner::send(&mut socket, &Control::Launch(Box::new(launch))).map_err(exec_error)?;
         if run.stopping.load(Ordering::SeqCst) {
             run.stop();
         }
@@ -661,6 +667,88 @@ impl Drop for HelperChild {
         if self.armed {
             let _ = self.socket.shutdown(std::net::Shutdown::Both);
             let _ = self.child.wait();
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod finite_completion_tests {
+    use super::*;
+    #[test]
+    fn exit_or_failure_status_is_not_reaping_and_timeout_keeps_runtime_owned() {
+        for state in [RunState::Exited, RunState::Failed] {
+            let root =
+                std::env::temp_dir().join(format!("fw-reap-wait-{:032x}", rand::random::<u128>()));
+            std::fs::create_dir(&root).unwrap();
+            let executions = Arc::new(Executions::new(Some(root.clone())));
+            let runtime = ProjectRuntime {
+                node_path: root.join("selected-node").to_str().unwrap().into(),
+                version: "v22.23.4".into(),
+            };
+            let id = "a".repeat(32);
+            let run_id = "b".repeat(32);
+            let run = Arc::new(Run {
+                status: Mutex::new(RunStatus {
+                    project_id: id.clone(),
+                    run_id: run_id.clone(),
+                    revision: 1,
+                    state,
+                    created_at: now(),
+                    started_at: Some(now()),
+                    ended_at: None,
+                    exit_code: Some(0),
+                    signal: None,
+                    error: if state == RunState::Failed {
+                        Some(Error::new(
+                            ErrorCode::ExecutionFailed,
+                            "Controlled early failure event",
+                        ))
+                    } else {
+                        None
+                    },
+                    forced_cleanup: false,
+                    runtime: runtime.clone(),
+                }),
+                active: AtomicBool::new(true),
+                stopping: AtomicBool::new(false),
+                finished: Condvar::new(),
+                log: Mutex::new(RunLog::new(&root, &id, &run_id).unwrap()),
+                observer: None,
+                metadata: root.join("status.json"),
+                control: Mutex::new(None),
+            });
+            executions
+                .runs
+                .lock()
+                .unwrap()
+                .insert(id.clone(), VecDeque::from([run.clone()]));
+            let before = Instant::now();
+            assert!(run.wait(before + Duration::from_millis(30)).is_err());
+            assert!(before.elapsed() < Duration::from_secs(2));
+            assert!(run.active.load(Ordering::SeqCst));
+            assert!(executions
+                .ensure_runtime_unused(Path::new(&runtime.node_path))
+                .is_err());
+            let returned = Arc::new(AtomicBool::new(false));
+            let observed = returned.clone();
+            let waiting = executions.clone();
+            let waiter = std::thread::spawn(move || {
+                let status = waiting.wait_for_exit(StopRequest { id, run_id }).unwrap();
+                observed.store(true, Ordering::SeqCst);
+                status
+            });
+            std::thread::sleep(Duration::from_millis(50));
+            assert!(!returned.load(Ordering::SeqCst));
+            // Model the native worker's child.wait() followed by complete().
+            run.complete();
+            let status = waiter.join().unwrap();
+            assert_eq!(status.state, state);
+            assert!(executions
+                .ensure_runtime_unused(Path::new(&runtime.node_path))
+                .is_ok());
+            drop(executions);
+            drop(run);
+            std::fs::remove_dir_all(root).unwrap();
         }
     }
 }

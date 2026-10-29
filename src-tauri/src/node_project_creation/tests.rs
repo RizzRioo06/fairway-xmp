@@ -134,9 +134,9 @@ fn catalog_has_six_versioned_local_templates_and_exact_dependencies() {
     let mut ids = std::collections::HashSet::new();
     for template in catalog.templates {
         assert!(ids.insert(template.id));
-        assert_eq!(template.revision, "2");
-        assert_eq!(template.qualification, "localGeneration");
-        assert_eq!(template.lockfile_status, "notPrepared");
+        assert_eq!(template.revision, "3");
+        assert_eq!(template.qualification, "scriptDisabledInstall");
+        assert_eq!(template.lockfile_status, "npmGenerated");
         assert_eq!(template.package_manager.name, "npm");
         assert_eq!(template.provenance.kind, "fairwayAuthoredTemplate");
         assert!(template.provenance.upstream_revision.is_none());
@@ -168,7 +168,7 @@ fn plans_are_immutable_idempotent_and_do_not_write_or_register() {
         .ends_with("destination 日本 with spaces/example-project"));
     assert_eq!(plan.expires_at - plan.created_at, 600_000);
     assert_eq!(plan.template.id, "node-js");
-    assert!(!plan.installation.installation_available);
+    assert!(plan.installation.installation_available);
     assert!(plan.installation.ignore_scripts);
     let again = f.state.plan(f.request()).unwrap();
     assert_eq!(again.id, plan.id);
@@ -640,8 +640,8 @@ fn ipc_shapes_are_camel_case_strict_and_exclude_environment_values() {
     assert_eq!(catalog["supported"], true);
     assert!(catalog["runtimes"][0].get("nodePath").is_some());
     let plan = serde_json::to_value(f.state.plan(f.request()).unwrap()).unwrap();
-    assert_eq!(plan["installation"]["installationAvailable"], false);
-    assert_eq!(plan["template"]["qualification"], "localGeneration");
+    assert_eq!(plan["installation"]["installationAvailable"], true);
+    assert_eq!(plan["template"]["qualification"], "scriptDisabledInstall");
     assert!(plan["tools"].get("revision").is_some());
     assert!(plan["tools"].get("environment").is_none());
     for code in [

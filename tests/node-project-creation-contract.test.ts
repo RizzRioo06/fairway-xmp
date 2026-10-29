@@ -10,8 +10,8 @@ test('creation error codes and native catalog preserve the read-only boundary', 
   assert.equal(catalog.schemaVersion, 1);
   assert.deepEqual(catalog.templates.map(template => template.id), ['node-js', 'node-ts', 'hono-ts', 'express-js', 'react-vite-js', 'react-vite-ts']);
   for (const template of catalog.templates) {
-    assert.equal(template.qualification, 'localGeneration');
-    assert.equal(template.lockfileStatus, 'notPrepared');
+    assert.equal(template.qualification, 'scriptDisabledInstall');
+    assert.equal(template.lockfileStatus, 'npmGenerated');
     assert.equal(template.packageManager.name, 'npm');
     assert.ok(template.intendedFiles.includes('package.json'));
     for (const dependency of template.dependencies) assert.match(dependency.version, /^\d+\.\d+\.\d+$/);

@@ -1,15 +1,16 @@
-# Node project creation — catalog, local generation and recovery
+# Node project creation — planning, generation and owned installation
 
-Stages 1–2 provide a backend service separate from importing/running existing
-Node projects. Planning is read-only. Explicitly confirmed Generate writes local
-files, publishes a new folder and registers it. There is no dependency installer,
-framework initializer, registry network access, graphical creation wizard or
-automatic project execution. Existing PHP and Node controls keep their behavior.
+Stages 1–3 provide a backend service separate from importing/running existing
+Node projects. Planning is read-only. Confirmed Generate still writes/publishes
+local source files without installation. The separate confirmed Install action
+generates into a private stage, runs the selected npm with scripts disabled,
+verifies the result, then publishes/registers. No graphical wizard or automatic
+project execution is introduced. Existing PHP and Node controls keep their behavior.
 
 ## Versioned local templates
 
-The compiled catalog is schema 1, revision 2. Every template is revision 2,
-`qualification: localGeneration`, `lockfileStatus: notPrepared`. Its content
+The compiled catalog is schema 1, revision 3. Every template is revision 3,
+`qualification: scriptDisabledInstall`, `lockfileStatus: npmGenerated`. Its content
 revision hashes the catalog, renderer, template sources and MIT license. Plans
 also contain the exact byte size and SHA-256 of each materialized file, so local
 asset changes require a fresh review plan.
@@ -24,7 +25,10 @@ Common generated files:
 - `LICENSE`: unchanged Fairway MIT license and copyright notice.
 - `.env.example`: nonsecret local defaults; real `.env` is never created.
 - `.fairway-template.json`: random creation ID, catalog/template/asset revisions,
-  design provenance, dependency/license references and not-installed status.
+  design provenance and dependency/license references. This immutable source marker
+  describes generation, not live installation state; the durable journal owns status.
+- `package-lock.json`: genuine npm-generated complete resolution graph and integrity.
+- `.fairway-install.lock`: empty private workspace ownership lock.
 
 | Template ID | Additional files | Scripts |
 | --- | --- | --- |
@@ -47,12 +51,14 @@ Vite references. No upstream template archive or scaffolder is copied/executed;
 own licenses when installed. Catalog dependencies remain metadata, not new app
 build dependencies.
 
-**No template contains a package lockfile or node_modules.** No lockfile is
-fabricated. Installation, full transitive lockfile provenance, dependency/build
-compatibility and any install-script policy require Stage 3 review. The displayed
-prospective npm `ci` policy is disabled (`installationAvailable: false`) and is
-not runnable until an appropriate lockfile/install plan exists. Node-only JS has
-no third-party dependencies, but no npm lockfile is asserted for it either.
+Each template bundles a genuine npm v3 lockfile; no `node_modules` is bundled.
+`locks/provenance.json` records raw SHA-256, generator Node/npm versions, registry,
+and package counts. Generation normalizes only root package names. Version and
+integrity entries remain npm-generated. The renderer checks exact root dependencies,
+registry URLs, integrity structure and path bounds. Install rechecks the exact
+reviewed file hash before invoking npm. The immutable plan's `installationAvailable`
+is true; the separate Install request must include both `confirmed` and
+`installConfirmed`. Generate/Plan never invokes npm ci.
 
 ## Runtime and read-only planning
 
@@ -197,8 +203,8 @@ corruption, cancellation, failed registration and retry, registry-save replay,
 interrupted staging and actual SIGKILL host death at staging/publication boundaries.
 The nested-directory reproducer failed before identity checks and passed afterward.
 Syntax-only TypeScript compiler parsing caught and fixed both React entry-point
-quotes; it never imports/executes template code. Installation/build qualification
-of framework projects remains intentionally pending.
+quotes; it never imports/executes template code. Installation/build/run qualification
+is covered separately by the explicit offline installer suite below.
 
 Opt-in `real_local_generation_uses_selected_runtime_without_installation` uses
 provisioned Node 22/24 and their paired npm to generate/register all six projects.
@@ -207,7 +213,155 @@ fixtures or execute profiles. Both download/install/start nothing. The existing
 native PHP/Node lifecycle coexistence fixture is also run against disposable data
 and read-only packaged tools. See [Testing](testing.md) for commands and evidence.
 
-Stage 3 remains unimplemented: owned dependency installation, qualified lockfiles,
-network/script-policy review, install progress/logs and installer process supervision.
-Stage 4's graphical wizard is also outside this work. No PostgreSQL, Redis, Caddy,
+## Stage 3: owned npm installation
+
+`installation.rs` defines typed finite jobs; `installation_native.rs` validates
+and runs them on macOS. The shared Node runner accepts a narrow internal install
+launch variant. A separate `Executions` instance keeps installer status/logs out
+of the ordinary Node Projects list. One installer runs at a time; project servers
+and PHP services can continue independently. The desktop operation reservation
+covers acceptance/staging only, so a long network download does not block PHP controls.
+
+The exact selected Node executable runs its paired npm CLI with validated arguments:
+`ci --ignore-scripts --no-audit --no-fund --include=dev --global=false
+--workspaces=false --strict-ssl=true --engine-strict=true`. Fetch retries/timeouts
+are bounded; the helper enforces a five-minute job deadline. No shell command,
+remote initializer, dependency upgrade or development server is invoked.
+
+Preparation revalidates exact Node version/fingerprint, paired npm CLI, metadata,
+semver and the entire source receipt manifest. The child starts with Stage 2's
+allowlisted environment and selected Node first on PATH. HOME, cache and TMPDIR
+are newly created private app-owned per-job directories. Personal/global npm
+config and inherited npm credentials/options/proxies are absent; generated stages
+contain no `.npmrc`. TLS and SHA-512 dependency integrity remain enforced. The
+production registry is fixed to `https://registry.npmjs.org/`. There is no IPC URL
+or command override. A debug-only `node-install-fixtures` feature permits loopback
+mirrors set directly by Rust tests; release builds reject them even with that feature.
+
+`npm ci` may erase an existing dependency directory, so it is accepted only in
+an unpublished stage with **no existing node_modules**. The working directory is
+pinned to its opened inode with `fchdir` immediately before exec. Existing parent,
+stage and nested source checks remain intact. After npm and its helper are fully
+reaped, bounded descriptor walks hash dependency files, inodes, modes and safe
+`.bin` links. Absolute/escaping/chained dependency links, hard links and special
+files are rejected. Before publication and registration, source receipts and the
+entire dependency receipt are checked again. The same exclusive atomic directory
+rename and atomic registry save from Stage 2 are reused.
+
+A dependency receipt is a safety check for later recovery, not a malware scan.
+Node/runtime isolation is not an operating-system sandbox. Downloaded package code
+can execute when a user later explicitly builds or starts the project.
+
+### Ownership, cancellation and shutdown
+
+Every installation has distinct creation, job and run IDs plus revision checks.
+States are `starting`, `installing`, `completed`, `failed`, `cancelled`, `interrupted`.
+`installing` means a process is running; it does not mean the application is ready.
+The existing helper remains the process-group leader, so the group identity cannot
+be reused while it signals. Stop uses the live private channel, SIGTERM, then
+bounded SIGKILL for stubborn ordinary descendants. No saved PID, executable name
+or port is used for signaling. Host death closes the channel and triggers cleanup.
+Intentionally detached/escaped processes are outside this ordinary-descendant model.
+
+Cancellation before publication sets an owned flag and drains the group; once
+publication commits, cancellation reports too late and keeps the project. Worker
+errors also drain the native job before releasing runtime/workspace ownership.
+The workspace flock remains held by the helper across host death. Recovery and
+runtime removal honor that lock while an earlier helper finishes cleanup. The
+controller waits for reaping, not just npm's initial exit event, before publication.
+
+Hiding a window leaves jobs running. Explicit quit cancels staging/install jobs,
+waits for ownership cleanup, and attempts Node and PHP cleanup even if another
+component fails. The updater performs the same installer drain before replacement;
+a cleanup error prevents installation of the update. Runtime uninstall/replacement
+checks both project runs and installer leases. PHP Start All/Stop All remain unchanged.
+
+### Persistence and recovery policy
+
+The version-1 creation journal gains optional install status and dependency receipt
+fields; old Stage 2 journals remain readable with their persisted review manifests.
+After host restart, unfinished installation status is **interrupted**, never adopted
+or automatically restarted. `creation_jobs` includes installation IDs/status for
+recovery discovery. No PID grants authority. App-owned cursor logs reuse bounded
+256 KiB/1024-record memory and rotating 5 MiB disk segments; stdout/stderr stay
+identified and Unicode-safe. Status/diagnostic contracts contain no environment map.
+
+- `finalize`: only after durable `ciCompleted`, intact source/dependency receipts,
+  current tools and explicit confirmation. It completes exclusive publication and/or
+  retries registration. The deterministic creation ID prevents duplicate registration.
+- `discardStaging`: only intact unpublished source-only data. A partial or installed
+  `node_modules` is deliberately preserved: it can contain user changes. Published
+  projects are never deleted. Source-only cleanup reuses owned Stage 2 receipts.
+- **Retry:** review a fresh plan and authorize a fresh job/workspace. Never rerun
+  destructive ci in a partial workspace. The old failed stage is retained for inspection.
+- **Already published Stage 2 project:** select a new destination and review a fresh
+  generation/install plan for the same template. This is an explicit new project,
+  not an in-place upgrade or automatic migration. The old folder and registration
+  remain untouched; old user edits/dependencies are not copied. Reusing its occupied
+  destination is rejected. Any later manual removal is the user's separate decision.
+
+App-owned installer homes/caches and uncertain dependency stages are retained,
+not automatically recursively deleted. History remains bounded to 256 journals;
+there is no automatic retry, cache pruning or background installation.
+
+### IPC
+
+| Command | Request | Result |
+| --- | --- | --- |
+| `node_project_install_start` | planId, digest, confirmed, installConfirmed | InstallStatus |
+| `node_project_install_status` | jobId | InstallStatus |
+| `node_project_install_logs` | jobId, afterCursor | NodeLogBatch |
+| `node_project_install_cancel` | jobId, expectedRevision | InstallStatus |
+| `node_project_install_recover` | jobId, expectedRevision, action, confirmed | InstallStatus |
+
+TypeScript wrappers mirror these Rust DTOs. No graphical wizard is implemented;
+a future client should refresh the Node registry when an install completes.
+
+### Qualification and limitations
+
+The six genuine locks were generated separately against public npm on 2026-10-28
+using Node 22.23.4/npm 10.9.9 with lifecycle scripts disabled. Public clean installs
+and the four build scripts passed. One React download initially failed with
+EIDLETIMEOUT; retry with a 60-second fetch timeout succeeded with TLS/integrity intact.
+This was a qualification network failure, not a reproducible code defect.
+
+The controlled offline mirror then passed all six variants with real npm on both
+Node 22.23.4/npm 10.9.9 and Node 24.20.0/npm 11.19.0, including normalized project names,
+build/test scripts, dev-server HTTP responses and owned shutdown. esbuild/tsx/Vite
+and Rollup worked without install lifecycle hooks on macOS arm64 because their
+pinned platform packages supplied the binaries. No lifecycle-script exception was
+needed. This does not qualify other CPU/OS combinations or future dependency versions.
+
+Maintainer commands (only disposable output; public qualification is explicit):
+
+```sh
+python3 scripts/qualify_node_templates.py --node /absolute/node/bin/node
+# Candidate new locks only, never edits repository:
+python3 scripts/qualify_node_templates.py --node /absolute/node/bin/node --generate-locks
+# Build the native fixture helper with --features node-install-fixtures first.
+python3 scripts/test_node_installations.py --qualification-cache /tmp/fairway-template-qualification-... \
+  --runner /absolute/target/debug/examples/node_projects_runner \
+  --node /absolute/node22/bin/node --node /absolute/node24/bin/node
+```
+
+The offline server reads only genuine cached SHA-512 tarballs, never proxies/fetches
+remote packages, and also supplies corrupt bytes and 503 responses for failure tests.
+A reserved TCP port without a listener exercises unavailable-network handling.
+Use `--runtime /absolute/packaged/runtime` to include the live PHP coexistence test,
+or `--test-filter NAME` for focused checks. Freeze a helper built with
+`--features node-install-fixtures` outside Cargo output before changing build features;
+the harness checks its capabilities before running.
+The production code never exposes this server configuration through IPC.
+
+Windows/Linux native installation, signed installers, live updater replacement,
+manual GUI acceptance, deliberate process-group escape, a five-minute wall-clock
+expiry, power-loss simulation and a malicious same-user filesystem adversary are
+not qualified by these tests. Native hooks are platform-guarded. macOS filesystem
+identity checks mitigate races but do not create a sandbox. Normal user project
+data and the installed app are never used as installation test workspaces.
+
+Stage 4's graphical wizard remains outside this work. No PostgreSQL, Redis, Caddy,
 additional package managers, templates or generic plugin framework are introduced.
+
+Stage 3 test evidence and the complete file inventory are recorded in
+[Node installation verification](node-installation-verification.md).

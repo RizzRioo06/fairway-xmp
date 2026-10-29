@@ -14,7 +14,7 @@ const FRAME_LIMIT: u64 = 128 * 1024;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct Launch {
+pub(crate) struct Launch {
     pub home: std::path::PathBuf,
     pub data: std::path::PathBuf,
     pub runtime: std::path::PathBuf,
@@ -22,13 +22,21 @@ pub(super) struct Launch {
     pub run_id: String,
     pub expected_revision: String,
     pub manifest_revision: String,
+    #[serde(default)]
+    pub installation: Option<InstallLaunch>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct InstallLaunch {
+    pub creation_data: std::path::PathBuf,
+    pub creation_id: String,
 }
 
 #[cfg(any(target_os = "macos", test))]
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum Control {
-    Launch(Launch),
+    Launch(Box<Launch>),
     Stop,
 }
 
@@ -209,6 +217,7 @@ mod native {
                 "Missing runner launch request.",
             ));
         };
+        let launch = *launch;
         let stopped = Arc::new(AtomicBool::new(false));
         let control = stopped.clone();
         thread::spawn(move || {
@@ -242,35 +251,62 @@ mod native {
                     "An earlier runner for this project is still cleaning up. Retry shortly.",
                 ));
             }
-            let layout = Layout::at(launch.home, launch.data, launch.runtime);
-            let projects = NodeProjects::new(Some(layout));
-            let request = PrepareRuntimeRequest {
-                id: launch.id.clone(),
-                expected_revision: launch.expected_revision,
-                manifest_revision: launch.manifest_revision,
+            let _installation_lock = if let Some(installation) = &launch.installation {
+                Some(crate::node_project_creation::installation::runner_lock(
+                    &installation.creation_data,
+                    &installation.creation_id,
+                )?)
+            } else {
+                None
             };
-            let plan = projects.prepare_runtime(request)?;
-            let script = projects.execution_script(
-                &launch.id,
-                &plan.summary().registry_revision,
-                &plan.summary().manifest_revision,
-            )?;
-            if script.starts_with('-') {
-                return Err(Error::new(
-                    ErrorCode::InvalidProject,
-                    "Script names starting with '-' cannot be executed.",
-                ));
-            }
+            let mut command = if let Some(installation) = &launch.installation {
+                let layout = Layout::at(
+                    launch.home.clone(),
+                    installation.creation_data.clone(),
+                    launch.runtime.clone(),
+                );
+                crate::node_project_creation::installation::runner_command(
+                    &layout,
+                    &installation.creation_id,
+                    &launch.id,
+                    &launch.run_id,
+                )?
+            } else {
+                let layout = Layout::at(
+                    launch.home.clone(),
+                    launch.data.clone(),
+                    launch.runtime.clone(),
+                );
+                let projects = NodeProjects::new(Some(layout));
+                let request = PrepareRuntimeRequest {
+                    id: launch.id.clone(),
+                    expected_revision: launch.expected_revision,
+                    manifest_revision: launch.manifest_revision,
+                };
+                let plan = projects.prepare_runtime(request)?;
+                let script = projects.execution_script(
+                    &launch.id,
+                    &plan.summary().registry_revision,
+                    &plan.summary().manifest_revision,
+                )?;
+                if script.starts_with('-') {
+                    return Err(Error::new(
+                        ErrorCode::InvalidProject,
+                        "Script names starting with '-' cannot be executed.",
+                    ));
+                }
+                let mut command = plan.node_command();
+                command
+                    .arg(&plan.summary().npm.cli_path)
+                    .args(["--silent", "run-script", &script]);
+                command
+            };
             if stopped.load(Ordering::SeqCst) || SIGNAL.load(Ordering::SeqCst) {
                 emit(&socket, &Event::Finished);
                 return Ok(());
             }
-            let mut command = plan.node_command();
             use std::os::unix::process::CommandExt;
-            command
-                .process_group(id)
-                .arg(&plan.summary().npm.cli_path)
-                .args(["--silent", "run-script", &script]);
+            command.process_group(id);
             let mut child = command
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
@@ -348,7 +384,20 @@ mod native {
                 }));
             }
             let mut exit = None;
+            let installation_deadline = Instant::now() + Duration::from_secs(300);
             loop {
+                if launch.installation.is_some() && Instant::now() >= installation_deadline {
+                    emit(
+                        &socket,
+                        &Event::Failure {
+                            error: Error::new(
+                                ErrorCode::ExecutionFailed,
+                                "Dependency installation exceeded its five-minute limit.",
+                            ),
+                        },
+                    );
+                    break;
+                }
                 if let Some(status) = child.try_wait().map_err(io_error)? {
                     emit(
                         &socket,

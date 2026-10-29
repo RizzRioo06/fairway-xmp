@@ -80,6 +80,28 @@ impl Dir {
         }
         Ok(current)
     }
+    pub fn file(&self) -> Result<File> {
+        self.0.try_clone().map_err(failure)
+    }
+    pub fn link_text(&self, name: &str) -> Result<String> {
+        let mut bytes = vec![0u8; 4097];
+        let size = unsafe {
+            libc::readlinkat(
+                self.0.as_raw_fd(),
+                c(name)?.as_ptr(),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+            )
+        };
+        if size < 0 || size as usize >= bytes.len() {
+            return Err(failure("Invalid dependency symlink"));
+        }
+        bytes.truncate(size as usize);
+        String::from_utf8(bytes).map_err(failure)
+    }
+    pub fn names_bounded(&self, limit: usize) -> Result<Vec<String>> {
+        self.names_with_limit(limit)
+    }
     pub fn id(&self) -> Result<Identity> {
         Ok(identity(&self.0.metadata().map_err(failure)?))
     }
@@ -163,6 +185,9 @@ impl Dir {
         Ok(())
     }
     pub fn names(&self) -> Result<Vec<String>> {
+        self.names_with_limit(512)
+    }
+    fn names_with_limit(&self, limit: usize) -> Result<Vec<String>> {
         let fd = checked(unsafe {
             libc::openat(
                 self.0.as_raw_fd(),
@@ -202,7 +227,7 @@ impl Dir {
             }
             c(name)?;
             names.push(name.to_owned());
-            if names.len() > 512 {
+            if names.len() > limit {
                 return Err(failure("Too many job directory entries"));
             }
         }
@@ -327,13 +352,19 @@ impl Dir {
     pub fn sync(&self) -> Result<()> {
         self.0.sync_all().map_err(failure)
     }
+    pub fn lock_existing(&self, name: &str) -> Result<File> {
+        self.lock_with_flags(name, false)
+    }
     pub fn lock(&self, name: &str) -> Result<File> {
+        self.lock_with_flags(name, true)
+    }
+    fn lock_with_flags(&self, name: &str, create: bool) -> Result<File> {
         let fd = checked(unsafe {
             libc::openat(
                 self.0.as_raw_fd(),
                 c(name)?.as_ptr(),
                 libc::O_RDWR
-                    | libc::O_CREAT
+                    | if create { libc::O_CREAT } else { 0 }
                     | libc::O_NOFOLLOW
                     | libc::O_NONBLOCK
                     | libc::O_CLOEXEC,
@@ -416,13 +447,28 @@ pub(super) fn verify_tree(
     files: &BTreeMap<String, Receipt>,
     dirs: &BTreeMap<String, Identity>,
 ) -> Result<()> {
+    verify_tree_with_dependencies(root, files, dirs, None)
+}
+pub(super) fn verify_tree_with_dependencies(
+    root: &Dir,
+    files: &BTreeMap<String, Receipt>,
+    dirs: &BTreeMap<String, Identity>,
+    dependency: Option<&Identity>,
+) -> Result<()> {
     fn walk(
         root: &Dir,
         prefix: &str,
         found: &mut Vec<String>,
         dirs: &BTreeMap<String, Identity>,
+        dependency: Option<&Identity>,
     ) -> Result<()> {
         for name in root.names()? {
+            if prefix.is_empty() && name == "node_modules" && dependency.is_some() {
+                if Some(&root.child(&name)?.id()?) != dependency {
+                    return Err(failure("Dependency root was replaced"));
+                }
+                continue;
+            }
             let relative = format!("{prefix}{name}");
             let (_, mode) = root
                 .entry(&name)?
@@ -439,7 +485,7 @@ pub(super) fn verify_tree(
                         "An unknown/replaced nested directory was preserved.",
                     ));
                 }
-                walk(&child, &format!("{relative}/"), found, dirs)?;
+                walk(&child, &format!("{relative}/"), found, dirs, None)?;
             } else if mode & libc::S_IFMT as u32 != libc::S_IFREG as u32 {
                 return Err(Error::new(
                     ErrorCode::RecoveryUnsafe,
@@ -454,7 +500,7 @@ pub(super) fn verify_tree(
     }
     root.private()?;
     let mut found = Vec::new();
-    walk(root, "", &mut found, dirs)?;
+    walk(root, "", &mut found, dirs, dependency)?;
     found.sort();
     let mut expected: Vec<_> = files.keys().chain(dirs.keys()).cloned().collect();
     expected.sort();

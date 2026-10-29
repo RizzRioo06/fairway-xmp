@@ -23,3 +23,19 @@ export function cancelNodeProjectCreation(request: { jobId: string }): Promise<v
 export function recoverNodeProjectCreation(request: import('./types').RecoverCreationRequest): Promise<import('./types').CreationJobStatus> {
   return invoke('node_project_creation_recover', { request });
 }
+
+export function startNodeProjectInstallation(request: import('./types').InstallRequest): Promise<import('./types').InstallStatus> {
+  return invoke('node_project_install_start', { request });
+}
+export function nodeProjectInstallationStatus(request: { jobId: string }): Promise<import('./types').InstallStatus> {
+  return invoke('node_project_install_status', { request });
+}
+export function nodeProjectInstallationLogs(request: { jobId: string; afterCursor: number }): Promise<import('../node-projects/types').NodeLogBatch> {
+  return invoke('node_project_install_logs', { request });
+}
+export function cancelNodeProjectInstallation(request: import('./types').InstallReference): Promise<import('./types').InstallStatus> {
+  return invoke('node_project_install_cancel', { request });
+}
+export function recoverNodeProjectInstallation(request: import('./types').InstallRecoveryRequest): Promise<import('./types').InstallStatus> {
+  return invoke('node_project_install_recover', { request });
+}

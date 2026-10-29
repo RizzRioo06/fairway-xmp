@@ -1,4 +1,4 @@
-// Reviewed local generation only. No dependency installer or project-execution API.
+// Reviewed creation and explicitly authorized finite npm installation.
 export const creationErrorCodes = [
   'unsupportedPlatform', 'unavailable', 'invalidName', 'invalidDestination', 'destinationExists',
   'invalidTemplate', 'unsupportedPackageManager', 'runtimeUnavailable', 'runtimeChanged',
@@ -6,7 +6,7 @@ export const creationErrorCodes = [
   'catalogChanged', 'invalidRequest', 'duplicateRequest', 'planUnavailable', 'planTampered',
   'planExpired', 'planStale', 'planLimit', 'planConsumed', 'confirmationRequired', 'generationBusy',
   'unsafeTemplate', 'filesystemFailed', 'journalUnavailable', 'staleJob', 'jobUnavailable', 'recoveryUnsafe',
-  'cancellationTooLate', 'generationCancelled', 'registrationFailed',
+  'cancellationTooLate', 'generationCancelled', 'registrationFailed', 'invalidLockfile', 'installationFailed', 'installBusy', 'staleInstallation',
 ] as const;
 export type CreationErrorCode = typeof creationErrorCodes[number];
 export interface CreationError { code: CreationErrorCode; message: string }
@@ -22,7 +22,7 @@ export interface TemplateDependency {
 export interface NodeTemplate {
   id: string; revision: string; title: string; language: 'javascript' | 'typescript';
   nodeRange: string; packageManager: { name: 'npm'; versionRange: string };
-  qualification: 'localGeneration'; lockfileStatus: 'notPrepared'; intendedFiles: string[];
+  qualification: 'scriptDisabledInstall'; lockfileStatus: 'npmGenerated'; intendedFiles: string[];
   scripts: Record<string, string>; dependencies: TemplateDependency[];
   provenance: { kind: 'fairwayAuthoredTemplate'; referenceUrl: string; upstreamRevision: string | null; license: string; note: string };
 }
@@ -43,7 +43,7 @@ export interface NodeCreationPlan {
   template: NodeTemplate;
   tools: { runtimeId: string; nodePath: string; nodeVersion: string; npmCliPath: string; npmVersion: string; revision: string };
   installation: { packageManager: 'npm'; intendedCommand: 'ci'; ignoreScripts: true;
-    registry: string; cacheScope: 'appOwned'; dependencyLock: 'notPrepared'; installationAvailable: false };
+    registry: string; cacheScope: 'appOwned'; dependencyLock: 'npmGenerated'; installationAvailable: true };
   files: Record<string, { bytes: number; sha256: string }>;
   warnings: string[];
 }
@@ -53,7 +53,17 @@ export interface CreationJobReference { jobId: string; expectedRevision: number 
 export type CreationPhase = 'prepared' | 'staging' | 'ready' | 'publishing' | 'needsRegistration' | 'completed' | 'cancelled' | 'preserved';
 export interface CreationJobStatus {
   jobId: string; revision: number; phase: CreationPhase; destination: string; stagingPath: string;
-  projectId: string | null; error: CreationError | null; active: boolean; recoveryRequired: boolean;
+  projectId: string | null; error: CreationError | null; active: boolean; recoveryRequired: boolean; installation: InstallStatus | null;
 }
 export interface CreationJobsSnapshot { supported: boolean; jobs: CreationJobStatus[]; errors: string[] }
 export interface RecoverCreationRequest extends CreationJobReference { action: 'discardStaging' | 'retryRegistration'; confirmed: true }
+
+export type InstallState = 'starting' | 'installing' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+export interface InstallStatus {
+  jobId: string; creationId: string; runId: string; revision: number; state: InstallState;
+  runtime: {nodePath: string; version: string}; lockfileSha256: string; registry: string;
+  ciCompleted: boolean; cancelRequested: boolean; exitCode: number | null; error: CreationError | null;
+}
+export interface InstallRequest extends CreationPlanReference { confirmed: true; installConfirmed: true }
+export interface InstallReference { jobId: string; expectedRevision: number }
+export interface InstallRecoveryRequest extends InstallReference { action: 'finalize' | 'discardStaging'; confirmed: true }

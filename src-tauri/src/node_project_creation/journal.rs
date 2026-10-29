@@ -27,6 +27,10 @@ pub(super) struct Journal {
     pub project_id: Option<String>,
     pub error: Option<Error>,
     pub expected_registry_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installation: Option<super::installation::InstallStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<super::installation::DependencyReceipt>,
 }
 impl Journal {
     pub fn new(
@@ -47,6 +51,8 @@ impl Journal {
             project_id: None,
             error: None,
             expected_registry_revision: registry_revision,
+            installation: None,
+            dependencies: None,
         }
     }
     pub fn status(&self, active: bool) -> JobStatus {
@@ -62,6 +68,7 @@ impl Journal {
             project_id: self.project_id.clone(),
             error: self.error.clone(),
             active,
+            installation: self.installation.clone(),
             recovery_required: !active
                 && !matches!(self.phase, Phase::Completed | Phase::Cancelled),
         }
@@ -87,6 +94,24 @@ impl Journal {
             || Path::new(&self.plan.parent).join(&self.plan.project_name)
                 != Path::new(&self.plan.destination)
         {
+            return Err(invalid());
+        }
+        if let Some(status) = &self.installation {
+            if status.creation_id != id
+                || !super::hex(&status.job_id, 32)
+                || !super::hex(&status.run_id, 32)
+                || status.revision == 0
+                || status.runtime.node_path != self.plan.tools.node_path
+                || status.runtime.version != self.plan.tools.node_version
+                || self
+                    .plan
+                    .files
+                    .get("package-lock.json")
+                    .is_none_or(|file| file.sha256 != status.lockfile_sha256)
+            {
+                return Err(invalid());
+            }
+        } else if self.dependencies.is_some() {
             return Err(invalid());
         }
         let mut unsigned = self.plan.clone();

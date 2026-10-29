@@ -24,6 +24,7 @@ pub fn revision() -> String {
         }
     }
     bytes.extend_from_slice(include_bytes!("../../../LICENSE"));
+    bytes.extend_from_slice(super::locks::revision().as_bytes());
     super::digest(&bytes)
 }
 fn sources(id: &str) -> Result<&'static [(&'static str, &'static str)]> {
@@ -201,6 +202,11 @@ pub fn render(plan: &CreationPlan) -> Result<BTreeMap<String, Vec<u8>>> {
     };
     files.insert("package.json".into(), json(&package));
     files.insert(
+        "package-lock.json".into(),
+        super::locks::render(plan, &package)?,
+    );
+    files.insert(".fairway-install.lock".into(), Vec::new());
+    files.insert(
         ".node-version".into(),
         format!("{}\n", plan.tools.node_version).into_bytes(),
     );
@@ -221,8 +227,8 @@ pub fn render(plan: &CreationPlan) -> Result<BTreeMap<String, Vec<u8>>> {
         .keys()
         .map(|key| format!("- `npm run {key}`\n"))
         .collect::<String>();
-    files.insert("README.md".into(),format!("# {}\n\n{} — local template revision {}.\n\n## Setup\n\nCreated without installing dependencies or executing scripts. No package lockfile is supplied; dependency installation/build qualification belongs to Fairway Stage 3. No application has been started.\n\nSelected Node: `{}`; paired npm: `{}`. `.node-version` records the choice without changing any global default.\n\nIf independently setting this project up in Terminal, review dependencies and installation scripts first; `npm install --ignore-scripts` is a possible manual starting point, not a qualified Fairway installation. No remote initializer is needed.\n\n## Development\n\n{}\nCopy `.env.example` to `.env` if needed. API starters load it explicitly; Vite exposes only public `VITE_` values. Never commit secrets.\n\nLocal address: http://127.0.0.1:{} . A running process does not establish readiness. Stop with Ctrl-C in Terminal or Stop in Fairway. Resolve port conflicts explicitly.\n\n## Provenance\n\nSources are Fairway-authored, under the included MIT license. `.fairway-template.json` records the catalog, asset revision and dependency references. Framework packages retain their own licenses when installed. No third-party package sources are bundled here.\n",plan.project_name,plan.template.title,plan.template.revision,plan.tools.node_version,plan.tools.npm_version,commands,if react {5173} else {3000}).into_bytes());
-    files.insert(".fairway-template.json".into(),json(&serde_json::json!({"schemaVersion":1,"creationId":plan.id,"templateId":plan.template.id,"templateRevision":plan.template.revision,"catalogRevision":plan.catalog_revision,"assetRevision":revision(),"provenance":plan.template.provenance,"dependencies":plan.template.dependencies,"dependenciesInstalled":false,"lockfile":"notPrepared"})));
+    files.insert("README.md".into(),format!("# {}\n\n{} — local template revision {}.\n\n## Setup\n\nCreated without automatically executing project scripts. A genuine, pinned npm lockfile is supplied. Dependencies are installed only through an explicitly confirmed installation action; inspect the installation job status. No application has been started.\n\nSelected Node: `{}`; paired npm: `{}`. `.node-version` records the choice without changing any global default.\n\nIf independently setting this project up in Terminal, review dependencies and installation scripts first; `npm ci --ignore-scripts` uses the reviewed dependency graph without install-time lifecycle hooks. No remote initializer is needed.\n\n## Development\n\n{}\nCopy `.env.example` to `.env` if needed. API starters load it explicitly; Vite exposes only public `VITE_` values. Never commit secrets.\n\nLocal address: http://127.0.0.1:{} . A running process does not establish readiness. Stop with Ctrl-C in Terminal or Stop in Fairway. Resolve port conflicts explicitly.\n\n## Provenance\n\nSources are Fairway-authored, under the included MIT license. `.fairway-template.json` records the catalog, asset revision and dependency references. Framework packages retain their own licenses when installed. No third-party package sources are bundled here.\n",plan.project_name,plan.template.title,plan.template.revision,plan.tools.node_version,plan.tools.npm_version,commands,if react {5173} else {3000}).into_bytes());
+    files.insert(".fairway-template.json".into(),json(&serde_json::json!({"schemaVersion":1,"creationId":plan.id,"templateId":plan.template.id,"templateRevision":plan.template.revision,"catalogRevision":plan.catalog_revision,"assetRevision":revision(),"provenance":plan.template.provenance,"dependencies":plan.template.dependencies,"dependenciesInstalledByGeneration":false,"installationStatusSource":"Fairway creation journal","lockfile":"npmGenerated"})));
     if files.len() > 128 || files.values().map(Vec::len).sum::<usize>() > 2 * 1024 * 1024 {
         return Err(Error::new(
             ErrorCode::UnsafeTemplate,

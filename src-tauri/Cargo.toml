@@ -28,6 +28,7 @@ name = "terminal_bridge"
 required-features = ["terminal"]
 
 [features]
+node-install-fixtures = []
 default = ["desktop"]
 cli = []
 desktop = ["terminal", "dep:tauri", "dep:tauri-build", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-updater", "dep:tauri-plugin-dialog", "dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:reqwest", "dep:rustls"]
