@@ -4,8 +4,8 @@ Stages 1–3 provide a backend service separate from importing/running existing
 Node projects. Planning is read-only. Confirmed Generate still writes/publishes
 local source files without installation. The separate confirmed Install action
 generates into a private stage, runs the selected npm with scripts disabled,
-verifies the result, then publishes/registers. No graphical wizard or automatic
-project execution is introduced. Existing PHP and Node controls keep their behavior.
+verifies the result, then publishes/registers. Stage 4 adds a graphical wizard over these operations; development servers still
+require the existing explicit Start confirmation. Existing PHP and Node controls keep their behavior.
 
 ## Versioned local templates
 
@@ -175,7 +175,7 @@ guard, so Quit/updater installation wait rather than race file publication. Runn
 PHP/Node services keep running; their Start All/Stop All semantics are unchanged.
 Cancellation and read-only job listing bypass that guard. Successful registry
 handoffs invalidate Node cards using the existing real registry revision event.
-No GUI creation workflow is added.
+The Stage 4 wizard below reuses these native commands.
 
 | Command | Request | Result |
 | --- | --- | --- |
@@ -314,8 +314,8 @@ there is no automatic retry, cache pruning or background installation.
 | `node_project_install_cancel` | jobId, expectedRevision | InstallStatus |
 | `node_project_install_recover` | jobId, expectedRevision, action, confirmed | InstallStatus |
 
-TypeScript wrappers mirror these Rust DTOs. No graphical wizard is implemented;
-a future client should refresh the Node registry when an install completes.
+TypeScript wrappers mirror these Rust DTOs. The Stage 4 workspace refreshes the
+Node registry when a published, registered installation completes.
 
 ### Qualification and limitations
 
@@ -360,8 +360,57 @@ not qualified by these tests. Native hooks are platform-guarded. macOS filesyste
 identity checks mitigate races but do not create a sandbox. Normal user project
 data and the installed app are never used as installation test workspaces.
 
-Stage 4's graphical wizard remains outside this work. No PostgreSQL, Redis, Caddy,
-additional package managers, templates or generic plugin framework are introduced.
+No PostgreSQL, Redis, Caddy, additional package managers, templates or generic
+plugin framework are introduced.
 
 Stage 3 test evidence and the complete file inventory are recorded in
 [Node installation verification](node-installation-verification.md).
+
+
+## Stage 4: graphical creation workspace
+
+**Create New Project** sits beside Import in Node Projects. Six radio cards come
+from the compiled native catalog, including purpose descriptions and language;
+React does not maintain another template list. The wizard has five steps:
+
+1. Choose a catalog template.
+2. Enter a name, pick an existing parent through the native folder picker and
+   select an installed runtime. **Check setup** requests a read-only native plan.
+   Rust validates compatibility and the paired npm; the UI does not duplicate
+   semver or path rules. Unsupported choices cannot advance to a valid review.
+3. Review the native destination, template revision, files, pinned dependencies,
+   warnings and installation policy. Explicit consent is required. Expired/stale
+   plans require a refreshed review and fresh consent.
+4. Call `node_project_install_start`, which generates privately, installs, verifies,
+   publishes and registers. The wizard deliberately does **not** call Generate
+   first: that operation would publish a source-only project before installation.
+5. Show success only after completed publication and registration. **View project**
+   focuses its existing stopped card. Starting it remains a separate confirmation.
+
+`CreationWorkspace` owns job discovery separately from `CreationWizard`'s draft.
+`TemplateSelection`, `ProjectConfiguration`, `CreationReview`, `SetupProgress` and
+`CompletionRecovery` keep each step focused. `useCreationJobs` serializes polls,
+rejects stale revisions/mixed run identities and refreshes the project registry.
+Only an advisory selected job ID is stored in WebView session storage. Native
+journals remain the source of truth after navigation/reload. No unmount handler
+cancels jobs and no job is automatically restarted.
+
+The installer contract adds optional `progress` metadata: preparing, installing,
+verifying, publishing, registering and complete. These phases are saved by Rust
+at the real boundaries, including verification only after supervisor cleanup.
+No percentage or readiness estimate is invented. Optional fields and omitted
+empty descriptions preserve serialization/digests of old recovery journals.
+Existing ownership, locks, leases, supervisor and publication rules are unchanged.
+
+Installation output uses native job/run IDs and cursors, bounded to 256 KiB and
+1024 records in the UI, retaining stdout/stderr and escaped Unicode text. Changing
+jobs discards old views; late responses cannot mix output. Cancellation/recovery
+use the last native revision. Registration failures offer explicit finalization;
+legacy source-only publication offers Retry Registration. Partial installations
+require fresh review in another destination. No delete/discard button guesses
+whether uncertain files can safely be removed.
+
+The dialog reuses Fairway's modal focus trap, restores trigger/card focus, uses
+native controls and app color variables, and scrolls at the 820×650 minimum size.
+No installed application or normal user settings are needed for automated tests.
+See [manual acceptance](node-creation-manual-testing.md) for isolated Mac testing.

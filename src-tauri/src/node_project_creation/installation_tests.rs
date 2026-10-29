@@ -275,6 +275,7 @@ fn owned_installer_success_recovery_and_published_stage2_transition() {
     let started = f.start(&plan);
     let done = f.wait(&started, true);
     assert_eq!(done.state, InstallState::Completed, "{done:?}");
+    assert_eq!(done.progress, Some(InstallProgress::Complete));
     assert!(done.ci_completed);
     assert_eq!(f.nodes.snapshot().projects.len(), 2);
     assert!(f.nodes.runs().runs.is_empty());
@@ -847,6 +848,7 @@ fn prelaunch_lock_runtime_and_consent_revalidation_and_owned_empty_cleanup() {
             run_id: format!("{:032x}", rand::random::<u128>()),
             revision: 1,
             state: InstallState::Starting,
+            progress: Some(InstallProgress::Preparing),
             runtime: ProjectRuntime {
                 node_path: plan.tools.node_path.clone(),
                 version: plan.tools.node_version.clone(),
@@ -1199,4 +1201,18 @@ fn genuine_npm_network_unavailable_preserves_stage_without_publication() {
     assert!(Path::new(&plan.parent)
         .join(format!(".fairway-node-{}", plan.id))
         .exists());
+}
+
+#[test]
+fn progress_contract_is_optional_for_old_jobs_and_names_only_native_phases() {
+    for (phase, name) in [
+        (InstallProgress::Preparing, "preparing"),
+        (InstallProgress::Installing, "installing"),
+        (InstallProgress::Verifying, "verifying"),
+        (InstallProgress::Publishing, "publishing"),
+        (InstallProgress::Registering, "registering"),
+        (InstallProgress::Complete, "complete"),
+    ] {
+        assert_eq!(serde_json::to_value(phase).unwrap(), name);
+    }
 }

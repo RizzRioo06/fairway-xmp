@@ -338,6 +338,9 @@ fn update(
     {
         status.cancel_requested = slot.cancel.load(Ordering::SeqCst);
     }
+    if state == InstallState::Completed {
+        status.progress = Some(InstallProgress::Complete);
+    }
     status.state = state;
     status.error = error;
     status.revision += 1;
@@ -345,6 +348,22 @@ fn update(
     store.save(journal)?;
     service.installation.update(&result, true);
     Ok(result)
+}
+// Additive display metadata only; ownership and publication rules stay native.
+fn progress(
+    service: &NodeProjectCreation,
+    store: &Store,
+    journal: &mut Journal,
+    step: InstallProgress,
+) -> Result<InstallStatus> {
+    let status = journal
+        .installation
+        .as_mut()
+        .ok_or_else(|| io("Missing installation status"))?;
+    status.progress = Some(step);
+    let state = status.state.clone();
+    let error = status.error.clone();
+    update(service, store, journal, state, error)
 }
 // A synchronous rejection can happen after the durable journal was claimed.
 // Keep that discoverable job terminal even though no worker was launched.
@@ -388,12 +407,12 @@ fn publish(
             ));
         }
         journal.phase = Phase::Publishing;
-        store.save(journal)?;
+        progress(service, store, journal, InstallProgress::Publishing)?;
         parent.verify_child(&journal.stage_name, &root)?;
         parent.no_replace(&journal.stage_name, &journal.plan.project_name)?;
     }
     journal.phase = Phase::NeedsRegistration;
-    store.save(journal)?;
+    progress(service, store, journal, InstallProgress::Registering)?;
     register(service, nodes, store, journal)
 }
 impl NodeProjectCreation {
@@ -436,6 +455,7 @@ impl NodeProjectCreation {
             run_id: run_id.clone(),
             revision: 1,
             state: InstallState::Starting,
+            progress: Some(InstallProgress::Preparing),
             runtime: node_projects::ProjectRuntime {
                 node_path: plan.tools.node_path.clone(),
                 version: plan.tools.node_version.clone(),
@@ -708,6 +728,7 @@ fn worker(
                 .find(|run| run.project_id == status.job_id)
                 .ok_or_else(|| io("Lost owned install status"))?;
             if run.state == node_projects::RunState::Running && !observed_running {
+                journal.installation.as_mut().unwrap().progress = Some(InstallProgress::Installing);
                 status = update(
                     &service,
                     &store,
@@ -773,6 +794,7 @@ fn worker(
         parent.assert_path(Path::new(&journal.plan.parent))?;
         let root = stage(&parent, &journal, &journal.stage_name)?;
         let _workspace_lock = root.lock_existing(".fairway-install.lock")?;
+        progress(&service, &store, &mut journal, InstallProgress::Verifying)?;
         let dependencies = dependency_snapshot(&root)?;
         filesystem::verify_tree_with_dependencies(
             &root,

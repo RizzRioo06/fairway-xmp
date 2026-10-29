@@ -15,6 +15,8 @@ pub struct Template {
     pub id: String,
     pub revision: String,
     pub title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
     pub language: String,
     pub node_range: String,
     pub package_manager: PackageManager,

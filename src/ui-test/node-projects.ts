@@ -93,3 +93,9 @@ export function flood(start: number) {
   const run = Object.values(runs)[0];
   if (run) for (let index = start; index < start + 500; index++) append(run, 'stdout', `burst-${index} 日本\n`);
 }
+
+// Native creation hands registration to the existing workspace; never Start.
+export function addCreatedProject(project: NodeProjectConfig, emit: Emit) {
+  if (projects.some(existing => existing.id === project.id)) return;
+  projects.push(project); revision++; emit('node-projects-changed', { revision: `r${revision}` });
+}

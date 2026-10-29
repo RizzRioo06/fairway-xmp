@@ -8,6 +8,7 @@ import { useProjects } from './useProjects';
 import ProjectEditor from './ProjectEditor';
 import ProjectLogs from './ProjectLogs';
 import type { NodeProjectConfig, NodeProjectInspection, NodeRunStatus, SaveNodeProjectRequest } from './types';
+import CreationWorkspace from '../node-project-creation/CreationWorkspace';
 import './projects.css';
 
 type Confirmation = { kind: 'start' | 'restart'; project: NodeProjectConfig; run?: NodeRunStatus; inspection: NodeProjectInspection; revision: string } | { kind: 'remove'; project: NodeProjectConfig; revision: string };
@@ -21,6 +22,8 @@ export default function NodeProjectsPage({ active, busy }: { active: boolean; bu
   const operation = useRef(false);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
   const [logs, setLogs] = useState<string | null>(null);
+  const [creationRequest, setCreationRequest] = useState(0);
+  const createButton = useRef<HTMLButtonElement>(null);
   const importButton = useRef<HTMLButtonElement>(null);
   const modalTrigger = useRef<HTMLElement | null>(null);
   function trigger(element: HTMLElement) { element.focus({ preventScroll: true }); modalTrigger.current = element; }
@@ -86,17 +89,18 @@ export default function NodeProjectsPage({ active, busy }: { active: boolean; bu
   const supported = canControl && snapshot?.supported;
   // The page owns no processes. Navigation and component teardown never send Stop.
   return <div className="node-projects-page">
-    <div className="page-heading"><div><h1>Node Projects</h1><p>Your existing Node.js apps, each with its own runtime.</p></div><div className="button-row"><button className="secondary" disabled={blocked || !canControl || loading} onClick={() => { void refresh(); }}><RefreshCw size={14} />Refresh</button><button ref={importButton} className="primary" disabled={blocked || !supported || !!snapshot?.registryError || !snapshot?.revision} onClick={event => { trigger(event.currentTarget); setEditor({ project: null, revision: snapshot!.revision! }); }}><Plus size={15} />Import Node project</button></div></div>
+    <div className="page-heading"><div><h1>Node Projects</h1><p>Your existing Node.js apps, each with its own runtime.</p></div><div className="button-row"><button className="secondary" disabled={blocked || !canControl || loading} onClick={() => { void refresh(); }}><RefreshCw size={14} />Refresh</button><button ref={importButton} className="primary" disabled={blocked || !supported || !!snapshot?.registryError || !snapshot?.revision} onClick={event => { trigger(event.currentTarget); setEditor({ project: null, revision: snapshot!.revision! }); }}><Plus size={15} />Import Node project</button><button ref={createButton} className="primary" disabled={blocked || !supported || !!snapshot?.registryError || !snapshot?.revision} onClick={event => { trigger(event.currentTarget); setCreationRequest(value => value + 1); }}><Plus size={15} />Create New Project</button></div></div>
+    <CreationWorkspace active={active} openRequest={creationRequest} returnFocus={createButton.current} onRegistered={refresh} onViewProject={id => { void refresh().then(() => requestAnimationFrame(() => { document.getElementById(`node-project-${id}`)?.focus({ preventScroll: false }); })); }} />
     <section className="sites-server"><Code2 size={20} /><div><strong>Explicit starts. Independent runtimes.</strong><p>Importing never runs scripts. Start and Restart execute the selected npm script and its lifecycle hooks. PHP service controls stay separate. Running indicates a process, not application readiness.</p></div></section>
     {!canControl && <div className="notice" role="status">Open the macOS desktop app to manage Node projects.</div>}
     {canControl && snapshot && !snapshot.supported && <div className="notice" role="status">Node Projects is available on macOS first. Your PHP services remain available.</div>}
     {loading && !snapshot && <p role="status">Loading Node projects…</p>}
     {(error || snapshot?.registryError) && <div className="notice error" role="alert">{error ?? nodeError(snapshot!.registryError)} <button className="text-link" disabled={blocked} onClick={() => { void refresh(); }}>Retry loading projects</button></div>}
     {notice && <div className={`notice${notice.error ? ' error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.text}</div>}
-    {supported && !snapshot.registryError && !snapshot.projects.length && <section className="sites-empty"><FolderOpen size={26} /><h2>No Node projects yet</h2><p>Import a folder containing package.json. Choose an installed Node version and an npm script, then start it when you are ready.</p></section>}
+    {supported && !snapshot.registryError && !snapshot.projects.length && <section className="sites-empty"><FolderOpen size={26} /><h2>No Node projects yet</h2><p>Create a project from a template or import a folder containing package.json. Choose an installed Node version and an npm script, then start it when you are ready.</p></section>}
     {supported && <ul className="sites-list node-project-list" aria-label="Registered Node projects">{snapshot.projects.map(({ config: project, rootAvailable, manifestAvailable, runtimeAvailable }) => {
       const run = runs[project.id], running = activeRun(run);
-      return <li className="site-item node-project-card" key={project.id} aria-label={project.name}>
+      return <li id={`node-project-${project.id}`} tabIndex={-1} className="site-item node-project-card" key={project.id} aria-label={project.name}>
         <div className="site-title"><h2>{project.name}</h2><span role="status" className={`site-status${run?.state === 'running' ? ' ready' : ''}`}>{run ? states[run.state] : 'Stopped'}</span></div>
         <p className="site-root"><span>Folder</span><code>{project.root}</code></p>
         <div className="node-project-meta"><span>Node <strong>{project.runtime.version}</strong></span><span>npm script <code>{project.script}</code></span></div>

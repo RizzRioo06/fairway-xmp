@@ -660,3 +660,51 @@ fn ipc_shapes_are_camel_case_strict_and_exclude_environment_values() {
 #[cfg(target_os = "macos")]
 #[path = "generation_tests.rs"]
 mod generation_tests;
+
+#[cfg(target_os = "macos")]
+#[test]
+fn legacy_review_journals_keep_their_digest_when_description_and_progress_are_absent() {
+    use super::{
+        filesystem::Dir,
+        journal::{Journal, Store},
+    };
+    let f = Fixture::new();
+    let mut plan = f.state.plan(f.request()).unwrap();
+    plan.template.description.clear();
+    plan.digest.clear();
+    let parent = Dir::absolute(Path::new(&plan.parent))
+        .unwrap()
+        .identity_text()
+        .unwrap();
+    plan.digest = digest(&serde_json::to_vec(&(&plan, &parent)).unwrap());
+    let mut journal = Journal::new(plan.clone(), parent, None);
+    journal.installation = Some(InstallStatus {
+        job_id: "d".repeat(32),
+        creation_id: plan.id.clone(),
+        run_id: "e".repeat(32),
+        revision: 1,
+        state: InstallState::Starting,
+        progress: None,
+        runtime: ProjectRuntime {
+            node_path: plan.tools.node_path.clone(),
+            version: plan.tools.node_version.clone(),
+        },
+        lockfile_sha256: plan.files["package-lock.json"].sha256.clone(),
+        registry: "https://registry.npmjs.org/".into(),
+        ci_completed: false,
+        cancel_requested: false,
+        exit_code: None,
+        error: None,
+    });
+    let wire = serde_json::to_value(&journal).unwrap();
+    assert!(wire["plan"]["template"].get("description").is_none());
+    assert!(wire["installation"].get("progress").is_none());
+    let store = Store::open(f.state.layout().unwrap(), true)
+        .unwrap()
+        .unwrap();
+    store.claim(&journal).unwrap();
+    let loaded = store.load(&plan.id).unwrap();
+    assert_eq!(loaded.plan.digest, plan.digest);
+    assert!(loaded.plan.template.description.is_empty());
+    assert!(loaded.installation.unwrap().progress.is_none());
+}

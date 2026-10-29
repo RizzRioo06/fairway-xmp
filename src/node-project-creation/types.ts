@@ -20,7 +20,7 @@ export interface TemplateDependency {
   license: string; metadataUrl: string;
 }
 export interface NodeTemplate {
-  id: string; revision: string; title: string; language: 'javascript' | 'typescript';
+  id: string; revision: string; title: string; description?: string; language: 'javascript' | 'typescript';
   nodeRange: string; packageManager: { name: 'npm'; versionRange: string };
   qualification: 'scriptDisabledInstall'; lockfileStatus: 'npmGenerated'; intendedFiles: string[];
   scripts: Record<string, string>; dependencies: TemplateDependency[];
@@ -61,6 +61,7 @@ export interface RecoverCreationRequest extends CreationJobReference { action: '
 export type InstallState = 'starting' | 'installing' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 export interface InstallStatus {
   jobId: string; creationId: string; runId: string; revision: number; state: InstallState;
+  progress?: 'preparing' | 'installing' | 'verifying' | 'publishing' | 'registering' | 'complete';
   runtime: {nodePath: string; version: string}; lockfileSha256: string; registry: string;
   ciCompleted: boolean; cancelRequested: boolean; exitCode: number | null; error: CreationError | null;
 }

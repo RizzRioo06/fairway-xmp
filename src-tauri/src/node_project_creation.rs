@@ -4,8 +4,8 @@ use crate::{
     node_projects::{self, ProjectRuntime, RuntimeChoice, RuntimePreparation},
 };
 pub use installation::{
-    InstallLogRequest, InstallQuery, InstallRecoveryAction, InstallRecoveryRequest,
-    InstallReference, InstallRequest, InstallState, InstallStatus,
+    InstallLogRequest, InstallProgress, InstallQuery, InstallRecoveryAction,
+    InstallRecoveryRequest, InstallReference, InstallRequest, InstallState, InstallStatus,
 };
 use serde::{Deserialize, Serialize};
 use std::{

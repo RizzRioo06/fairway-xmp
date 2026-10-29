@@ -1,4 +1,5 @@
 import { nodeRequest, resetNodeProjects } from './node-projects';
+import { creationRequest, resetCreation, folder as creationFolder } from './node-creation';
 import { preview } from '../bridge';
 import { terminalRequest } from './terminal';
 import type { MailMessage, NodeStatus, PhpSettings, PhpSettingsView, Ports, ProjectConfig, ServiceId, Snapshot } from '../types';
@@ -107,6 +108,7 @@ function running(id: ServiceId, value: boolean) {
 
 export function select(next: Scenario, os: Platform) {
   resetNodeProjects();
+  if (data) resetCreation();
   resetData();
   phpOverrides = {};
   seedMail();
@@ -181,6 +183,8 @@ function syncNode() {
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   window.dispatchEvent(new CustomEvent('fairway-ui-command', { detail: command }));
+  if (command === 'pick_folder' && document.querySelector('.creation-wizard')) return creationFolder() as T;
+  if (command === 'node_project_templates' || command.startsWith('node_project_creation') || command.startsWith('node_project_install_')) return structuredClone(await creationRequest(command, args, emit, platform)) as T;
   if (command.startsWith('node_project')) return structuredClone(await nodeRequest(command, args, emit, platform)) as T;
   if (command === 'pick_folder' && document.querySelector('.node-projects-page [role=dialog]')) return ((await import('./node-projects')).options.root ?? '/Users/Student May/Code/Node café 日本') as T;
   if (command.startsWith('terminal_')) return terminalRequest(command, args, data.documentRoot, data.phpVersions[data.phpVersion], data.runtimeReady, data.projects) as T;

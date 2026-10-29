@@ -21,6 +21,16 @@ pub enum InstallState {
     Cancelled,
     Interrupted,
 }
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum InstallProgress {
+    Preparing,
+    Installing,
+    Verifying,
+    Publishing,
+    Registering,
+    Complete,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InstallStatus {
@@ -29,6 +39,8 @@ pub struct InstallStatus {
     pub run_id: String,
     pub revision: u64,
     pub state: InstallState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<InstallProgress>,
     pub runtime: node_projects::ProjectRuntime,
     pub lockfile_sha256: String,
     pub registry: String,
