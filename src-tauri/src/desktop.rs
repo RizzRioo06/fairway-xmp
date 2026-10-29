@@ -18,6 +18,7 @@ use tauri::{Emitter, Manager as _, State};
 use tauri_plugin_updater::UpdaterExt;
 
 mod node_project_commands;
+mod postgresql_commands;
 
 #[cfg(target_os = "macos")]
 pub(crate) mod authorization;
@@ -1323,6 +1324,7 @@ pub fn run() {
             } else {
                 app.path().resource_dir()?.join("runtime")
             };
+            app.manage(Arc::new(crate::postgresql::Discovery::new(Some(runtime.clone()))));
             let startup = crate::startup::Startup::new(runtime);
             let nodes = Arc::new(crate::node_projects::NodeProjects::new(startup.layout.clone()));
             let event_app = app.handle().clone();
@@ -1360,6 +1362,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            postgresql_commands::postgres_runtime_discover,
+            postgresql_commands::postgres_runtime_inspect,
             snapshot,
             startup_status,
             retry_startup,

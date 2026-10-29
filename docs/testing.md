@@ -101,3 +101,22 @@ its own folders and fnm inventory, dispatches the same runner entrypoint, and
 stops owned runs before disposing the fixture. Its test picker returns those
 folders. It does not automate Finder or execute personal project scripts.
 Keep device acceptance separate using the [manual guide](node-projects-manual-testing.md).
+
+## PostgreSQL integration Stage 1 (read-only)
+
+Do not run the existing PostgreSQL **server smoke** during Stage 1: it initializes
+a disposable cluster. The discovery tests need no database or network connection:
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features \
+  --features terminal --locked postgresql
+cargo run --manifest-path src-tauri/Cargo.toml --no-default-features \
+  --example postgres_discovery --locked
+```
+
+The example prints metadata only. Its explicit `--inspect` argument authorizes
+fixed native `--version` invocations, never server initialization/start or health
+connections. Wrappers/scripts are refused. Use installed tools read-only; do not
+install/start Homebrew services or change existing clusters just to obtain test
+candidates. See [Stage 1 design](postgresql-integration.md) and
+[observed verification](postgresql-stage1-verification.md).
