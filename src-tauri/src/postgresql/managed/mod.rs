@@ -168,7 +168,13 @@ impl Managed {
             || Err(fail(Code::Unavailable, "Runtime not provisioned")),
             |c| Ok(Ok(c.base.shared_lock("clients.lease")?)),
         )
-        .map_err(|_| fail(Code::Unavailable, "Runtime client lease unavailable"))?
+        .map_err(|error| {
+            if error.code == ErrorCode::Busy {
+                fail(Code::Busy, "PostgreSQL metadata resolver is busy")
+            } else {
+                fail(Code::Unavailable, "Runtime client lease unavailable")
+            }
+        })?
     }
     pub(crate) fn explorer_connection(
         &self,
@@ -236,11 +242,15 @@ impl Managed {
                 Ok(Ok(envelope))
             },
         )
-        .map_err(|_| {
-            fail(
-                Code::Unavailable,
-                "Verified PostgreSQL runtime or owned credentials unavailable",
-            )
+        .map_err(|error| {
+            if error.code == ErrorCode::Busy {
+                fail(Code::Busy, "PostgreSQL metadata resolver is busy")
+            } else {
+                fail(
+                    Code::Unavailable,
+                    "Verified PostgreSQL runtime or owned credentials unavailable",
+                )
+            }
         })?
     }
     pub fn stop_for_shutdown(&self) -> Result<()> {

@@ -132,3 +132,13 @@ results](postgresql-stage2-verification.md). It uses a memory-only test vault an
 does not establish native Keychain qualification. The separate opt-in Keychain smoke
 must be run by an operator in a disposable macOS account. [Runtime preparation](postgresql-runtime.md)
 requires checksum verification before authorized source-script execution.
+
+
+## PostgreSQL Stage 3 backend
+
+The focused opt-in suite reuses the verified Stage 2 payload and headless worker;
+it creates only disposable clusters and never uses Keychain or personal databases.
+See [Stage 3 reproduction/results](postgresql-stage3-verification.md) for catalog,
+exact-type rows, read-only/write consent, bounds, timeout, cancellation/owner-loss
+and restricted external-role fixtures. Signed runtime/Keychain acceptance remains
+unverified. No graphical PostgreSQL workspace is implemented or simulated here.

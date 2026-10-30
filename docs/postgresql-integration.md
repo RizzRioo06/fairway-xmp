@@ -1,10 +1,133 @@
 # PostgreSQL integration — Phase 2
 
-Stage 1 implements independent read-only discovery. Stage 2 adds an explicitly
-authorized managed runtime and cluster controller for macOS arm64. No PostgreSQL
-service starts on app launch, discovery or provisioning. External installations
-remain read-only discovery targets; no external server control or connection
-profile API exists. Explorer, arbitrary SQL, roles and backup/restore are deferred.
+Stage 1 implements read-only discovery; Stage 2 adds explicitly authorized managed
+lifecycle. Stage 3 adds database-explorer and SQL-editor **backend** contracts and
+native workers. No PostgreSQL service starts automatically. No graphical PostgreSQL
+workspace, persistent external profiles, role UI or backup/restore UI is implemented.
+Signed runtime packaging and real signed-app Keychain acceptance remain unverified;
+Stage 3 fixtures do not establish managed release acceptance.
+
+## Stage 3 backend
+
+| Module | Responsibility |
+| --- | --- |
+| `postgresql/explorer_contract.rs` | Strict target/session/operation/page/query/result/error DTOs; ephemeral password input has no Debug or public serialization |
+| `postgresql/explorer/mod.rs` | Memory-only sessions, bounded job registry, unique job IDs, early/session/all cancellation; no external lifecycle authority |
+| `postgresql/explorer/sql.rs` | Identifier quoting, validated columns/sort/filter choices, bound values, authorization and input limits |
+| `postgresql/explorer/catalog.rs` | PostgreSQL-native database/schema/relation/column/index/view queries with privilege checks |
+| `postgresql/explorer/process.rs`, `wire.rs` | Owned private helper, cleared environment, stdin-only secrets, bounded IPC/deadlines and helper memory supervision |
+| `postgresql/explorer/native.rs` | Verified libpq, asynchronous connect/query, single-row results, connection-bound cancellation and transaction outcomes |
+| `desktop/postgresql_explorer_commands.rs`, `src/postgresql/explorer*.ts` | Explicit typed IPC and frontend foundations; no automatic invocation or workspace UI |
+
+The chosen transport reuses Stage 2's pinned libpq rather than coupling PostgreSQL
+to PHP startup or adding a new driver dependency. Existing Fairway job IDs,
+operation reservations, private worker transport and exact-value result patterns
+are reused; MySQL SQL, credentials, KILL QUERY and service ownership are not.
+See [Stage 3 verification and limits](postgresql-stage3-verification.md).
+
+### Connections and ownership
+
+`postgres_connection_open({confirmed:true,database,target})` registers a descriptor;
+it returns `authentication:notChecked`, **not** an authenticated/ready claim.
+Targets are `{kind:managed,clusterId}` or `{kind:external,host,port,user,password,
+transport}`. A job authenticates a new bounded connection against that database.
+Select another database by opening another session, using the same explicit policy.
+There are at most 16 memory-only sessions and two backend job slots. Desktop query
+IPC also uses Fairway's existing operation reservation, serializing it with other
+service/database actions. No session/SQL/history/password is written to disk.
+
+Managed jobs recheck the owned, running cluster and verified runtime, resolve only
+its Keychain secret, and check the server's database/role/version/data-directory/
+cluster-name identity. Unavailable Keychain fails closed; there is no production
+managed memory-vault fallback. Client leases are separate shared leases; existing
+managed process/runtime leases and ownership receipts remain intact.
+
+External sessions explicitly choose `transport:loopback` and literal `127.0.0.1` or
+`::1`; their password is deliberately session-only input, not a persistence fallback.
+No server data directory/PID/service identity or lifecycle authority belongs to that
+target. `transport:verifyFull` records the required remote policy but currently
+returns `unavailable`: the pinned minimal client has no TLS. No downgrade, CA bypass,
+external configuration write or personal libpq service/password-file inheritance
+occurs. Both paths currently require the separately provisioned verified macOS
+arm64 client and a server reporting exactly 18.6; no other version/platform/remote
+combination is claimed qualified by these fixtures.
+
+### Catalog, rows and SQL
+
+`postgres_explorer_execute({jobId,sessionId,operation})` accepts these operations:
+`databases`, `schemas`, `relations`, `columns`, `indexes`, `view`, `rows`, `query`.
+Catalogs use `pg_catalog`, schema-aware identities, privilege checks and bound text
+names. Default schema lists omit internal schemas. Relations include ordinary and
+partitioned tables, views, materialized views and foreign tables when accessible;
+foreign-server behavior is not qualified. Columns include formatted types, defaults,
+nullability and identity/generated flags; indexes include primary/unique/valid and
+definition; views expose their definition.
+
+Rows validate identifiers as 1–63 UTF-8 bytes without control characters, quote each
+schema/relation/column separately with doubled double quotes, and bind every filter,
+limit and offset. Sort directions/operators are enums; columns must match catalog
+metadata. Filters support equality/inequality, comparisons, literal text contains,
+and NULL tests, joined by AND. Native comparison semantics determine type validity;
+invalid casts/operators return safe SQLSTATE errors. Primary-key columns break sort
+ties; views/unkeyed relations warn about unstable order. Offset pagination always
+warns about concurrent changes; no full COUNT, snapshot cursor or keyset protocol
+is added. The page response includes `hasMore` from one extra row.
+
+Catalog/browse jobs use read-only transactions. Custom SQL additionally requires
+`confirmed:true`; `mode` defaults to `readOnly`. A conservative initial-keyword gate
+rejects obvious non-read commands, while the **server read-only transaction** guards
+DML hidden in WITH/functions. Explicit `mode:readWrite,confirmed:true` is required
+for modifying SQL. The extended query protocol accepts a single statement and bound
+text/NULL parameters, without splitting SQL on semicolons. SQL scripts, COPY streams,
+manual transactions and commands needing execution outside a transaction are not
+supported. Privileged SQL, functions/views/foreign tables and nontransactional
+side effects are not sandboxed by PostgreSQL read-only transactions; use least
+privilege. See [transaction semantics](https://www.postgresql.org/docs/18/sql-set-transaction.html).
+
+Write jobs commit only after successful bounded result collection. Results/errors
+report `outcome`: `notStarted`, `notCommitted`, `committed`, or `unknown`. A lost
+commit response/worker transport is never reported as a guaranteed rollback. Even
+`notCommitted` does not undo sequence or external-function side effects. Oversized
+write RETURNING results are cancelled and commit is not attempted. Read jobs close
+without committing. No SQL/parameter/server diagnostic text is logged by the backend.
+Managed job sessions suppress value-bearing server diagnostics; logging policy on
+externally owned servers remains outside Fairway's control.
+
+Results preserve ordered columns (including duplicate labels) and rows as exact
+UTF-8 strings/NULL, with type OID, common type name, modifier and origin metadata.
+JSON/JSONB, UUID, arrays, BIGINT/NUMERIC, bytea and timestamps are not coerced through
+JavaScript numbers or object maps. Unknown/domain/extension type names fall back
+to `oid:<number>`; column inspection supplies PostgreSQL's formatted type. Timezone
+is UTC, DateStyle ISO, bytea hex, and float output requests round-trip precision.
+
+### Bounds and cancellation
+
+Initial limits: SQL 64 KiB; 32 parameters of 4 KiB each; page size 50/default and
+200/max; offset 100,000; three sorts/eight filters; 128 result columns; 200 query/
+catalog rows; 64 KiB per cell; 256 KiB cumulative returned text; 1 MiB private input
+and 2 MiB serialized output. Row browsing permits one bounded lookahead row.
+Excess query rows are marked truncated and cancelled; oversized cells/bytes fail
+with `resultLimit`. These display/resource caps do not pretend to limit SQL effects.
+
+Connection deadline is three seconds; statement timeout ten seconds; lock timeout
+one second; worker query deadline twelve seconds; parent helper deadline twenty
+seconds. Single-row libpq retrieval avoids buffering an entire multirow result.
+The owned helper's physical footprint is sampled every ten milliseconds at 256 MiB;
+this is supervision with possible sampling overshoot, not a hard allocation/RSS
+sandbox. Unavailable supervision fails closed. Helper core dumps are disabled.
+
+`postgres_explorer_cancel({jobId})` requests cancellation of that job's own libpq
+connection, never a supplied backend PID or server process. Bounded early-cancel
+markers prevent a cancellation-before-dispatch race; closing a session cancels
+its jobs and drops its credential when jobs release their copies. Quit/update
+hooks request active-job cancellation through the independent Explorer state.
+Private stdin EOF signals owner loss. Short metadata-resolver contention reports
+`busy` with `notStarted`, rather than misreporting runtime/vault unavailability;
+callers may retry only before dispatch. Cancellation delivery is best effort and
+closes the job connection; server deadlines remain a fallback. Only a stalled or
+over-budget **client helper** can be forcibly cleaned up, never an external server.
+See [libpq cancellation](https://www.postgresql.org/docs/18/libpq-cancel.html) and
+[single-row retrieval](https://www.postgresql.org/docs/18/libpq-single-row-mode.html).
 
 ## Stage 2 implementation
 
@@ -102,8 +225,8 @@ flowchart LR
   UI[Typed frontend API] --> IPC[PostgreSQL IPC]
   IPC --> Discovery[Tool discovery and version inspection]
   IPC --> Managed[Owned managed cluster controller]
-  IPC -. later .-> Connections[Connection profiles and private workers]
-  Connections -. later .-> Explorer[PostgreSQL catalog and SQL adapter]
+  IPC --> Connections[Memory sessions and private workers]
+  Connections --> Explorer[PostgreSQL catalog and SQL backend]
 ```
 
 The discovery path below remains the Stage 1 boundary; the managed path above is implemented in Stage 2:
@@ -181,7 +304,7 @@ Errors are `busy`, `confirmationRequired`, `staleCandidate`, or `unavailable`.
 Request DTOs reject unknown fields. IPC version inspection has no disk persistence,
 credential input, network operation, start/stop or mutation endpoint.
 
-## Connection/profile design (future stages; managed implementation above)
+## Historical connection/profile plan (persistent profiles remain future work)
 
 Use a discriminated target: `{kind:managed, clusterId}` or
 `{kind:external, profileId}`. A runtime toolset ID is neither target type.
@@ -240,12 +363,12 @@ connections may be closed/cancelled; their servers must never be stopped.
 | `RowViewer`, `TableWorkspace`, `query-results`, `row-values`, `Dialog`, `ActionMenu` | Exact string/NULL rendering, pagination controls, dialogs, results and focus patterns | Add schema identity and engine capabilities; keep MySQL/SQLite behavior and tests |
 | MySQL/SQLite workers and forms | Safety patterns only | Do not reuse backticks, MySQL catalogs/KILL QUERY/unsigned/AUTO_INCREMENT, SQLite rowid or shared MySQL credentials |
 
-The proposed first explorer transport is a separate PHP PostgreSQL worker, because
+The Stage 1 transport candidate was a separate PHP PostgreSQL worker, because
 Fairway already ships both drivers. Confirm cancellation via the connection's own
 `pg_cancel_query`/libpq cancel handle before choosing PDO-only execution; do not
 cancel arbitrary server backend PIDs. A Rust driver remains an alternative if the
 PHP adapter cannot meet isolation, TLS, exact-value or cancellation requirements.
-No new dependency is selected or installed in Stage 1. See official
+Stage 3 instead selects the existing pinned native libpq worker above, with no new dependency. See official
 [connection-bound cancellation](https://www.postgresql.org/docs/18/libpq-cancel.html).
 
 ## Explorer and administration plan
@@ -285,19 +408,19 @@ partial effects. Database dumps do not include global roles/tablespaces; plan a
 separately authorized pg_dumpall globals path. Restores can execute code and must
 never auto-run downloaded dumps. See [pg_dump behavior and version compatibility](https://www.postgresql.org/docs/18/app-pgdump.html).
 
-## Stage 3 readiness
+## Stage 4 readiness
 
-The managed backend and disposable lifecycle fixtures are implemented. Signed
-runtime packaging and signed-app Keychain acceptance remain release blockers;
-Windows, Linux, Intel Macs and older macOS versions are unverified/unsupported for
-managed control. Review those limitations before authorizing more work.
+The backend is ready for a separately authorized graphical integration against its
+qualified macOS arm64/18.6 development path. Stage 4 should bind session/operation
+contracts to navigation, schema-aware tables, exact-value cells, SQL mode consent,
+cancel controls, truncation and uncertain-commit states. Do not add automatic service
+startup or external ownership. No Stage 4 implementation has begun.
 
-After acceptance and a new request, Stage 3 can add connection/profile foundations
-and the database explorer plan above, using an independent native worker and exact
-value handling. Do not begin it automatically. Keep external connection ownership
-separate from this managed service, and qualify TLS/cancellation before enabling
-external profiles. SQL editing, roles and backup/restore remain separately staged.
+Signed runtime packaging, real signed-app Keychain acceptance, remote TLS/client
+qualification and other platform/server combinations remain outstanding. Backend
+fixtures do not establish real managed-cluster or release acceptance. Persistent
+profiles, roles and backup/restore remain separately scoped future work.
 
-[Stage 1 verification](postgresql-stage1-verification.md) is historical discovery
-evidence; [Stage 2 verification](postgresql-stage2-verification.md) supersedes its
-statements about the absence of managed lifecycle code.
+[Stage 1](postgresql-stage1-verification.md), [Stage 2](postgresql-stage2-verification.md)
+and [Stage 3 verification](postgresql-stage3-verification.md) distinguish historical
+evidence from current implementation and unresolved acceptance.

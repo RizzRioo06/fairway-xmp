@@ -381,6 +381,36 @@ fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independen
             confirmed: true,
         })
     };
+    let wait_for_sleep = |expected: &str| {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let result = match query(
+                "SELECT count(*) FROM pg_catalog.pg_stat_activity \
+                 WHERE application_name='fairway-postgresql-job' AND state='active' \
+                 AND query='SELECT pg_sleep(30)' AND pid<>pg_catalog.pg_backend_pid()",
+                vec![],
+                false,
+            ) {
+                Err(error) if error.code == x::Code::Busy && Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(25));
+                    continue;
+                }
+                result => result.unwrap(),
+            };
+            let actual = result.rows[0][0].as_deref();
+            if actual == Some(expected) {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                // Only fresh fixture sessions are queried; no passwords or SQL
+                // text are included in these diagnostic fields.
+                let activity=query("SELECT application_name,state,wait_event_type,wait_event FROM pg_catalog.pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_catalog.pg_backend_pid()",vec![],false).unwrap();
+                eprintln!("Fixture activity states: {:?}", activity.rows);
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    };
     query(
         "CREATE SCHEMA \"test\"\"; DROP SCHEMA nope;--\"",
         vec![],
@@ -529,21 +559,41 @@ fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independen
     let jid = job.clone();
     let started = Instant::now();
     let thread = std::thread::spawn(move || {
-        state.execute(
-            &owner,
-            x::Request {
-                job_id: jid,
-                session_id: sid,
-                operation: x::Operation::Query {
-                    sql: "SELECT pg_sleep(30)".into(),
-                    parameters: vec![],
-                    mode: x::QueryMode::ReadOnly,
-                    confirmed: true,
+        let dispatch_deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let result = state.execute(
+                &owner,
+                x::Request {
+                    job_id: jid.clone(),
+                    session_id: sid.clone(),
+                    operation: x::Operation::Query {
+                        sql: "SELECT pg_sleep(30)".into(),
+                        parameters: vec![],
+                        mode: x::QueryMode::ReadOnly,
+                        confirmed: true,
+                    },
                 },
-            },
-        )
+            );
+            // The observer can race the short metadata resolver. Only Busy is
+            // retryable here: it means this job has not reached SQL dispatch.
+            if result.as_ref().is_err_and(|e| e.code == x::Code::Busy)
+                && Instant::now() < dispatch_deadline
+            {
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+            return result;
+        }
     });
-    std::thread::sleep(Duration::from_millis(900));
+    // Observe the actual server statement before requesting cancellation.
+    if !wait_for_sleep("1") {
+        let code = if thread.is_finished() {
+            thread.join().unwrap().err().map(|e| e.code)
+        } else {
+            None
+        };
+        panic!("Sleep query was not active; completed job code: {code:?}");
+    }
     let duplicate = explorer
         .execute(
             &managed,
@@ -559,6 +609,7 @@ fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independen
     explorer.cancel(x::Cancel { job_id: job }).unwrap();
     assert_eq!(thread.join().unwrap().unwrap_err().code, x::Code::Cancelled);
     assert!(started.elapsed() < Duration::from_secs(8));
+    assert!(wait_for_sleep("0"));
     assert_eq!(
         query("SELECT pg_sleep(30)", vec![], false)
             .unwrap_err()
@@ -666,7 +717,7 @@ fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independen
         write.write_all(&input.0).unwrap();
         drop(input);
         drop(e);
-        std::thread::sleep(Duration::from_millis(600));
+        assert!(wait_for_sleep("1"));
         drop(write);
         let until = Instant::now() + Duration::from_secs(4);
         loop {
@@ -678,6 +729,7 @@ fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independen
             std::thread::sleep(Duration::from_millis(20));
         }
     }
+    assert!(wait_for_sleep("0"));
     // A new unprivileged fixture role qualifies external access without granting
     // that target any lifecycle authority. Its verifier is copied only in memory.
     let verifier = query(
@@ -799,4 +851,18 @@ fn session_cluster_id(managed: &Managed) -> String {
         .unwrap()
         .id
         .clone()
+}
+
+#[test]
+fn explorer_resolution_preserves_busy_without_accessing_runtime_or_credentials() {
+    use crate::postgresql::explorer_contract::Code;
+    let managed = Managed::new(None);
+    let _guard = managed.controller.lock().unwrap();
+    let connection = managed
+        .explorer_connection(None, "postgres".into())
+        .err()
+        .unwrap();
+    assert_eq!(connection.code, Code::Busy);
+    let lease = managed.explorer_lease().err().unwrap();
+    assert_eq!(lease.code, Code::Busy);
 }
