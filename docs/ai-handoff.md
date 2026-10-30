@@ -1,27 +1,25 @@
 # AI handoff
 
-- Repository: `/Users/rioo/projects/fairway-xmp-personal`, personal fork
-  `RizzRioo06/fairway-xmp`; active branch `feature/postgresql-integration`.
-- Base: verified `origin/main` at `dbc03ff`. Use `git log -1` for this stage's commit.
-- **Phase 2 PostgreSQL Stage 1 is complete; Stage 2 has not started.** read-only tool discovery, explicit native
-  `--version` inspection, typed Rust/Tauri/TypeScript IPC and architecture plan.
-  No PostgreSQL server initialization/start, connection, profile/password storage,
-  service controls, explorer or database mutation is implemented.
-- Backend: `src-tauri/src/postgresql.rs`, `postgresql/`,
-  `desktop/postgresql_commands.rs`; frontend contracts: `src/postgresql/`.
-- [Architecture and later-stage contracts](postgresql-integration.md),
-  [verification/limitations](postgresql-stage1-verification.md).
+- Personal fork `RizzRioo06/fairway-xmp`; branch `feature/postgresql-integration`.
+  Base `origin/main`: `dbc03ff`; Stage 1: `4af4d1e`. Use `git log -1` for latest.
+- **Stage 2 implemented; signed runtime/Keychain acceptance remains outstanding.**
+  Pinned official PostgreSQL 18.6 macOS arm64 source recipe, verified private runtime
+  provisioning, Keychain-only production secrets, explicit SCRAM/loopback initdb,
+  owned foreground lifecycle, smart-only shutdown, separate responsiveness/auth,
+  bounded retained logs and typed managed-only IPC. No auto-start/service UI.
+- Modules: `src-tauri/src/postgresql/managed/`, `managed_contract.rs`,
+  `desktop/postgresql_managed_commands.rs`, `src/postgresql/`.
+- [Architecture](postgresql-integration.md), [runtime/pin/release blockers](postgresql-runtime.md),
+  [verification and manual acceptance](postgresql-stage2-verification.md).
+- Real disposable-cluster tests use a memory fixture vault, **not** the login Keychain.
+  Headless native Keychain smoke is compile-checked only; run manually in a disposable
+  account. Final signed payload must be pinned after signing; current pin is the
+  qualified ad-hoc development payload. Existing release workflows omit it.
+- Never adopt/delete/overwrite/upgrade a cluster, signal external installations or
+  bypass unavailable vault/integrity checks. Failed stages/journals/PID markers are
+  retained. Active clients can delay smart stop; orphan recovery is manual review.
+  Generic `--remove-data` refuses any PostgreSQL tree/link. MySQL/PHP/Node remain separate.
 
-PostgreSQL is independent of MySQL/PHP/Node. Discovered tools and matching versions
-never grant cluster/process ownership or prove readiness. External connections
-must stay separate from managed lifecycle. Future passwords require an OS vault
-or memory-only use; no plaintext persistence or credentials in diagnostics.
-
-`feature/node-project-templates` remains unchanged at `3f81e1e`, awaiting the user's
-final manual acceptance/merge. It is not included in this branch. The existing
-Node Projects integration on main remains. Project instructions in `AGENTS.md`
-were carried forward unchanged because main did not yet contain that file.
-
-Next: review/authorize Stage 2 runtime packaging, vault boundary and explicit safe
-managed-cluster lifecycle using disposable fixtures. Do not begin Stage 2, merge
-main, alter other feature branches or push upstream without a new request.
+`main` and upstream remain unchanged. `feature/node-project-templates` stays at
+`3f81e1e`, awaiting manual acceptance/merge. Do not merge, distribute this unqualified
+signed-runtime path, or start Stage 3/explorer/SQL/roles/backups without a new request.

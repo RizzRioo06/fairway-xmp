@@ -1,4 +1,4 @@
-// Stage 1 native contracts. No connection credentials or service-control commands.
+// Independent discovery and managed-only lifecycle contracts; credentials stay native.
 export type PostgresTool = 'postgres' | 'initdb' | 'pg_ctl' | 'psql' | 'pg_isready' | 'pg_dump' | 'pg_restore' | 'pg_dumpall';
 export type PostgresVersion = { major: number; minor: number; patch: number | null };
 export type PostgresToolIssue = 'missing' | 'unsafeFile' | 'probeFailed' | 'invalidVersion' | 'deadlineExceeded';
@@ -21,3 +21,18 @@ export function isPostgresError(value: unknown): value is PostgresError {
   return typeof error.message === 'string' && typeof error.code === 'string'
     && ['busy', 'confirmationRequired', 'staleCandidate', 'unavailable'].includes(error.code);
 }
+
+// Managed target only. No renderer-supplied path, password, executable or SQL.
+export type ManagedPostgresSnapshot = {
+  supported: boolean;
+  runtimeVersion: string;
+  clusterId: string | null;
+  port: number | null;
+  running: boolean;
+  responsiveness: 'notChecked' | 'accepting' | 'rejecting' | 'noResponse';
+  authentication: 'notChecked' | 'authenticated' | 'rejected';
+  message: string | null;
+};
+export type ManagedPostgresConfirmation = { confirmed: true };
+export type InitializeManagedPostgres = ManagedPostgresConfirmation & { port: number };
+export type ManagedPostgresLogs = { text: string; truncated: boolean };

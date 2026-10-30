@@ -8,12 +8,16 @@ test('PostgreSQL discovery errors remain typed without accepting unrelated failu
   }
   for (const value of [null, {}, new Error('error'), { code: 'saveFailed', message: 'error' }, { code: 'busy', message: 1 }]) assert.equal(isPostgresError(value), false);
 });
-test('Stage 1 bridge exposes discovery/version inspection and keeps managed/external control separate', () => {
+test('Bridge keeps discovery separate from explicitly managed-only lifecycle', () => {
   const api = readFileSync(new URL('../src/postgresql/api.ts', import.meta.url), 'utf8');
   const commands = [...api.matchAll(/invoke\('([^']+)'/g)].map(match => match[1]);
-  assert.deepEqual(commands, ['postgres_runtime_discover', 'postgres_runtime_inspect']);
+  assert.deepEqual(commands, ['postgres_runtime_discover', 'postgres_runtime_inspect', ...['provision', 'initialize', 'start', 'stop', 'restart', 'snapshot', 'health', 'logs'].map(action => `postgres_managed_${action}`)]);
   const native = readFileSync(new URL('../src-tauri/src/desktop/postgresql_commands.rs', import.meta.url), 'utf8');
-  for (const command of commands) assert.ok(native.includes(`fn ${command}(`));
+  for (const command of commands.slice(0, 2)) assert.ok(native.includes(`fn ${command}(`));
+  const managed = readFileSync(new URL('../src-tauri/src/desktop/postgresql_managed_commands.rs', import.meta.url), 'utf8');
+  for (const command of commands.slice(2)) assert.ok(managed.includes(command));
+  assert.ok(managed.includes('super::begin_operation'));
+  assert.equal(commands.some(command => /external|query|sql|explor/.test(command)), false);
   const rust = readFileSync(new URL('../src-tauri/src/postgresql.rs', import.meta.url), 'utf8');
   assert.ok(rust.includes('deny_unknown_fields'));
   assert.ok(rust.includes('pub confirmed: bool'));

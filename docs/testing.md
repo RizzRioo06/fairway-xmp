@@ -120,3 +120,15 @@ connections. Wrappers/scripts are refused. Use installed tools read-only; do not
 install/start Homebrew services or change existing clusters just to obtain test
 candidates. See [Stage 1 design](postgresql-integration.md) and
 [observed verification](postgresql-stage1-verification.md).
+
+
+## Managed PostgreSQL Stage 2
+
+Only explicitly authorized isolated tests may build the pinned source and initialize
+new disposable clusters. Never run them against installed Fairway, Homebrew/system
+clusters or personal profiles. The ignored native lifecycle fixture needs the
+reviewed payload and a headless health worker; see [Stage 2 reproduction and actual
+results](postgresql-stage2-verification.md). It uses a memory-only test vault and
+does not establish native Keychain qualification. The separate opt-in Keychain smoke
+must be run by an operator in a disposable macOS account. [Runtime preparation](postgresql-runtime.md)
+requires checksum verification before authorized source-script execution.

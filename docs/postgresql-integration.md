@@ -1,9 +1,94 @@
-# PostgreSQL integration — Phase 2, Stage 1
+# PostgreSQL integration — Phase 2
 
-Stage 1 adds read-only runtime discovery and an architecture for later PostgreSQL
-work. It does not ship a PostgreSQL server, initialize a cluster, connect to any
-server, or add service/explorer controls. No PostgreSQL version is qualified for
-managed use by a successful discovery or version check.
+Stage 1 implements independent read-only discovery. Stage 2 adds an explicitly
+authorized managed runtime and cluster controller for macOS arm64. No PostgreSQL
+service starts on app launch, discovery or provisioning. External installations
+remain read-only discovery targets; no external server control or connection
+profile API exists. Explorer, arbitrary SQL, roles and backup/restore are deferred.
+
+## Stage 2 implementation
+
+| Module | Responsibility |
+| --- | --- |
+| `scripts/prepare_postgresql_runtime.py`, `postgresql-source.lock.json` | Authorized SHA-256-pinned official 18.6 source build in disposable staging, native dependency validation, exclusive payload publication |
+| `postgresql/managed/runtime.rs`, `runtime-pin.json` | Reviewed manifest digest, exact file tree/hash checks, private copy, inode ownership and runtime lease |
+| `postgresql/managed/files.rs` | Descriptor-relative no-follow filesystem operations, private ownership, hardlink checks, durable journals, exclusive publication and locks |
+| `postgresql/managed/mod.rs` | Owned root/cluster receipts, explicit initdb, foreground child, smart shutdown and independent service state |
+| `postgresql/managed/secrets.rs` | Native macOS Keychain generic-password items; no renderer password or plaintext fallback |
+| `postgresql/managed/health.rs` | Bounded clean-environment pg_isready and private stdin/libpq worker for authenticated identity checks |
+| `postgresql/managed/logs.rs` | Private bounded disk capture and recent output; persistent last-log reference |
+| `postgresql/managed_contract.rs`, `desktop/postgresql_managed_commands.rs`, `src/postgresql/` | Strict typed IPC, existing desktop operation reservations, separate managed-only API |
+
+[Runtime preparation and release boundaries](postgresql-runtime.md) document the
+pin and packaging. [Stage 2 verification](postgresql-stage2-verification.md) records
+actual evidence and unresolved signed-app/vault acceptance; this is not release
+qualification or permission to begin Stage 3.
+
+The controller creates its own `data/postgresql` only after a confirmed mutation.
+Existing roots require an inode-bound owner marker before any lock/journal write.
+It uses a separate service lock, runtime lease, random cluster ID, port, Keychain
+account, logs and metadata. It never calls MySQL recovery, service managers, brew,
+pg_upgrade, shell profiles or external PID-based control. Constructors do no IO;
+snapshot/health/log reads do not create a missing root. Existing registered metadata
+can be reopened, but a live process is never adopted.
+
+`postgres_managed_{provision,initialize,start,stop,restart}` require explicit
+`confirmed:true`. Initialization also accepts a port; no IPC accepts a path,
+executable, credential, connection URL, additional PostgreSQL arguments or SQL.
+Snapshot/health/logs are separate read commands. The TypeScript API has no automatic
+calls, polling or service UI. PostgreSQL is excluded from PHP/MySQL Start All/Stop
+All. Quit attempts PostgreSQL, Node and PHP cleanup even if another stack fails;
+update installation is aborted when managed cleanup fails. Generic `--remove-data`
+refuses any PostgreSQL tree/link instead of deleting a cluster.
+
+Initialization validates the pinned runtime, configured Fairway/HTTPS reservations
+and actual loopback bind, then creates and reads back a random 256-bit secret in
+Keychain. No cluster directory/initdb is created when the vault fails. Keychain
+queries prohibit interactive authentication; unavailable/locked storage fails closed.
+The account is an opaque data-root hash plus cluster ID. Credentials never reach
+IPC, argv, environment, password files or logs. Test-only memory vaults do not exist
+as a production fallback. A private pipe feeds `initdb --pwfile=/dev/fd/0`, with
+SCRAM for local/host initialization, UTF-8/C locale and mode-0700 staging.
+
+Only the new stage's config is written: `127.0.0.1`, separate port, Unix sockets
+disabled, SCRAM-only host auth for the generated role, all other host/local rules
+rejected, password/statement logging disabled. Loopback non-TLS is explicit; remote
+connections are unsupported. The protected data tree, cluster inode/marker,
+PG_VERSION, pinned runtime and configuration digests are checked before Start.
+Unexpected links/hardlinks, foreign ownership, permissive POSIX modes, altered
+configuration/auto.conf, occupied ports and any pre-existing postmaster marker
+are refused. Same-user hostile modification is not sandboxed by these checks.
+
+A durable nonsecret intent journal precedes the vault write and bootstrap; owned publication and `active.json` use
+no-overwrite operations. Failures retain the stage, journal and any already-created
+vault item for diagnosis; a vault failure also retains its opaque intent reference. A publication/registration interruption is surfaced and
+blocks new initialization; it never auto-adopts, deletes or upgrades that cluster.
+There is no automated repair, pruning, password rotation or data-removal API.
+
+Start owns a foreground `postgres` Child and keeps the runtime lease until it exits.
+Stop sends PostgreSQL's documented **smart shutdown** SIGTERM to that unreaped child,
+never a PID read from a file; it waits ten seconds. Active clients cause an explicit
+waiting error and retain the child/lease. Retry after clients finish; Restart starts
+only after Stop succeeds. There is no fast/immediate shutdown or forced live-server
+kill. Only a timed-out unpublished initdb bootstrap or private health worker can
+receive bounded worker cleanup. Child commands clear the inherited environment and
+disable core dumps. See [PostgreSQL shutdown modes](https://www.postgresql.org/docs/18/server-shutdown.html).
+
+Process ownership (`running`), responsiveness (`accepting`, `rejecting`, `noResponse`,
+`notChecked`) and authentication (`authenticated`, `rejected`, `notChecked`) remain
+separate. The private native health worker rechecks the pinned runtime and supplies
+only fixed loopback parameters to libpq, with no personal service/password files.
+Its fixed, bounded query verifies database, role, server version, data directory
+and cluster identity. Raw libpq errors are suppressed. A responsive server with a
+wrong/unavailable credential is never reported as authenticated.
+
+Logs are mode 0600, at most 1 MiB per run and 64 KiB in a response. At most 32 retained
+log files are permitted; Start then refuses instead of deleting history. Live output
+keeps the recent tail; after reopening, the last retained disk capture is bounded
+and marked truncated when appropriate. After an app crash or Quit anyway, an orphan
+server may remain: Fairway neither signals it nor removes its PID marker. Manual
+ownership review is required; automatic process/cluster adoption is deliberately
+absent. Smart shutdown may complete later after active clients disconnect.
 
 ## Independent ownership and modules
 
@@ -16,12 +101,12 @@ External servers remain externally owned even when Fairway connects to them.
 flowchart LR
   UI[Typed frontend API] --> IPC[PostgreSQL IPC]
   IPC --> Discovery[Tool discovery and version inspection]
-  IPC -. later .-> Managed[Owned managed cluster controller]
+  IPC --> Managed[Owned managed cluster controller]
   IPC -. later .-> Connections[Connection profiles and private workers]
   Connections -. later .-> Explorer[PostgreSQL catalog and SQL adapter]
 ```
 
-Only the solid path exists in Stage 1:
+The discovery path below remains the Stage 1 boundary; the managed path above is implemented in Stage 2:
 
 | Module | Responsibility |
 | --- | --- |
@@ -96,7 +181,7 @@ Errors are `busy`, `confirmationRequired`, `staleCandidate`, or `unavailable`.
 Request DTOs reject unknown fields. IPC version inspection has no disk persistence,
 credential input, network operation, start/stop or mutation endpoint.
 
-## Configuration, secrets and health design (later stages only)
+## Connection/profile design (future stages; managed implementation above)
 
 Use a discriminated target: `{kind:managed, clusterId}` or
 `{kind:external, profileId}`. A runtime toolset ID is neither target type.
@@ -200,17 +285,19 @@ partial effects. Database dumps do not include global roles/tablespaces; plan a
 separately authorized pg_dumpall globals path. Restores can execute code and must
 never auto-run downloaded dumps. See [pg_dump behavior and version compatibility](https://www.postgresql.org/docs/18/app-pgdump.html).
 
-## Recommended Stage 2, only after a new request
+## Stage 3 readiness
 
-Implement a pinned, separately packaged managed runtime and safe cluster lifecycle
-with an OS vault/memory-only secret boundary. Review supported OS/CPU/major versions
-and corresponding notices first. Require explicit initialization consent, a new
-owned empty destination, a configurable independent loopback port, SCRAM auth,
-durable journal and verified shutdown. Prove failure/cancellation recovery and
-that existing Homebrew/system clusters remain untouched using disposable fixtures.
-Keep external profiles separate and begin their explicit authenticated health-test
-contract without external service ownership. Explorer, arbitrary SQL, roles and
-backup/restore remain later stages unless separately authorized.
+The managed backend and disposable lifecycle fixtures are implemented. Signed
+runtime packaging and signed-app Keychain acceptance remain release blockers;
+Windows, Linux, Intel Macs and older macOS versions are unverified/unsupported for
+managed control. Review those limitations before authorizing more work.
 
-[Stage 1 verification and limits](postgresql-stage1-verification.md) records the
-actual evidence; this design is not permission to run Stage 2.
+After acceptance and a new request, Stage 3 can add connection/profile foundations
+and the database explorer plan above, using an independent native worker and exact
+value handling. Do not begin it automatically. Keep external connection ownership
+separate from this managed service, and qualify TLS/cancellation before enabling
+external profiles. SQL editing, roles and backup/restore remain separately staged.
+
+[Stage 1 verification](postgresql-stage1-verification.md) is historical discovery
+evidence; [Stage 2 verification](postgresql-stage2-verification.md) supersedes its
+statements about the absence of managed lifecycle code.
