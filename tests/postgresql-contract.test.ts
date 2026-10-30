@@ -22,3 +22,12 @@ test('Bridge keeps discovery separate from explicitly managed-only lifecycle', (
   assert.ok(rust.includes('deny_unknown_fields'));
   assert.ok(rust.includes('pub confirmed: bool'));
 });
+test('Explorer bridge stays independent from managed lifecycle and exposes no persistence or backup commands', () => {
+  const api = readFileSync(new URL('../src/postgresql/explorer.ts', import.meta.url), 'utf8');
+  const commands = [...api.matchAll(/invoke\('([^']+)'/g)].map(match => match[1]);
+  assert.deepEqual(commands, ['postgres_connection_open', 'postgres_connection_close', 'postgres_explorer_execute', 'postgres_explorer_cancel']);
+  const native = readFileSync(new URL('../src-tauri/src/desktop/postgresql_explorer_commands.rs', import.meta.url), 'utf8');
+  for (const command of commands) assert.ok(native.includes(`fn ${command}(`));
+  assert.ok(native.includes('super::begin_operation'));
+  assert.equal(/localStorage|sessionStorage|console\./.test(api), false);
+});
