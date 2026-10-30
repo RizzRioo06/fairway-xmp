@@ -234,6 +234,12 @@ impl Dir {
         self.sync()
     }
     pub fn lock(&self, value: &str) -> Result<File> {
+        self.lock_mode(value, libc::LOCK_EX)
+    }
+    pub(crate) fn shared_lock(&self, value: &str) -> Result<File> {
+        self.lock_mode(value, libc::LOCK_SH)
+    }
+    fn lock_mode(&self, value: &str, mode: i32) -> Result<File> {
         let n = name(value)?;
         let f = fd(unsafe {
             libc::openat(
@@ -254,7 +260,7 @@ impl Dir {
             || !owned(&m)
             || m.nlink() != 1
             || m.mode() & 0o7777 != 0o600
-            || unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0
+            || unsafe { libc::flock(f.as_raw_fd(), mode | libc::LOCK_NB) } != 0
         {
             return Err(failure(
                 "Managed runtime/cluster is leased or its lock is unsafe",

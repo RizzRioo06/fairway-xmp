@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Mutex};
 
 mod discovery;
+pub mod explorer;
+pub mod explorer_contract;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod managed;
 pub mod managed_contract;

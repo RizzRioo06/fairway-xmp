@@ -66,6 +66,17 @@ impl Managed {
     pub fn logs(&self) -> super::Result<Logs> {
         Self::unavailable()
     }
+    pub(crate) fn explorer_connection(
+        &self,
+        _: Option<&str>,
+        _: String,
+    ) -> crate::postgresql::explorer_contract::Result<crate::postgresql::explorer::wire::Envelope>
+    {
+        Err(crate::postgresql::explorer_contract::fail(
+            crate::postgresql::explorer_contract::Code::Unavailable,
+            "PostgreSQL client requires qualified macOS arm64 runtime",
+        ))
+    }
     pub fn stop_for_shutdown(&self) -> super::Result<()> {
         Ok(())
     }

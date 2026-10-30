@@ -323,3 +323,480 @@ fn generic_data_removal_preserves_postgresql_directories_and_links() {
     symlink(s.0.join("kept"), s.0.join("postgresql")).unwrap();
     assert!(crate::postgresql::ensure_data_removal_allowed(&s.0).is_err());
 }
+
+#[test]
+#[ignore = "Requires reviewed payload and query worker; creates disposable database fixtures with memory-only vault"]
+fn stage3_native_catalog_rows_queries_types_cancellation_and_external_independence() {
+    use crate::postgresql::{explorer::Explorer, explorer_contract as x};
+    let (_scratch, mut c, vault) = fixture();
+    c.source = std::env::var_os("FAIRWAY_TEST_POSTGRES_PAYLOAD")
+        .expect("Provide reviewed payload")
+        .into();
+    runtime::provision(&c.base, &c.path, &c.source).unwrap();
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    c.initialize(port).unwrap();
+    c.start().unwrap();
+    let id = c.cluster.as_ref().unwrap().id.clone();
+    let layout = Layout::at(
+        c.settings.join("home"),
+        c.settings.clone(),
+        c.source.parent().unwrap().into(),
+    );
+    let managed = Arc::new(Managed {
+        layout: Some(layout),
+        controller: Mutex::new(Some(c)),
+        vault: vault.clone(),
+    });
+    let explorer = Arc::new(Explorer::default());
+    let session = explorer
+        .connect(x::Connect {
+            confirmed: true,
+            database: "postgres".into(),
+            target: x::Target::Managed { cluster_id: id },
+        })
+        .unwrap();
+    let call = |op| {
+        explorer.execute(
+            &managed,
+            x::Request {
+                job_id: format!("{:032x}", rand::random::<u128>()),
+                session_id: session.id.clone(),
+                operation: op,
+            },
+        )
+    };
+    let query = |sql: &str, parameters: Vec<Option<String>>, write: bool| {
+        call(x::Operation::Query {
+            sql: sql.into(),
+            parameters,
+            mode: if write {
+                x::QueryMode::ReadWrite
+            } else {
+                x::QueryMode::ReadOnly
+            },
+            confirmed: true,
+        })
+    };
+    query(
+        "CREATE SCHEMA \"test\"\"; DROP SCHEMA nope;--\"",
+        vec![],
+        true,
+    )
+    .unwrap();
+    let schema = "test\"; DROP SCHEMA nope;--";
+    let relation = "rows\"; DROP TABLE nope;--";
+    let target = "\"test\"\"; DROP SCHEMA nope;--\".\"rows\"\"; DROP TABLE nope;--\"";
+    query(&format!("CREATE TABLE {target}(id bigint PRIMARY KEY,label text,document jsonb,token uuid,tags text[],stamp timestamptz,amount numeric(30,8),nothing text)"),vec![],true).unwrap();
+    query(&format!("INSERT INTO {target} SELECT n,'日本 '||n,'{{\"big\":9007199254740993}}'::jsonb,'550e8400-e29b-41d4-a716-446655440000'::uuid,ARRAY['a,b','日本',NULL],TIMESTAMPTZ '2026-10-30 12:30:00+07',12345678901234567890.12345678,NULL FROM generate_series(1,205) n"),vec![],true).unwrap();
+    query(
+        &format!("CREATE VIEW public.stage3_view AS SELECT id,label FROM {target}"),
+        vec![],
+        true,
+    )
+    .unwrap();
+    assert!(call(x::Operation::Databases)
+        .unwrap()
+        .rows
+        .iter()
+        .any(|r| r[1].as_deref() == Some("postgres")));
+    assert!(call(x::Operation::Schemas)
+        .unwrap()
+        .rows
+        .iter()
+        .any(|r| r[1].as_deref() == Some(schema)));
+    assert_eq!(
+        call(x::Operation::Relations {
+            schema: schema.into()
+        })
+        .unwrap()
+        .rows[0][1]
+            .as_deref(),
+        Some(relation)
+    );
+    assert_eq!(
+        call(x::Operation::Columns {
+            schema: schema.into(),
+            relation: relation.into()
+        })
+        .unwrap()
+        .rows
+        .len(),
+        8
+    );
+    assert_eq!(
+        call(x::Operation::Indexes {
+            schema: schema.into(),
+            relation: relation.into()
+        })
+        .unwrap()
+        .rows
+        .len(),
+        1
+    );
+    assert!(!call(x::Operation::View {
+        schema: "public".into(),
+        relation: "stage3_view".into()
+    })
+    .unwrap()
+    .rows
+    .is_empty());
+    let page = x::Page {
+        limit: 2,
+        offset: 1,
+        sort: vec![x::Sort {
+            column: "id".into(),
+            direction: x::Direction::Desc,
+        }],
+        filters: vec![x::Filter {
+            column: "id".into(),
+            operator: x::FilterOperator::Gt,
+            value: Some("200".into()),
+        }],
+    };
+    let rows = call(x::Operation::Rows {
+        schema: schema.into(),
+        relation: relation.into(),
+        page,
+    })
+    .unwrap();
+    assert_eq!(rows.rows[0][0].as_deref(), Some("204"));
+    assert_eq!(rows.has_more, Some(true));
+    assert_eq!(
+        rows.rows[0][2].as_deref(),
+        Some("{\"big\": 9007199254740993}")
+    );
+    assert_eq!(
+        rows.rows[0][3].as_deref(),
+        Some("550e8400-e29b-41d4-a716-446655440000")
+    );
+    assert_eq!(rows.rows[0][4].as_deref(), Some("{\"a,b\",日本,NULL}"));
+    assert_eq!(rows.rows[0][5].as_deref(), Some("2026-10-30 05:30:00+00"));
+    assert_eq!(
+        rows.rows[0][6].as_deref(),
+        Some("12345678901234567890.12345678")
+    );
+    assert!(rows.rows[0][7].is_none());
+    assert_eq!(rows.columns[2].type_oid, 3802);
+    let q=query("SELECT $1::text AS duplicate, $2::text AS duplicate, NULL::uuid, ''::text, '\\x00ff'::bytea",vec![Some("'); DROP SCHEMA public CASCADE;--".into()),Some("exact".into())],false).unwrap();
+    assert_eq!(q.columns[0].name, q.columns[1].name);
+    assert!(q.rows[0][2].is_none());
+    assert_eq!(q.rows[0][3].as_deref(), Some(""));
+    assert_eq!(q.rows[0][4].as_deref(), Some("\\x00ff"));
+    assert!(query("SELECT 1; SELECT 2", vec![], false).is_err());
+    let denied = query(
+        &format!("WITH d AS (DELETE FROM {target} RETURNING id) SELECT * FROM d"),
+        vec![],
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(denied.sql_state.as_deref(), Some("25006"));
+    let limited = query("SELECT generate_series(1,1000000)", vec![], false).unwrap();
+    assert!(limited.truncated);
+    assert_eq!(limited.rows.len(), 200);
+    assert_eq!(
+        query("SELECT repeat('x',70000)", vec![], false)
+            .unwrap_err()
+            .code,
+        x::Code::ResultLimit
+    );
+    let failed = query(
+        "SELECT 'sensitive-diagnostic-marker'::integer",
+        vec![],
+        false,
+    )
+    .unwrap_err();
+    assert!(!serde_json::to_string(&failed)
+        .unwrap()
+        .contains("sensitive-diagnostic-marker"));
+    assert_eq!(failed.sql_state.as_deref(), Some("22P02"));
+    // A write with oversized RETURNING data must never silently commit.
+    assert!(query(&format!("DELETE FROM {target} RETURNING id"), vec![], true).is_err());
+    assert_eq!(
+        query(&format!("SELECT count(*) FROM {target}"), vec![], false)
+            .unwrap()
+            .rows[0][0]
+            .as_deref(),
+        Some("205")
+    );
+    let job = format!("{:032x}", rand::random::<u128>());
+    let state = explorer.clone();
+    let owner = managed.clone();
+    let sid = session.id.clone();
+    let jid = job.clone();
+    let started = Instant::now();
+    let thread = std::thread::spawn(move || {
+        state.execute(
+            &owner,
+            x::Request {
+                job_id: jid,
+                session_id: sid,
+                operation: x::Operation::Query {
+                    sql: "SELECT pg_sleep(30)".into(),
+                    parameters: vec![],
+                    mode: x::QueryMode::ReadOnly,
+                    confirmed: true,
+                },
+            },
+        )
+    });
+    std::thread::sleep(Duration::from_millis(900));
+    let duplicate = explorer
+        .execute(
+            &managed,
+            x::Request {
+                job_id: job.clone(),
+                session_id: session.id.clone(),
+                operation: x::Operation::Schemas,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(duplicate.code, x::Code::Busy);
+    assert!(query("SELECT 42", vec![], false).is_ok());
+    explorer.cancel(x::Cancel { job_id: job }).unwrap();
+    assert_eq!(thread.join().unwrap().unwrap_err().code, x::Code::Cancelled);
+    assert!(started.elapsed() < Duration::from_secs(8));
+    assert_eq!(
+        query("SELECT pg_sleep(30)", vec![], false)
+            .unwrap_err()
+            .code,
+        x::Code::TimedOut
+    );
+    // A stalled external listener must time out without being stopped.
+    let stalled = TcpListener::bind("127.0.0.1:0").unwrap();
+    let stalled_session = explorer
+        .connect(x::Connect {
+            confirmed: true,
+            database: "postgres".into(),
+            target: x::Target::External {
+                host: "127.0.0.1".into(),
+                port: stalled.local_addr().unwrap().port(),
+                user: "fairway".into(),
+                password: x::Password::from_bytes(b"fixture-only").unwrap(),
+                transport: x::Transport::Loopback,
+            },
+        })
+        .unwrap();
+    let started = Instant::now();
+    let error = explorer
+        .execute(
+            &managed,
+            x::Request {
+                job_id: format!("{:032x}", rand::random::<u128>()),
+                session_id: stalled_session.id.clone(),
+                operation: x::Operation::Schemas,
+            },
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error.code,
+        x::Code::TimedOut | x::Code::ConnectionFailed
+    ));
+    assert!(started.elapsed() < Duration::from_secs(7));
+    assert!(stalled.local_addr().is_ok());
+    explorer
+        .disconnect(x::SessionRequest {
+            session_id: stalled_session.id,
+        })
+        .unwrap();
+    // Disconnect cancels that session's own running jobs too.
+    let closing = explorer
+        .connect(x::Connect {
+            confirmed: true,
+            database: "postgres".into(),
+            target: x::Target::Managed {
+                cluster_id: session_cluster_id(&managed),
+            },
+        })
+        .unwrap();
+    let state = explorer.clone();
+    let owner = managed.clone();
+    let sid = closing.id.clone();
+    let thread = std::thread::spawn(move || {
+        state.execute(
+            &owner,
+            x::Request {
+                job_id: format!("{:032x}", rand::random::<u128>()),
+                session_id: sid,
+                operation: x::Operation::Query {
+                    sql: "SELECT pg_sleep(30)".into(),
+                    parameters: vec![],
+                    mode: x::QueryMode::ReadOnly,
+                    confirmed: true,
+                },
+            },
+        )
+    });
+    std::thread::sleep(Duration::from_millis(600));
+    explorer
+        .disconnect(x::SessionRequest {
+            session_id: closing.id,
+        })
+        .unwrap();
+    assert_eq!(thread.join().unwrap().unwrap_err().code, x::Code::Cancelled);
+    // Parent pipe EOF simulates owner loss; the worker cancels its own connection.
+    {
+        use std::io::Write;
+        let mut e = managed
+            .explorer_connection(Some(&session_cluster_id(&managed)), "postgres".into())
+            .unwrap();
+        e.operation = x::Operation::Query {
+            sql: "SELECT pg_sleep(30)".into(),
+            parameters: vec![],
+            mode: x::QueryMode::ReadOnly,
+            confirmed: true,
+        };
+        let mut input =
+            crate::postgresql::explorer::wire::PrivateBytes(serde_json::to_vec(&e).unwrap());
+        input.0.push(b'\n');
+        let (read, mut write) = std::os::unix::net::UnixStream::pair().unwrap();
+        let fd: std::os::fd::OwnedFd = read.into();
+        let mut cmd = clean_command(std::env::var_os("FAIRWAY_TEST_POSTGRES_WORKER").unwrap());
+        let mut child = cmd
+            .arg("--fairway-postgres-query-worker")
+            .stdin(Stdio::from(fd))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        drop(cmd);
+        write.write_all(&input.0).unwrap();
+        drop(input);
+        drop(e);
+        std::thread::sleep(Duration::from_millis(600));
+        drop(write);
+        let until = Instant::now() + Duration::from_secs(4);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            assert!(Instant::now() < until, "Owner-lost worker did not exit");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    // A new unprivileged fixture role qualifies external access without granting
+    // that target any lifecycle authority. Its verifier is copied only in memory.
+    let verifier = query(
+        "SELECT rolpassword FROM pg_catalog.pg_authid WHERE rolname='fairway'",
+        vec![],
+        false,
+    )
+    .unwrap()
+    .rows[0][0]
+        .clone()
+        .unwrap();
+    query(
+        &format!(
+            "CREATE ROLE stage3_read LOGIN PASSWORD '{}'",
+            verifier.replace('\'', "''")
+        ),
+        vec![],
+        true,
+    )
+    .unwrap();
+    query(
+        "GRANT USAGE ON SCHEMA \"test\"\"; DROP SCHEMA nope;--\" TO stage3_read",
+        vec![],
+        true,
+    )
+    .unwrap();
+    query(
+        &format!("GRANT SELECT ON {target} TO stage3_read"),
+        vec![],
+        true,
+    )
+    .unwrap();
+    {
+        let mut guard = managed.controller.lock().unwrap();
+        let c = guard.as_mut().unwrap();
+        let path = c.cluster_path(c.cluster.as_ref().unwrap()).unwrap();
+        let dir = Dir::absolute(&path).unwrap();
+        let mut hba = b"host all stage3_read 127.0.0.1/32 scram-sha-256\n".to_vec();
+        hba.extend(dir.read("pg_hba.conf", 65536).unwrap());
+        dir.atomic("pg_hba.conf", &hba).unwrap();
+        c.cluster.as_mut().unwrap().hba_sha256 = runtime::hash(&hba);
+        c.base
+            .atomic("active.json", &json(c.cluster.as_ref().unwrap()).unwrap())
+            .unwrap();
+        unsafe {
+            libc::kill(c.run.as_ref().unwrap().child.id() as i32, libc::SIGHUP);
+        }
+    }
+    std::thread::sleep(Duration::from_millis(200));
+    let password = {
+        let v = vault.0.lock().unwrap();
+        x::Password::from_bytes(&v.values().next().unwrap().0).unwrap()
+    };
+    let external = explorer
+        .connect(x::Connect {
+            confirmed: true,
+            database: "postgres".into(),
+            target: x::Target::External {
+                host: "127.0.0.1".into(),
+                port,
+                user: "stage3_read".into(),
+                password,
+                transport: x::Transport::Loopback,
+            },
+        })
+        .unwrap();
+    let out = explorer
+        .execute(
+            &managed,
+            x::Request {
+                job_id: format!("{:032x}", rand::random::<u128>()),
+                session_id: external.id.clone(),
+                operation: x::Operation::Rows {
+                    schema: schema.into(),
+                    relation: relation.into(),
+                    page: x::Page::default(),
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(out.rows.len(), 50);
+    explorer
+        .disconnect(x::SessionRequest {
+            session_id: external.id,
+        })
+        .unwrap();
+    assert!(managed.snapshot().unwrap().running); // External disconnect never stops a server.
+    explorer
+        .disconnect(x::SessionRequest {
+            session_id: session.id,
+        })
+        .unwrap();
+    managed.stop(Confirmation { confirmed: true }).unwrap();
+    {
+        let guard = managed.controller.lock().unwrap();
+        let c = guard.as_ref().unwrap();
+        for (name, mode) in c.base.entries().unwrap() {
+            if name.starts_with("log-") && mode & libc::S_IFMT as u32 == libc::S_IFREG as u32 {
+                let data = c.base.read(&name, 1024 * 1024).unwrap();
+                assert!(!data
+                    .windows(b"sensitive-diagnostic-marker".len())
+                    .any(|w| w == b"sensitive-diagnostic-marker"));
+            }
+        }
+    }
+    assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_err());
+}
+
+#[cfg(test)]
+fn session_cluster_id(managed: &Managed) -> String {
+    managed
+        .controller
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .cluster
+        .as_ref()
+        .unwrap()
+        .id
+        .clone()
+}

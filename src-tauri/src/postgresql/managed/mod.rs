@@ -9,11 +9,11 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-mod files;
+pub(crate) mod files;
 mod health;
 pub use health::worker_entrypoint;
 mod logs;
-mod runtime;
+pub(crate) mod runtime;
 mod secrets;
 #[cfg(test)]
 mod tests;
@@ -161,6 +161,87 @@ impl Managed {
             },
             |c| c.logs(),
         )
+    }
+    pub(crate) fn explorer_lease(&self) -> crate::postgresql::explorer_contract::Result<File> {
+        use crate::postgresql::explorer_contract::*;
+        self.read(
+            || Err(fail(Code::Unavailable, "Runtime not provisioned")),
+            |c| Ok(Ok(c.base.shared_lock("clients.lease")?)),
+        )
+        .map_err(|_| fail(Code::Unavailable, "Runtime client lease unavailable"))?
+    }
+    pub(crate) fn explorer_connection(
+        &self,
+        cluster_id: Option<&str>,
+        database: String,
+    ) -> crate::postgresql::explorer_contract::Result<crate::postgresql::explorer::wire::Envelope>
+    {
+        use crate::postgresql::{
+            explorer::wire::{Envelope, ManagedIdentity},
+            explorer_contract::*,
+        };
+        self.read(
+            || {
+                Err(fail(
+                    Code::Unavailable,
+                    "Explicit runtime provisioning is required",
+                ))
+            },
+            |c| {
+                let rt = c.runtime()?;
+                let envelope = if let Some(id) = cluster_id {
+                    c.reap()?;
+                    let (_, cluster, path) = c.validate()?;
+                    if cluster.id != id || c.run.is_none() {
+                        return Err(failure("Requested owned cluster is not running"));
+                    }
+                    let account = format!(
+                        "{}-{}",
+                        runtime::hash(
+                            c.path
+                                .to_str()
+                                .ok_or_else(|| failure("Invalid managed path"))?
+                                .as_bytes()
+                        ),
+                        cluster.id
+                    );
+                    let secret = c.vault.read(&account)?;
+                    Envelope {
+                        runtime: rt.path,
+                        host: "127.0.0.1".into(),
+                        port: cluster.port,
+                        user: "fairway".into(),
+                        database,
+                        password: Password::from_bytes(&secret.0)
+                            .map_err(|_| failure("Credential unavailable"))?,
+                        managed: Some(ManagedIdentity {
+                            cluster_name: format!("fairway-{}", cluster.id),
+                            data_directory: path,
+                        }),
+                        operation: Operation::Schemas,
+                    }
+                } else {
+                    Envelope {
+                        runtime: rt.path,
+                        host: String::new(),
+                        port: 0,
+                        user: String::new(),
+                        database,
+                        password: Password::from_bytes(b"")
+                            .map_err(|_| failure("Credential unavailable"))?,
+                        managed: None,
+                        operation: Operation::Schemas,
+                    }
+                };
+                Ok(Ok(envelope))
+            },
+        )
+        .map_err(|_| {
+            fail(
+                Code::Unavailable,
+                "Verified PostgreSQL runtime or owned credentials unavailable",
+            )
+        })?
     }
     pub fn stop_for_shutdown(&self) -> Result<()> {
         let mut guard = self
