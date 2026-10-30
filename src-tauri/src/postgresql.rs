@@ -1,9 +1,16 @@
-//! Stage 1: tool discovery and explicit --version inspection only.
-//! No connection, cluster, credential store, service control or Manager dependency.
+//! Independent read-only discovery and explicitly authorized managed PostgreSQL.
+//! External installations never grant managed ownership or service-control authority.
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Mutex};
 
 mod discovery;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod managed;
+pub mod managed_contract;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub use managed::Managed;
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+pub use managed_contract::Managed;
 #[cfg(test)]
 mod tests;
 mod version;
@@ -176,5 +183,25 @@ impl Discovery {
             )
         })?;
         discovery::inspect(self.discover(), &request.candidate_id, version::probe)
+    }
+}
+
+/// Private subprocess entry point; called before desktop setup, never by IPC.
+pub fn managed_health_worker() -> bool {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        managed::worker_entrypoint()
+    }
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        false
+    }
+}
+
+/// Existing generic data removal must never delete a managed PostgreSQL tree.
+pub fn ensure_data_removal_allowed(data: &std::path::Path) -> crate::config::Result<()> {
+    match std::fs::symlink_metadata(data.join("postgresql")) {
+        Err(error) if error.kind()==std::io::ErrorKind::NotFound=>Ok(()),
+        _=>Err("PostgreSQL managed data is retained. This command never deletes clusters; review and back up that directory separately.".into()),
     }
 }
