@@ -1,5 +1,22 @@
 # AI handoff
 
+## Mac sharing package repair (2026-11-25)
+
+- Owner's sharing run `45643736390` on `eeda0b3` produced the Windows installer,
+  but Mac packaging failed strict codesign verification with an invalid symlink
+  destination. No usable Mac artifact or native GUI acceptance is claimed.
+- The sharing packager now validates self-contained app/runtime trees before
+  copying, materializes internal aliases into regular files, and rejects external,
+  broken, cyclic and special-file inputs before copying. Strict verification and
+  PostgreSQL's existing pin/signature checks remain enabled; pinned PostgreSQL is
+  never re-signed. Publication still refuses aliases and existing destinations.
+- A disposable native codesign fixture reproduces the old failure and verifies
+  the repaired bundle after moving it. Four copy/native fixtures and the existing
+  signing/PostgreSQL integrity tests passed locally. Full sharing CI remains the
+  required evidence for the actual app package.
+- Work stays on `feature/ci-check-fixes`. Preserve the unrelated uncommitted
+  `src/data/ColumnFields.tsx` edit; do not include it in packaging commits.
+
 ## CI repair in progress (2026-11-25)
 
 - Current work is on `feature/ci-check-fixes`; personal fork `main` and teacher

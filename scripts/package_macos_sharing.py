@@ -11,10 +11,43 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tarfile
 from postgresql_release import ROOT, digest, new_stage, publish, read, verify_development_code, verify_payload, write
 from sign_macos import signing_command, signing_targets
+
+
+def copy_bundle_tree(source, destination):
+    """Materialize only self-contained build trees into a new owned destination.
+
+    Absolute aliases that point inside a build tree stop being internal when the
+    app is moved. Validate every alias before following it, then copy its contents
+    rather than preserving builder paths in the sealed, portable bundle.
+    """
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError('Bundle source must be a directory, not an alias')
+    root = source.resolve(strict=True)
+
+    def inspect(path, ancestors):
+        relative = path.relative_to(root)
+        try:
+            target = path.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f'Unresolvable bundle path: {relative}') from error
+        if not target.is_relative_to(root):
+            raise ValueError(f'Bundle link escapes source tree: {relative}')
+        mode = target.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            if target in ancestors:
+                raise ValueError(f'Cyclic bundle directory link: {relative}')
+            for child in target.iterdir():
+                inspect(child, ancestors | {target})
+        elif not stat.S_ISREG(mode):
+            raise ValueError(f'Unsupported bundle file: {relative}')
+
+    inspect(root, set())
+    shutil.copytree(root, destination, symlinks=False)
 
 
 def verify_identity(identity, pin, commit, version):
@@ -69,7 +102,7 @@ def package(app, sources, output):
     verify_identity(identity, pin, commit, version)
     stage, output = new_stage(output)
     staged_app = stage / 'Fairway XMP.app'
-    subprocess.run(['/usr/bin/ditto', str(app), str(staged_app)], check=True)
+    copy_bundle_tree(app, staged_app)
     resources = staged_app / 'Contents/Resources'
     resources.mkdir(parents=True, exist_ok=True)
     for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
@@ -81,7 +114,7 @@ def package(app, sources, output):
     source_runtime = ROOT / 'src-tauri/resources/runtime'
     verify_payload(source_runtime / 'postgresql', pin, bundled=True)
     verify_development_code(source_runtime / 'postgresql')
-    shutil.copytree(source_runtime, runtime, symlinks=True)
+    copy_bundle_tree(source_runtime, runtime)
     postgres = runtime / 'postgresql'
     for path in postgres.rglob('*'):
         path.chmod(0o755 if path.is_dir() else 0o555 if path.stat().st_mode & 0o100 else 0o444)
@@ -96,7 +129,7 @@ def package(app, sources, output):
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(sign, signing_targets(staged_app)))
     sign(staged_app)
-    subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(staged_app)], check=True)
+    subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=4', str(staged_app)], check=True)
     verify_payload(postgres, pin, bundled=True)
     verify_development_code(postgres)
     after = json.loads(subprocess.check_output([str(staged_app / 'Contents/MacOS/fairway'), '--build-info'], text=True))
