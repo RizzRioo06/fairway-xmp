@@ -1,5 +1,34 @@
 # AI handoff
 
+## CI repair in progress (2026-11-25)
+
+- Current work is on `feature/ci-check-fixes`; personal fork `main` and teacher
+  upstream are unchanged. The owner requested fixing the failing CI checks.
+- Official archived Windows PHP ZIPs match all five existing SHA256 pins,
+  including the upgrade fixture. Only their URLs changed; versions/hashes remain.
+- PostgreSQL source extraction validates POSIX TAR names independently of the host
+  and rejects Windows rooted/drive/backslash paths before any extraction.
+- Updated the browser sidebar assertion for PostgreSQL, fixed Windows-only strict
+  Clippy findings without allowing warnings, and refreshed the Linux builder's
+  libssh package with an early exact-source availability check.
+- First hosted run: `45628569079` on `f1c570a`. macOS verification passed;
+  Windows Python/Rust tests passed but Clippy exposed three findings fixed in
+  `4c57a90`. Windows runtime/upgrade staging and Mac corresponding-source packaging
+  passed their former PHP 404 failures. Browser review reached case 508/556 before
+  the 15-minute job timeout; `f43bd80` raises that budget to 25 minutes.
+- Local evidence: 103 Python regressions passed before adding a further passing
+  valid-source extraction test; all three focused source-safety tests, 32 TS unit
+  tests, four focused Chromium/WebKit cases, frontend build, 177 Rust regressions
+  (nine opt-in tests ignored), strict headless Clippy, formatting, YAML parsing and
+  whitespace checks passed. Sandbox socket/process denials were resolved by
+  rerunning the isolated fixtures with those permissions. No GUI acceptance run.
+- After connectivity recovered, the first run confirmed both Mac jobs passed.
+  Linux runtime preparation also passed; its strict Clippy check exposed an
+  unused function on unsupported platforms. Final hosted verification of the
+  follow-up fixes is pending. Run `build.yml` on this branch with
+  `warm_inputs=true`; fix newly exposed failures before claiming all green.
+  No merge into `main` is authorized by this repair request.
+
 ## Free Mac/Windows sharing (2026-11-25)
 
 - Owner wants friends on Apple Silicon Macs and Windows to use the fork without
