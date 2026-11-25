@@ -296,19 +296,19 @@
   },
   "php-8.2-windows": {
     "sha256": "798ffa4b9ce22a820d57048e9695df7245bf917ed067917f256942a10918a8cc",
-    "url": "https://downloads.php.net/~windows/releases/php-8.2.35-nts-Win32-vs16-x64.zip"
+    "url": "https://downloads.php.net/~windows/releases/archives/php-8.2.35-nts-Win32-vs16-x64.zip"
   },
   "php-8.3-windows": {
     "sha256": "3c9242622c7402b47c38d2ec2ed779cef3a290fd6f2bde6c35f9c482699e7900",
-    "url": "https://downloads.php.net/~windows/releases/php-8.3.36-nts-Win32-vs16-x64.zip"
+    "url": "https://downloads.php.net/~windows/releases/archives/php-8.3.36-nts-Win32-vs16-x64.zip"
   },
   "php-8.4-windows": {
     "sha256": "93bd8a815a52156606fb906d0573437908c61f96e2cc52c03a51e36a41bf5236",
-    "url": "https://downloads.php.net/~windows/releases/php-8.4.27-nts-Win32-vs17-x64.zip"
+    "url": "https://downloads.php.net/~windows/releases/archives/php-8.4.27-nts-Win32-vs17-x64.zip"
   },
   "php-windows": {
     "sha256": "2ab242af38d76bdf417cde5ec048b1bcd76a5a40f39a3d15d5f046f38571c477",
-    "url": "https://downloads.php.net/~windows/releases/php-8.5.12-nts-Win32-vs17-x64.zip"
+    "url": "https://downloads.php.net/~windows/releases/archives/php-8.5.12-nts-Win32-vs17-x64.zip"
   },
   "phpmyadmin": {
     "sha256": "2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f",

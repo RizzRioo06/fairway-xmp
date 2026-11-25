@@ -14,6 +14,22 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PostgreSQLSourceSafety(unittest.TestCase):
+    def test_valid_source_tree_extracts(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            archive = root / 'archive.tar'
+            with tarfile.open(archive, 'w') as bundle:
+                directory = tarfile.TarInfo('postgresql/src')
+                directory.type = tarfile.DIRTYPE
+                bundle.addfile(directory)
+                source = tarfile.TarInfo('postgresql/src/example.c')
+                source.size = 4
+                bundle.addfile(source, io.BytesIO(b'kept'))
+            target = root / 'new'
+            target.mkdir()
+            MODULE.extract_source(archive, target)
+            self.assertEqual((target / 'postgresql/src/example.c').read_bytes(), b'kept')
+
     def test_changed_download_rejected(self):
         with tempfile.TemporaryDirectory() as scratch:
             source = Path(scratch) / 'source'
@@ -23,6 +39,8 @@ class PostgreSQLSourceSafety(unittest.TestCase):
 
     def test_unsafe_archive_never_partially_extracts(self):
         for name, kind, link in [('../escape', tarfile.REGTYPE, ''), ('/absolute', tarfile.REGTYPE, ''),
+                                 ('C:/escape', tarfile.REGTYPE, ''), ('C:escape', tarfile.REGTYPE, ''),
+                                 ('..\\escape', tarfile.REGTYPE, ''), ('\\rooted', tarfile.REGTYPE, ''),
                                  ('link', tarfile.SYMTYPE, '../escape'), ('hardlink', tarfile.LNKTYPE, 'safe'),
                                  ('device', tarfile.CHRTYPE, '')]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as scratch:
