@@ -103,8 +103,10 @@ jobs:
         run: cargo run --manifest-path src-tauri/Cargo.toml --example php_extension_smoke --no-default-features --locked -- .runtime-work/php-extension-smoke
       - name: Verify PHP clients with the runner's external PostgreSQL test server
         run: python scripts/check_postgres_clients.py
+      - name: Stage checksum-pinned PostgreSQL 17 test tools
+        run: python scripts/prepare_windows_postgres_fixture.py --destination "$env:RUNNER_TEMP/fairway-pg17-fixture"
       - name: Verify external PostgreSQL browsing with isolated native workers
-        run: python scripts/check_windows_postgres.py --authorize-isolated-server
+        run: python scripts/check_windows_postgres.py --authorize-isolated-server --postgres-bin "$env:RUNNER_TEMP/fairway-pg17-fixture/pgsql/bin"
       - name: Build native terminal test bridge
         run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --example terminal_bridge --locked
       - run: npx playwright install --only-shell chromium

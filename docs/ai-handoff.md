@@ -1,5 +1,16 @@
 # AI handoff
 
+## Windows fixture toolchain repair (2026-11-27)
+
+- Windows-only run `45981799173` failed before native fixture execution: the
+  hosted runner provides PostgreSQL 14.25, while browsing requires 17.x or 18.6.
+- The installer workflow now stages a separate EDB PostgreSQL 17.12-2 binary
+  archive using its published SHA-256 and passes an explicit fixture bin path.
+  No system service, app runtime pin or supported-version guard is changed.
+- Staging rejects unsafe archive entries and existing destinations, checks bounds
+  and hashes before extraction, and includes only bin/lib/share test resources.
+  Native Windows behavior remains pending the corrected hosted run.
+
 ## Windows PostgreSQL and signing request (2026-11-27)
 
 - Owner requested trusted Windows installer signing and implementing PostgreSQL

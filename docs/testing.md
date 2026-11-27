@@ -204,7 +204,8 @@ Windows PHP runtime so `build.rs` can embed its DLL pin. On a disposable Windows
 runner with native PostgreSQL 17.x or 18.6 test tools:
 
 ```powershell
-python scripts/check_windows_postgres.py --authorize-isolated-server
+python scripts/prepare_windows_postgres_fixture.py --destination "$env:RUNNER_TEMP/fairway-pg17-fixture"
+python scripts/check_windows_postgres.py --authorize-isolated-server --postgres-bin "$env:RUNNER_TEMP/fairway-pg17-fixture/pgsql/bin"
 ```
 
 This creates/stops only its own temporary cluster. It reads its generated password
@@ -212,6 +213,12 @@ through private stdin and never uses real Credential Manager items, personal app
 profiles or an existing database. It does not run the GUI. The installer workflow
 runs it after runtime preparation. Local Mac checks type-check the example contract
 but do **not** run the Windows worker or establish Windows compatibility.
+
+The installer runner's preinstalled PostgreSQL 14 is insufficient for this native
+fixture. The staging helper downloads EDB's PostgreSQL 17.12-2 Windows archive,
+verifies its published SHA-256 before extraction, and creates a new test-only
+directory. It never installs a service or changes PATH, the application payload,
+or the supported-server version checks. Existing destinations are refused.
 
 Focused pin tests require no database or Windows tools:
 
