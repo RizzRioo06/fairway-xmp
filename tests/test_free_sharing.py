@@ -4,6 +4,7 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,97 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from package_macos_sharing import verify_identity
 import package_macos_sharing as sharing
+
+
+@unittest.skipIf(os.name == 'nt', 'Bundle symlink fixtures require Unix')
+class SharingCopyTests(unittest.TestCase):
+    def test_internal_file_and_directory_aliases_become_independent_portable_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            source = root / 'source'
+            (source / 'data').mkdir(parents=True)
+            original = source / 'data/tool'
+            original.write_bytes(b'unchanged runtime bytes')
+            original.chmod(0o755)
+            (source / 'relative').symlink_to('data/tool')
+            (source / 'absolute').symlink_to(original)
+            (source / 'directory').symlink_to('data', target_is_directory=True)
+            destination = root / 'copy'
+            sharing.copy_bundle_tree(source, destination)
+            for name in ('data/tool', 'relative', 'absolute', 'directory/tool'):
+                copy = destination / name
+                self.assertEqual(copy.read_bytes(), original.read_bytes())
+                self.assertEqual(copy.stat().st_mode & 0o777, 0o755)
+                self.assertNotEqual(copy.stat().st_ino, original.stat().st_ino)
+            self.assertFalse(any(path.is_symlink() for path in destination.rglob('*')))
+            self.assertTrue((source / 'absolute').is_symlink())
+            with self.assertRaises(FileExistsError):
+                sharing.copy_bundle_tree(source, destination)
+
+    def test_external_broken_and_cyclic_links_fail_before_copying_any_files(self):
+        for target in ('../outside', 'missing', '.', 'bad'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder).resolve()
+                (root / 'outside').write_bytes(b'private unrelated data')
+                source = root / 'source'
+                source.mkdir()
+                (source / 'good').write_bytes(b'valid prefix')
+                (source / 'bad').symlink_to(target)
+                destination = root / 'copy'
+                with self.assertRaises(ValueError):
+                    sharing.copy_bundle_tree(source, destination)
+                self.assertFalse(destination.exists())
+                self.assertEqual((root / 'outside').read_bytes(), b'private unrelated data')
+
+    def test_source_aliases_and_special_files_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            source = root / 'source'
+            source.mkdir()
+            alias = root / 'alias'
+            alias.symlink_to(source, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                sharing.copy_bundle_tree(alias, root / 'copy')
+            os.mkfifo(source / 'pipe')
+            with self.assertRaises(ValueError):
+                sharing.copy_bundle_tree(source, root / 'copy')
+            self.assertFalse((root / 'copy').exists())
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Native codesign fixture requires macOS')
+    def test_native_strict_signature_survives_moving_the_materialized_bundle(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            app = root / 'Source.app'
+            binary = app / 'Contents/MacOS/probe'
+            binary.parent.mkdir(parents=True)
+            # Copy a system executable as inert signing input; never execute it.
+            shutil.copyfile('/usr/bin/true', binary)
+            binary.chmod(0o755)
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+                'CFBundleExecutable': 'probe', 'CFBundleIdentifier': 'dev.fairway.sharing-fixture',
+                'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}))
+            resources = app / 'Contents/Resources'
+            resources.mkdir()
+            (resources / 'notice').write_text('fixture notice')
+            (resources / 'alias').symlink_to(resources / 'notice')
+            def sign(path):
+                subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(path)],
+                               check=True, capture_output=True)
+            def verify(path):
+                return subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict',
+                                       '--verbose=4', str(path)], capture_output=True, text=True)
+            sign(app)
+            before = verify(app)
+            self.assertNotEqual(before.returncode, 0)
+            self.assertIn('invalid destination for symbolic link', before.stderr)
+            copied = root / 'Copied.app'
+            sharing.copy_bundle_tree(app, copied)
+            sign(copied)
+            moved = root / 'Moved.app'
+            copied.rename(moved)
+            after = verify(moved)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertTrue((resources / 'alias').is_symlink())
 
 
 class SharingIdentityTests(unittest.TestCase):

@@ -52,6 +52,37 @@ impl Explorer {
         }
         database(&r.database)?;
         let (target, kind) = match r.target {
+            Target::Session { session_id } => {
+                let sessions = self
+                    .sessions
+                    .lock()
+                    .map_err(|_| fail(Code::Unavailable, "Session state unavailable"))?;
+                let connection = sessions.get(&session_id).ok_or_else(|| {
+                    fail(
+                        Code::StaleSession,
+                        "Reconnect to the server before switching databases",
+                    )
+                })?;
+                match &connection.target {
+                    ConnectionTarget::Managed(cluster) => {
+                        (ConnectionTarget::Managed(cluster.clone()), "managed")
+                    }
+                    ConnectionTarget::External {
+                        host,
+                        port,
+                        user,
+                        password,
+                    } => (
+                        ConnectionTarget::External {
+                            host: host.clone(),
+                            port: *port,
+                            user: user.clone(),
+                            password: password.copy(),
+                        },
+                        "external",
+                    ),
+                }
+            }
             Target::Managed { cluster_id } => {
                 if !id(&cluster_id) {
                     return Err(fail(

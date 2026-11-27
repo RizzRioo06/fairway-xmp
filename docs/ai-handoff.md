@@ -1,5 +1,168 @@
 # AI handoff
 
+## SQL editor layout correction (2026-11-27)
+
+- Owner's manual screenshot showed the SQL textarea at its default narrow width
+  while the note and mode controls stretched across the panel.
+- The PostgreSQL editor now has an explicit full-width, border-box textarea with
+  readable monospace text, vertical resizing and contained horizontal scrolling.
+  The query heading, target database, mode badge and action toolbar are grouped;
+  long limits/safety notes are expandable and results have their own heading.
+- Read-only defaults, SQL size/statement limits, write-confirmation dialog,
+  cancellation and outcome behavior are unchanged. No new editor dependency.
+- Production frontend build and all 43 TypeScript unit tests passed. No UI/E2E
+  automation or real database operation ran; visual acceptance is still owner work.
+
+
+## Browse Data clarity and PostgreSQL table polish (2026-11-27)
+
+- Owner explicitly requested removing the PostgreSQL sidebar entry. PostgreSQL
+  is now accessed only through Browse Data → PostgreSQL; the duplicate route and
+  shortcut request state have been removed.
+- The tab adds a local-server introduction, schema guidance and browsing notes
+  explaining read-only rows, authorized SQL changes and existing-server ownership.
+  Filter operators have readable labels; pagination shows actual row ranges.
+- Results use numbered rows, sticky column/type headers and row numbers, zebra
+  striping, hover/focus highlighting, clearer NULL/empty badges and a wrap toggle.
+  Long Unicode previews are bounded, with the exact value preserved in the viewer.
+  Outcome summaries retain committed/not-started/uncommitted/unknown distinctions.
+- Frontend production build and 43 TS unit tests passed; no UI/E2E tests or real
+  database checks ran. Existing UI fixtures were updated but not executed. Visual
+  layout remains for owner Mac acceptance. Existing ColumnFields edit preserved.
+
+
+## PostgreSQL in Browse Data (2026-11-27)
+
+- Owner requested PostgreSQL beside MySQL/SQLite in the normal Browse Data screen.
+- `data/BrowseData.tsx` hosts all three source tabs. The embedded PostgreSQL
+  tab/controller preserves saved
+  connections, sessions, table/schema browsing and SQL safeguards.
+- MySQL/SQLite keep their existing Activity visibility cleanup. PostgreSQL is
+  retained outside that Activity so source navigation does not dispose its
+  controller. Returning to a SQL source waits for any old request to settle and
+  uses its existing source-switch path. No cross-engine SQL/backend reuse.
+- Production build and 40 TypeScript unit tests passed. No browser/E2E/UI automation
+  or real database checks ran. Manual Mac source switching/layout remains unverified.
+  The existing ColumnFields edit is preserved; no commit/push/release performed.
+
+
+## Missing-client connection recovery (2026-11-27)
+
+- Owner's manual Mac screenshots showed a saved profile and “Explicit runtime
+  provisioning is required” in a fresh isolated app profile. This is a missing
+  client runtime, before a database connection attempt, not an authentication result.
+- The form and workspace now explain the missing connection tools and expose
+  **Prepare connection tools** directly. That explicit action calls only runtime
+  provisioning; it does not initialize/start a cluster or connect automatically.
+  Form metadata stays in place. Successful provisioning clears only the matching
+  missing-runtime error; unrelated SQL errors/outcome uncertainty are preserved.
+- Production frontend build and 13 focused workspace/guidance tests passed.
+  No UI/E2E automation or real database/runtime/Keychain operation was performed.
+  User should retry Connect after preparing tools; actual database access is unverified.
+
+
+## Cross-platform saved-password providers (2026-11-27)
+
+- Owner explicitly selected **secure password storage first**, rather than full
+  Windows/Linux PostgreSQL browsing/runtime support. Continue on
+  `feature/postgresql-connection-profiles`; preserve the pre-existing data edit.
+- Profiles/metadata IPC now selects Keychain, Windows Credential Manager or Linux
+  direct libsecret Secret Service. Mac namespace and metadata format are retained.
+  No new dependency/runtime installation, real credential access or database work.
+- Windows metadata uses pinned ancestor handles, rejects reparse/hard links and
+  requires a protected current-user-only DACL. Linux uses descriptor-relative
+  private Unix storage. Both retain the existing credential recovery journal.
+- Linux requires system libsecret plus a Secret Service keyring; missing/locked/
+  cancelled operations fail without plaintext or a file-backend fallback. Native
+  cancellation is requested after 30 seconds. Windows blobs are wiped before free.
+- UI labels select the vault name per platform. The existing non-Mac workspace
+  restriction remains in place until a separately scoped native runtime port.
+- Local evidence: production frontend build and 37 TS unit tests passed; 11 focused
+  profile/provider/Unix-storage tests passed using scratch data and injected APIs.
+  Strict desktop all-target Clippy passed. Windows storage had a host-only Rust
+  type check; this is not a Windows build or OS credential acceptance result.
+- A no-feature test attempt exposed an existing `shell_environment` test that
+  requires the terminal feature. Focused checks/CI use `--features terminal`;
+  that unrelated source was not changed.
+- Added `credential-storage.yml` for Windows/Linux/Mac fixture checks without UI
+  or real account vault mutations; not dispatched. Windows/Linux builds and real
+  vault sessions remain unverified. No UI/E2E tests, commit, push or release.
+- [Platform contracts and limits](postgresql-integration.md#saved-connections).
+
+## PostgreSQL saved connections and UI improvement (2026-11-27)
+
+- Owner says the app is released/usable and requested saved external connections,
+  optional remembered passwords, native database switching and focused UI polish.
+  Work is on `feature/postgresql-connection-profiles`, based on `fc919ce`.
+  Preserve the pre-existing `src/data/ColumnFields.tsx` edit unchanged.
+- Native profiles store only bounded nonsecret metadata under the app data folder.
+  Optional passwords use a separate Keychain namespace, never plaintext files.
+  Revision checks, private descriptor-relative storage, interprocess locking and
+  a durable credential cleanup journal protect edits and interrupted operations.
+- Existing native sessions now supply credentials when switching databases.
+  Reconnect refreshes the current descriptor; failed initial authentication/catalog
+  attempts release their descriptors and keep form metadata for retry.
+- UI adds saved connection cards, edit/rename/remove, optional password retention,
+  connection status, collapsed managed controls, remembered source and table search.
+  [Contracts and limits](postgresql-integration.md#saved-connections).
+- Verification: frontend production build and 36 TypeScript unit tests passed;
+  desktop cargo check and strict all-target desktop Clippy passed using the existing
+  debug resource-copy override. Headless Rust regression: 183 passed, nine opt-in
+  fixtures ignored after rerunning sandbox-denied socket/process tests with access.
+  The final eight profile fixtures passed, including three added recovery/validation
+  cases after that regression run. Native vault fixtures use memory only.
+- No GUI, browser or end-to-end tests ran, and no real Keychain or existing database
+  was accessed. Existing UI test selectors were updated but remain unrun. User Mac
+  acceptance is still needed for visual layout, real Keychain and packaged relaunch.
+  No commit, push, merge, installer build or release publication was performed.
+
+
+## Mac sharing package repair (2026-11-25)
+
+- Owner's sharing run `45643736390` on `eeda0b3` produced the Windows installer,
+  but Mac packaging failed strict codesign verification with an invalid symlink
+  destination. No usable Mac artifact or native GUI acceptance is claimed.
+- The sharing packager now validates self-contained app/runtime trees before
+  copying, materializes internal aliases into regular files, and rejects external,
+  broken, cyclic and special-file inputs before copying. Strict verification and
+  PostgreSQL's existing pin/signature checks remain enabled; pinned PostgreSQL is
+  never re-signed. Publication still refuses aliases and existing destinations.
+- A disposable native codesign fixture reproduces the old failure and verifies
+  the repaired bundle after moving it. Four copy/native fixtures and the existing
+  signing/PostgreSQL integrity tests passed locally. Full sharing CI remains the
+  required evidence for the actual app package.
+- Work stays on `feature/ci-check-fixes`. Preserve the unrelated uncommitted
+  `src/data/ColumnFields.tsx` edit; do not include it in packaging commits.
+
+## CI repair in progress (2026-11-25)
+
+- Current work is on `feature/ci-check-fixes`; personal fork `main` and teacher
+  upstream are unchanged. The owner requested fixing the failing CI checks.
+- Official archived Windows PHP ZIPs match all five existing SHA256 pins,
+  including the upgrade fixture. Only their URLs changed; versions/hashes remain.
+- PostgreSQL source extraction validates POSIX TAR names independently of the host
+  and rejects Windows rooted/drive/backslash paths before any extraction.
+- Updated the browser sidebar assertion for PostgreSQL, fixed Windows-only strict
+  Clippy findings without allowing warnings, and refreshed the Linux builder's
+  libssh package with an early exact-source availability check.
+- First hosted run: `45628569079` on `f1c570a`. macOS verification passed;
+  Windows Python/Rust tests passed but Clippy exposed three findings fixed in
+  `4c57a90`. Windows runtime/upgrade staging and Mac corresponding-source packaging
+  passed their former PHP 404 failures. Browser review reached case 508/556 before
+  the 15-minute job timeout; `f43bd80` raises that budget to 25 minutes.
+- Local evidence: 103 Python regressions passed before adding a further passing
+  valid-source extraction test; all three focused source-safety tests, 32 TS unit
+  tests, four focused Chromium/WebKit cases, frontend build, 177 Rust regressions
+  (nine opt-in tests ignored), strict headless Clippy, formatting, YAML parsing and
+  whitespace checks passed. Sandbox socket/process denials were resolved by
+  rerunning the isolated fixtures with those permissions. No GUI acceptance run.
+- After connectivity recovered, the first run confirmed both Mac jobs passed.
+  Linux runtime preparation also passed; its strict Clippy check exposed an
+  unused function on unsupported platforms. Final hosted verification of the
+  follow-up fixes is pending. Run `build.yml` on this branch with
+  `warm_inputs=true`; fix newly exposed failures before claiming all green.
+  No merge into `main` is authorized by this repair request.
+
 ## Free Mac/Windows sharing (2026-11-25)
 
 - Owner wants friends on Apple Silicon Macs and Windows to use the fork without

@@ -193,14 +193,14 @@ def windows(target, lock, refresh):
     php = MANIFEST['php']
     mysql_series = '.'.join(MANIFEST['mysql'].split('.')[:2])
     sources = {
-        'php-windows': (f'https://downloads.php.net/~windows/releases/php-{php}-nts-Win32-vs17-x64.zip', 'php'),
+        'php-windows': (f'https://downloads.php.net/~windows/releases/archives/php-{php}-nts-Win32-vs17-x64.zip', 'php'),
         'mysql-windows': (f'https://cdn.mysql.com/Downloads/MySQL-{mysql_series}/mysql-{MANIFEST["mysql"]}-winx64.zip', 'mysql'),
         'nginx-windows': (f'https://nginx.org/download/nginx-{MANIFEST["nginx"]}.zip', 'nginx'),
     }
     for minor, version in MANIFEST.get('phpVersions', {}).items():
         if version != php:
             toolset = 'vs16' if minor in ('8.2', '8.3') else 'vs17'
-            sources[f'php-{minor}-windows'] = (f'https://downloads.php.net/~windows/releases/php-{version}-nts-Win32-{toolset}-x64.zip', f'php-{minor}')
+            sources[f'php-{minor}-windows'] = (f'https://downloads.php.net/~windows/releases/archives/php-{version}-nts-Win32-{toolset}-x64.zip', f'php-{minor}')
     for name, (url, service) in sources.items():
         archive = lock_download(name, url, refresh=refresh, lock=lock)
         with tempfile.TemporaryDirectory() as folder:

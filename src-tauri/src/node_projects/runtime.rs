@@ -40,17 +40,15 @@ pub(super) fn available(runtime: &ProjectRuntime) -> bool {
     let Ok(metadata) = path.metadata() else {
         return false;
     };
-    if !metadata.is_file() {
-        return false;
-    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o111 == 0 {
-            return false;
-        }
+        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
     }
-    true
+    #[cfg(not(unix))]
+    {
+        metadata.is_file()
+    }
 }
 
 #[cfg(any(target_os = "macos", test))]

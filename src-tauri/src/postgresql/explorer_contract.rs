@@ -10,7 +10,7 @@ impl Password {
     pub(crate) fn copy(&self) -> Self {
         Self(self.0.clone())
     }
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     pub(crate) fn from_bytes(b: &[u8]) -> Result<Self> {
         Ok(Self(
             std::str::from_utf8(b)
@@ -33,6 +33,9 @@ impl Drop for Password {
 pub enum Target {
     #[serde(rename_all = "camelCase")]
     Managed { cluster_id: String },
+    /// Reuse a native session's credentials without returning them to the renderer.
+    #[serde(rename_all = "camelCase")]
+    Session { session_id: String },
     External {
         host: String,
         port: u16,

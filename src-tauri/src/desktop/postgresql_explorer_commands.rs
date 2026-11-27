@@ -41,3 +41,57 @@ pub(super) async fn postgres_explorer_cancel(
 ) -> Result<()> {
     state.cancel(request)
 }
+
+#[tauri::command]
+pub(super) async fn postgres_profiles_list(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<crate::postgresql::profiles::Profiles>>,
+) -> Result<Vec<crate::postgresql::profiles::Profile>> {
+    let _operation = super::begin_operation(&app, "Updating PostgreSQL connections…")
+        .map_err(|_| fail(Code::Busy, "Service operation or shutdown in progress"))?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list())
+        .await
+        .map_err(task_error)?
+}
+#[tauri::command]
+pub(super) async fn postgres_profile_save(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<crate::postgresql::profiles::Profiles>>,
+    request: crate::postgresql::profiles::Save,
+) -> Result<crate::postgresql::profiles::Profile> {
+    let _operation = super::begin_operation(&app, "Updating PostgreSQL connections…")
+        .map_err(|_| fail(Code::Busy, "Service operation or shutdown in progress"))?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.save(request))
+        .await
+        .map_err(task_error)?
+}
+#[tauri::command]
+pub(super) async fn postgres_profile_remove(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<crate::postgresql::profiles::Profiles>>,
+    request: crate::postgresql::profiles::Remove,
+) -> Result<()> {
+    let _operation = super::begin_operation(&app, "Updating PostgreSQL connections…")
+        .map_err(|_| fail(Code::Busy, "Service operation or shutdown in progress"))?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.remove(request))
+        .await
+        .map_err(task_error)?
+}
+#[tauri::command]
+pub(super) async fn postgres_profile_open(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<crate::postgresql::profiles::Profiles>>,
+    explorer: State<'_, Arc<Explorer>>,
+    request: crate::postgresql::profiles::Open,
+) -> Result<Session> {
+    let _operation = super::begin_operation(&app, "Updating PostgreSQL connections…")
+        .map_err(|_| fail(Code::Busy, "Service operation or shutdown in progress"))?;
+    let state = state.inner().clone();
+    let explorer = explorer.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || explorer.connect(state.connection(request)?))
+        .await
+        .map_err(task_error)?
+}

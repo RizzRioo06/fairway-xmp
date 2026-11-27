@@ -9,7 +9,7 @@ import ctypes
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import shutil
 import subprocess
@@ -74,7 +74,13 @@ def verify_source(archive, expected):
 def extract_source(archive, source):
     with tarfile.open(archive) as bundle:
         for member in bundle.getmembers():
-            if not (member.isdir() or member.isfile()) or Path(member.name).is_absolute() or '..' in Path(member.name).parts:
+            # TAR names use POSIX paths on every host. Also reject Windows drive,
+            # rooted and backslash paths before extraction can normalize them.
+            path = PurePosixPath(member.name)
+            windows_path = PureWindowsPath(member.name)
+            if (not (member.isdir() or member.isfile()) or path.is_absolute()
+                    or '..' in path.parts or windows_path.drive or windows_path.root
+                    or '\\' in member.name):
                 raise RuntimeError('Unsafe source archive member')
         bundle.extractall(source, filter='data')
 

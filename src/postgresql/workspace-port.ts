@@ -1,9 +1,10 @@
 import * as service from './api';
 import * as explorer from './explorer';
+import { openProfile } from './profiles';
 import type { Port } from './workspace-model';
 export const workspacePort: Port = {
   snapshot: service.managedPostgresSnapshot, health: service.checkManagedPostgresHealth,
-  open: explorer.openPostgresConnection, close: explorer.closePostgresConnection,
+  open: request => request.target.kind === 'saved' ? openProfile(request.target.profile, request.target.password) : explorer.openPostgresConnection({ ...request, target: request.target }), close: explorer.closePostgresConnection,
   execute: explorer.executePostgres, cancel: explorer.cancelPostgres,
   service: (action, port) => {
     const confirmed = { confirmed: true as const };

@@ -1,10 +1,12 @@
 // In-memory UI fixtures only. No credentials, SQL text, files or server processes retained.
 import type { PgColumn, PgError, PgOperation, PgOutput, PgSession } from '../postgresql/explorer-types';
+import type { Profile, SaveProfile } from '../postgresql/profiles';
 import type { ManagedPostgresSnapshot } from '../postgresql/types';
 export const options: { fail?: string; delay?: string; delayMs?: number; empty?: boolean; openDelay?: number; cancelCommit?: boolean; ignoreCancel?: boolean; serviceFailure?: boolean } = {};
 export function configure(value: typeof options) { Object.keys(options).forEach(key => delete options[key as keyof typeof options]); Object.assign(options, value); }
 let counter = 0;
 const sessions = new Map<string, PgSession>();
+const profiles = new Map<string, Profile>();
 const jobs = new Map<string, { cancelled: boolean }>();
 const early = new Set<string>();
 const calls: { command: string; kind?: string; mode?: string; sessionId?: string }[] = [];
@@ -15,8 +17,29 @@ function error(code: PgError['code'], message: string, outcome: PgError['outcome
 function col(name: string, typeOid = 25, typeName = 'text'): PgColumn { return { name, typeOid, typeName, typeModifier: -1, tableOid: 0, attributeNumber: 0 }; }
 function result(columns: PgColumn[], rows: PgOutput['rows'], extra: Partial<PgOutput> = {}): PgOutput { return { columns, rows, command: 'SELECT', affectedRows: String(rows.length), truncated: false, hasMore: null, warnings: [], outcome: 'notCommitted', ...extra }; }
 export async function request(command: string, args: Record<string, unknown>): Promise<unknown> {
-  const r = args.request as { jobId: string; sessionId: string; operation: PgOperation; confirmed: boolean; database: string; target: { kind: 'managed' | 'external' }; port: number } | undefined;
+  const r = args.request as { jobId: string; sessionId: string; operation: PgOperation; confirmed: boolean; database: string; target: { kind: 'managed' | 'external' | 'session'; sessionId?: string }; port: number } | undefined;
   calls.push({ command, kind: r?.operation?.kind, mode: r?.operation?.kind === 'query' ? r.operation.mode : undefined, sessionId: r?.sessionId });
+  if (command === 'postgres_profiles_list') return [...profiles.values()].map(p => ({ ...p }));
+  if (command === 'postgres_profile_save') {
+    const request = args.request as SaveProfile;
+    if (!request.confirmed) throw error('confirmationRequired', 'Authorize saving this connection');
+    const old = profiles.get(request.profile.id);
+    if ((old?.revision ?? '') !== request.profile.revision) throw error('invalidRequest', 'Connection changed. Refresh and retry.');
+    const profile = { ...request.profile, revision: (++counter).toString(16).padStart(32, '0') };
+    profiles.set(profile.id, profile); return { ...profile };
+  }
+  if (command === 'postgres_profile_remove') {
+    const request = args.request as { confirmed: boolean; id: string; revision: string };
+    if (!request.confirmed || profiles.get(request.id)?.revision !== request.revision) throw error('invalidRequest', 'Connection changed. Refresh and retry.');
+    profiles.delete(request.id); return;
+  }
+  if (command === 'postgres_profile_open') {
+    const request = args.request as { confirmed: boolean; id: string; revision: string };
+    const profile = profiles.get(request.id);
+    if (!request.confirmed || !profile || profile.revision !== request.revision) throw error('invalidRequest', 'Saved connection unavailable');
+    const session: PgSession = { id: (++counter).toString(16).padStart(32, '0'), kind: 'external', database: profile.database, persistence: 'memoryOnly', authentication: 'notChecked' };
+    sessions.set(session.id, session); return session;
+  }
   if (command === 'postgres_managed_snapshot') return structuredClone(managed);
   if (command === 'postgres_managed_health') { managed = { ...managed, responsiveness: 'accepting', authentication: options.serviceFailure ? 'rejected' : 'authenticated' }; return structuredClone(managed); }
   if (command.startsWith('postgres_managed_')) {
@@ -30,7 +53,8 @@ export async function request(command: string, args: Record<string, unknown>): P
   if (command === 'postgres_connection_open') {
     if (options.openDelay) await wait(options.openDelay);
     if (!r?.confirmed) throw error('confirmationRequired', 'Authorize this connection');
-    const session: PgSession = { id: (++counter).toString(16).padStart(32, '0'), kind: r.target.kind, database: r.database, persistence: 'memoryOnly', authentication: 'notChecked' };
+    if (r.target.kind === 'session' && !sessions.has(r.target.sessionId!)) throw error('staleSession', 'Connection closed');
+    const session: PgSession = { id: (++counter).toString(16).padStart(32, '0'), kind: r.target.kind === 'session' ? sessions.get(r.target.sessionId!)?.kind ?? 'external' : r.target.kind, database: r.database, persistence: 'memoryOnly', authentication: 'notChecked' };
     sessions.set(session.id, session); return session;
   }
   if (command === 'postgres_connection_close') { sessions.delete(r!.sessionId); return; }

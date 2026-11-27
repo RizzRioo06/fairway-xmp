@@ -8,7 +8,7 @@ function fixture() {
   let count = 0;
   const closed: string[] = [], cancelled: string[] = [], operations: PgOperation[] = [];
   const port: Port = {
-    open: async request => ({ id: (++count).toString(16).padStart(32, '0'), database: request.database, kind: request.target.kind, persistence: 'memoryOnly', authentication: 'notChecked' }),
+    open: async request => ({ id: (++count).toString(16).padStart(32, '0'), database: request.database, kind: request.target.kind === 'managed' ? 'managed' : 'external', persistence: 'memoryOnly', authentication: 'notChecked' }),
     close: async id => { closed.push(id); }, cancel: async id => { cancelled.push(id); },
     execute: async request => { operations.push(request.operation); return request.operation.kind === 'schemas' ? output(['name'], [['public']]) : request.operation.kind === 'databases' ? output(['name'], [['postgres']]) : output(['id'], [['exact']]); },
     snapshot: async () => ({ supported: true, runtimeVersion: '18.6', clusterId: 'a'.repeat(32), port: 15432, running: true, responsiveness: 'notChecked', authentication: 'notChecked', message: null }),
@@ -56,4 +56,62 @@ test('unknown commit failures survive status refresh; pending read cancellation 
   const gate = deferred<PgOutput>(); let calls = 0; f.port.execute = () => { calls++; return gate.promise; };
   const task = f.model.refresh(); f.model.cancel(); gate.resolve(output(['name'], [['public']])); await task;
   assert.equal(calls, 1); assert.equal(f.model.snapshot().error?.code, 'cancelled'); f.model.dispose();
+});
+
+test('saved profile credentials are cleared on open failure and never enter workspace state', async () => {
+  const f = fixture(); f.port.open = async () => { throw { code: 'connectionFailed', message: 'Fixture rejection', outcome: 'notStarted', sqlState: null, position: null }; };
+  const profile = { id: 'a'.repeat(32), revision: 'b'.repeat(32), name: 'Local', host: '127.0.0.1', port: 5432, user: 'student', database: 'postgres', rememberPassword: false };
+  const request = { confirmed: true as const, database: 'postgres', target: { kind: 'saved' as const, profile, password: 'fixture-secret' } };
+  assert.equal(await f.model.connect(request), false);
+  assert.equal(request.target.password, undefined);
+  assert.equal(JSON.stringify(f.model.snapshot()).includes('fixture-secret'), false);
+  assert.equal(f.model.snapshot().connections.length, 0); f.model.dispose();
+});
+test('failed authentication releases the descriptor so repeated retries do not exhaust native sessions', async () => {
+  const f = fixture(); f.port.execute = async () => { throw { code: 'connectionFailed', message: 'Fixture rejection', outcome: 'notStarted', sqlState: null, position: null }; };
+  for (let i = 0; i < 18; i++) assert.equal(await f.connect(), false);
+  assert.equal(f.closed.length, 18); assert.equal(f.model.snapshot().connections.length, 0);
+  assert.equal(f.model.snapshot().error?.code, 'connectionFailed'); f.model.dispose();
+});
+test('database switching preserves nonsecret server identity without asking the renderer for credentials', async () => {
+  const f = fixture();
+  await f.model.connect({ confirmed: true, database: 'postgres', target: { kind: 'external', host: '::1', port: 5432, user: 'student', password: 'fixture-secret', transport: 'loopback' } });
+  const first = f.model.snapshot().activeId;
+  let target: unknown;
+  f.port.open = async request => { target = request.target; return { id: 'd'.repeat(32), database: request.database, kind: 'external', persistence: 'memoryOnly', authentication: 'notChecked' }; };
+  assert.equal(await f.model.connect({ confirmed: true, database: 'other', target: { kind: 'session', sessionId: first } }), true);
+  assert.deepEqual(target, { kind: 'session', sessionId: first });
+  assert.deepEqual(f.model.snapshot().connections[1].source, { kind: 'external', host: '::1', port: 5432, user: 'student' });
+  assert.equal(await f.model.connect({ confirmed: true, database: 'other', target: { kind: 'session', sessionId: 'missing' } }), false); f.model.dispose();
+});
+test('a rejected concurrent connection attempt still clears its password', async () => {
+  const f = fixture(); const gate = deferred<PgSession>(); f.port.open = () => gate.promise;
+  const pending = f.connect();
+  const request = { confirmed: true as const, database: 'postgres', target: { kind: 'external' as const, host: '127.0.0.1', port: 5432, user: 'student', password: 'fixture-secret', transport: 'loopback' as const } };
+  assert.equal(await f.model.connect(request), false); assert.equal(request.target.password, '');
+  f.model.dispose(); gate.resolve({ id: 'f'.repeat(32), kind: 'managed', database: 'postgres', persistence: 'memoryOnly', authentication: 'notChecked' }); await pending;
+});
+
+test('explicit client provisioning clears only missing-runtime errors and never connects or starts a server', async () => {
+  const f = fixture();
+  f.port.execute = async () => { throw { code: 'unavailable', message: 'Explicit runtime provisioning is required', outcome: 'notStarted', sqlState: null, position: null }; };
+  assert.equal(await f.connect(), false);
+  assert.equal(f.model.snapshot().error?.code, 'unavailable');
+  const actions: string[] = [];
+  f.port.service = async action => { actions.push(action); return f.port.snapshot(); };
+  const requests = f.operations.length;
+  await f.model.service('provision');
+  assert.deepEqual(actions, ['provision']); assert.equal(f.operations.length, requests);
+  assert.equal(f.model.snapshot().connections.length, 0); assert.equal(f.model.snapshot().error, null);
+  assert.match(f.model.snapshot().notice!, /Connect to your server again/);
+  f.model.dispose();
+});
+test('failed client provisioning retains the retry context and reports the provisioning failure', async () => {
+  const f = fixture();
+  f.port.execute = async () => { throw { code: 'unavailable', message: 'Explicit runtime provisioning is required', outcome: 'notStarted', sqlState: null, position: null }; };
+  await f.connect(); f.port.service = async () => { throw { code: 'unavailable', message: 'Runtime verification failed' }; };
+  await f.model.service('provision');
+  assert.equal(f.model.snapshot().error?.text, 'Explicit runtime provisioning is required');
+  assert.equal(f.model.snapshot().serviceError?.text, 'Runtime verification failed');
+  f.model.dispose();
 });
