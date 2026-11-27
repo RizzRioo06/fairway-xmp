@@ -56,7 +56,7 @@ export default function PostgresPage({ active, busy, platform, embedded = false 
     catch (error) { if (profileRefresh.current === token) setProfileError(problem(error)); }
     finally { if (profileRefresh.current === token) setProfilesLoading(false); }
   }
-  useEffect(() => { if (active && platform === 'macos' && canControl) void refreshProfiles(); }, [active, platform]);
+  useEffect(() => { if (active && ['macos', 'windows'].includes(platform) && canControl) void refreshProfiles(); }, [active, platform]);
   useEffect(() => { setSearch(''); }, [state.schema, state.activeId]);
   function showConnect(value: NonNullable<typeof connect>) { setDialogError(null); setConnect(value); }
   async function submitConnection(request: ConnectRequest, save?: SaveProfile, saveOnly = false) {
@@ -108,7 +108,7 @@ export default function PostgresPage({ active, busy, platform, embedded = false 
     return !error;
   }
   function serviceDialog(action: ServiceAction) { setService(action); setServiceConsent(false); }
-  if (platform !== 'macos') return <section className="pg-page" aria-label="PostgreSQL workspace"><div className="page-heading"><h1>PostgreSQL</h1></div><p>PostgreSQL browsing and managed services currently require an Apple Silicon Mac. They are unavailable on this platform.</p><p>Your PHP, MySQL, SQLite and Node.js tools remain available.</p></section>;
+  if (!['macos', 'windows'].includes(platform)) return <section className="pg-page" aria-label="PostgreSQL workspace"><div className="page-heading"><h1>PostgreSQL</h1></div><p>PostgreSQL browsing is available on macOS and Windows. It is unavailable on this platform.</p><p>Your PHP, MySQL, SQLite and Node.js tools remain available.</p></section>;
   return <section className="pg-page" aria-label="PostgreSQL workspace">
     {!embedded && <div className="page-heading"><div><h1>PostgreSQL</h1><p>Browse schemas and run explicitly authorized SQL.</p></div><MaximizeWorkspace id="postgres" title="PostgreSQL" /></div>}
     <div className="pg-intro"><div><h2>PostgreSQL</h2><p>Connect to your running local server, then choose a database, schema and table.</p></div><span className="pg-source-badge">Local server connection</span></div>
@@ -117,13 +117,13 @@ export default function PostgresPage({ active, busy, platform, embedded = false 
       else showConnect({ profile });
     }} />
     {profileError && <ErrorMessage error={profileError} />}
-    <details className="pg-managed-details"><summary><span>Fairway managed PostgreSQL</span><small>{state.managed?.running ? 'Running' : state.managed?.clusterId ? 'Stopped' : 'Optional local server'}</small></summary>
+    {platform === 'macos' && <details className="pg-managed-details"><summary><span>Fairway managed PostgreSQL</span><small>{state.managed?.running ? 'Running' : state.managed?.clusterId ? 'Stopped' : 'Optional local server'}</small></summary>
     <section className="pg-service settings-card" aria-label="Managed PostgreSQL status"><div className="card-title"><h2>Fairway managed PostgreSQL</h2><button className="secondary" disabled={blocked} onClick={() => void controller.status()}><RefreshCw size={14} />Refresh status</button></div>
       <dl className="pg-health"><div><dt>Process</dt><dd>{state.managed ? state.managed.running ? 'Running' : 'Stopped' : 'Unknown'}</dd></div><div><dt>Service responsiveness</dt><dd>{({ notChecked: 'Not checked', accepting: 'Accepting connections', rejecting: 'Rejecting connections', noResponse: 'No response' })[state.managed?.responsiveness ?? 'notChecked']}</dd></div><div><dt>Authenticated access</dt><dd>{({ notChecked: 'Not checked', authenticated: 'Verified by health check', rejected: 'Rejected' })[state.managed?.authentication ?? 'notChecked']}</dd></div></dl>
       <p className="db-hint">{state.managed?.port ? `Loopback port ${state.managed.port}. ` : ''}A running process alone does not establish database access. Checks are explicit snapshots, not live monitoring.</p>
       {state.managed?.message && <p className="pg-warning">{state.managed.message}</p>}{state.serviceError && <ErrorMessage error={state.serviceError} />}
       <div className="pg-actions"><button className="secondary" disabled={blocked || !state.managed?.running} onClick={() => void controller.status(true)}>Check access</button>{state.managed?.clusterId ? <><button className="secondary" disabled={blocked || state.managed.running} onClick={() => serviceDialog('start')}><Play size={14} />Start</button><button className="secondary" disabled={blocked || !state.managed.running} onClick={() => serviceDialog('stop')}><Square size={14} />Stop</button><button className="secondary" disabled={blocked || !state.managed.running} onClick={() => serviceDialog('restart')}>Restart</button></> : <><button className="secondary" disabled={blocked} onClick={() => serviceDialog('provision')}>Prepare runtime</button><button className="secondary" disabled={blocked || !state.managed?.supported} onClick={() => serviceDialog('initialize')}>Initialize new cluster</button></>}</div>
-    </section></details>
+    </section></details>}
     <Workspace id="postgres" title="PostgreSQL" className="pg-workspace" busy={!!state.pending}>
       <div className="pg-connection-bar"><label>Open connection<select aria-label="PostgreSQL connection" disabled={blocked} value={state.activeId} onChange={e => void controller.select(e.target.value)}><option value="" disabled>Choose a connected database</option>{state.connections.map(c => <option key={c.session.id} value={c.session.id}>{c.source.kind === 'managed' ? 'Managed' : `External ${c.source.host}:${c.source.port}`} / {c.session.database}</option>)}</select></label><button className="primary" disabled={blocked || state.connections.length >= 16} onClick={() => showConnect({})}>Add connection</button>{connected && <button className="secondary" onClick={() => void controller.disconnect(connected.session.id)}><Unplug size={14} />Disconnect</button>}</div>
       {state.pending && <div className="pg-pending" role="status"><LoaderCircle size={16} className="spin" />{state.pending.label}{state.pending.canCancel && <button className="secondary" disabled={state.pending.cancelling} onClick={() => controller.cancel()}>{state.pending.query ? 'Cancel Query' : 'Cancel operation'}</button>}</div>}

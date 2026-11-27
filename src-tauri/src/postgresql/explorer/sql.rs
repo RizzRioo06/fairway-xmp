@@ -128,7 +128,7 @@ fn first_word(mut s: &str) -> Option<String> {
         return (n > 0).then(|| s[..n].to_ascii_uppercase());
     }
 }
-#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), test))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64"), test))]
 pub fn rows(
     schema: &str,
     relation: &str,

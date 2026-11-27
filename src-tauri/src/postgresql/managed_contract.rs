@@ -30,11 +30,19 @@ pub struct Logs {
 }
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-pub struct Managed;
+pub struct Managed {
+    #[cfg(windows)]
+    layout: Option<crate::config::Layout>,
+}
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 impl Managed {
-    pub fn new(_: Option<crate::config::Layout>) -> Self {
-        Self
+    pub fn new(layout: Option<crate::config::Layout>) -> Self {
+        #[cfg(not(windows))]
+        let _ = layout;
+        Self {
+            #[cfg(windows)]
+            layout,
+        }
     }
     fn unavailable<T>() -> super::Result<T> {
         Err(super::Error::new(
@@ -68,14 +76,22 @@ impl Managed {
     }
     pub(crate) fn explorer_connection(
         &self,
-        _: Option<&str>,
-        _: String,
+        cluster: Option<&str>,
+        database: String,
     ) -> crate::postgresql::explorer_contract::Result<crate::postgresql::explorer::wire::Envelope>
     {
-        Err(crate::postgresql::explorer_contract::fail(
-            crate::postgresql::explorer_contract::Code::Unavailable,
-            "PostgreSQL client requires qualified macOS arm64 runtime",
-        ))
+        #[cfg(windows)]
+        {
+            super::windows_client::connection(self.layout.as_ref(), cluster, database)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (cluster, database);
+            Err(crate::postgresql::explorer_contract::fail(
+                crate::postgresql::explorer_contract::Code::Unavailable,
+                "PostgreSQL browsing is unavailable on this platform",
+            ))
+        }
     }
     pub fn stop_for_shutdown(&self) -> super::Result<()> {
         Ok(())

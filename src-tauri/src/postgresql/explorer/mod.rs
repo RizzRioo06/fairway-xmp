@@ -7,12 +7,16 @@ use std::{
         Arc, Mutex,
     },
 };
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 mod catalog;
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 mod native;
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
+mod native_library;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod process;
+#[cfg(windows)]
+mod process_windows;
 mod sql;
 #[cfg(test)]
 mod tests;
@@ -282,7 +286,12 @@ impl Explorer {
             let _lease = managed.explorer_lease()?;
             process::run(e, flag)
         }
-        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        #[cfg(windows)]
+        {
+            let _lease = super::windows_client::verify(&e.runtime)?;
+            process_windows::run(e, flag)
+        }
+        #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
         {
             let _ = (e, flag);
             Err(fail(
@@ -313,11 +322,11 @@ impl Drop for Explorer {
     }
 }
 pub fn worker_entrypoint() -> bool {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
     {
         wire::entrypoint()
     }
-    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
     {
         false
     }

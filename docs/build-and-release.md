@@ -42,7 +42,7 @@ Use `--refresh-lock` only when deliberately updating runtime sources; review and
 
 Mac distribution builds sign all Mach-O code, notarize/staple the app, then create and separately sign/notarize/staple the installer. Only PHP interpreters receive the PCRE JIT entitlement. Bundled libraries and application executables keep their normal entitlements. Signed PHP checks exercise regex JIT, PostgreSQL clients and Composer in every bundled version.
 
-Windows installers currently lack Authenticode signing. Desktop updater payloads are separately signed with the public key in `packaging/updater.pub`; these signatures are required independently of platform distribution signatures. Linux updates are manual.
+Windows installers currently lack Authenticode signing; see [Windows Authenticode setup](#windows-authenticode-setup) for the owner-credential prerequisite. Desktop updater payloads are separately signed with the public key in `packaging/updater.pub`; these signatures are required independently of platform distribution signatures. Linux updates are manual.
 
 | Credential | Purpose |
 | --- | --- |
@@ -78,3 +78,37 @@ Stable versions are ordinary GitHub releases marked latest. Preview versions are
 Installed preview clients use `beta-feed/latest.json`; stable clients use `stable-feed/latest.json`. The legacy preview URL stays valid for installed clients. Preview/stable ordering prevents downgrades and unwanted preview delivery to stable installations. Publishing a stable version can advance both feeds while preserving a newer next-version preview.
 
 Feed promotion is explicit and off by default. It runs after the numbered release exists. If promotion fails, the release remains available for manual download; retry `scripts/publish_release_feed.py` with `GH_REPO` and `FAIRWAY_TAG`. Do not rebuild or replace published installers to retry metadata delivery.
+
+## Windows Authenticode setup
+
+The owner has requested publicly trusted Windows installer signing. No Windows
+certificate or signing-service account is configured yet, so this remains a release
+prerequisite. The existing `signed_release` input signs **updater payloads only**;
+it does not Authenticode-sign the application or NSIS installer. Free-sharing
+artifacts must continue to be described as unsigned until an actual signed artifact
+has passed verification. A configuration flag alone cannot change that status.
+
+Choose a trusted signing identity before wiring the signing job:
+
+- Microsoft Artifact Signing or a publicly trusted CA-backed code-signing service,
+  subject to its identity/region eligibility and pricing. See Microsoft's
+  [Windows signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options).
+- An application to [SignPath Foundation](https://signpath.org/) is a possible
+  free option for qualifying open-source projects. Approval is external, and the
+  [project/component conditions](https://signpath.org/terms) must be reviewed;
+  this fork is not claimed to be accepted or sponsored.
+
+After the owner obtains an approved identity, configure its repository-scoped
+credentials/permissions without putting private keys or tokens in source. Use a
+separate controlled signing/package job: compile first without signing credentials,
+sign the application executable before packaging it, then sign and timestamp the
+installer. Preserve the existing source/commit checks. Follow the provider's
+[Tauri signing integration](https://v2.tauri.app/distribute/sign/windows/).
+Do not re-sign or rewrite the pinned third-party PostgreSQL/PHP DLLs.
+
+Verify Authenticode on both the app and final installer with `Get-AuthenticodeSignature`
+and `signtool verify /pa`. Compute artifact hashes, candidate metadata and updater
+signatures from the **final signed bytes**, then run native acceptance outside the
+credential-bearing signing stage. A self-signed certificate is not a substitute
+for public trust, and signing does not guarantee immediate SmartScreen reputation.
+See [Microsoft's reputation guidance](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).

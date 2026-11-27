@@ -26,12 +26,19 @@ test('status separates process from authentication and managed actions require e
   await dialog.getByLabel('Authorize this managed action').check(); await dialog.getByRole('button', { name: 'Stop managed PostgreSQL', exact: true }).click();
   await expect(status).toContainText('Stopped');
 });
-test('unsupported platforms explain availability without dispatching PostgreSQL requests', async ({ page }) => {
+test('Windows exposes existing-server browsing without managed-server actions', async ({ page }) => {
   await page.goto('/'); await page.getByLabel('Example paths').selectOption('Windows');
   await page.getByRole('button', { name: 'Browse Data', exact: true }).click(); await page.getByRole('tab', { name: 'PostgreSQL', exact: true }).click();
-  await expect(page.getByText('PostgreSQL browsing and managed services currently require an Apple Silicon Mac.', { exact: false })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'New connection', exact: true })).toHaveCount(0);
-  expect((await inspect(page)).calls).toHaveLength(0);
+  await page.getByRole('button', { name: 'New connection', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Connect to PostgreSQL', exact: true });
+  await expect(dialog.getByLabel('Connection source')).toHaveValue('external');
+  await expect(dialog.locator('option[value="managed"]')).toHaveCount(0);
+  await dialog.getByLabel('Save this connection for next time').uncheck();
+  await dialog.getByLabel('PostgreSQL user').fill('fixture'); await dialog.getByLabel('PostgreSQL password').fill('fixture-only');
+  await dialog.getByLabel('Connect to this database').check(); await dialog.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByLabel('PostgreSQL schema', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('region', { name: 'Managed PostgreSQL status', exact: true })).toHaveCount(0);
+  expect((await inspect(page)).calls.some((c: { command: string }) => c.command.startsWith('postgres_managed_'))).toBe(false);
 });
 test('browse exact PostgreSQL values, page/sort/filter, inspect columns/indexes/views and maximize', async ({ page }) => {
   await open(page); await connect(page); await rows(page);

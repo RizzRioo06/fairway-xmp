@@ -57,6 +57,16 @@ For real packaged tools and database operations, build `terminal_bridge` and use
 
 ## Isolated development profiles
 
+For a reusable local desktop profile, run `npm run dev:desktop`. It uses the
+ignored `.runtime-work/desktop-dev` folder and a separate development app identifier;
+connection/settings data persists across launches. Run
+`npm run dev:desktop -- --check` to prepare/check it without starting any UI or
+services. Launcher fixtures run in disposable directories:
+`node --experimental-strip-types --test tests/desktop-launcher.test.ts`.
+The Unix alias fixture is skipped on Windows, where creating symlinks can require
+additional privileges. The shortcut itself has not been GUI-launched by the agent.
+
+
 For a debug desktop build on macOS:
 
 ```sh
@@ -186,3 +196,26 @@ on those platforms is outside this secure-storage update.
 A no-feature local test attempt could not compile existing `shell_environment`
 unit tests (`is_tool_variable` requires the terminal feature). Use the commands
 above with `--features terminal`; no unrelated shell code was changed.
+
+## Windows PostgreSQL external browsing
+
+The source implementation requires Windows x64 and a freshly staged default
+Windows PHP runtime so `build.rs` can embed its DLL pin. On a disposable Windows
+runner with native PostgreSQL 17.x or 18.6 test tools:
+
+```powershell
+python scripts/check_windows_postgres.py --authorize-isolated-server
+```
+
+This creates/stops only its own temporary cluster. It reads its generated password
+through private stdin and never uses real Credential Manager items, personal app
+profiles or an existing database. It does not run the GUI. The installer workflow
+runs it after runtime preparation. Local Mac checks type-check the example contract
+but do **not** run the Windows worker or establish Windows compatibility.
+
+Focused pin tests require no database or Windows tools:
+
+```sh
+python3 -m unittest discover -s tests -p test_windows_postgres_client.py -v
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked --lib postgresql::windows_client
+```

@@ -1,5 +1,71 @@
 # AI handoff
 
+## Windows PostgreSQL and signing request (2026-11-27)
+
+- Owner requested trusted Windows installer signing and implementing PostgreSQL
+  on Windows after the explanation. They confirmed **no signing credentials**.
+  Existing signed_release is updater-only; public Authenticode signing is blocked
+  pending an external certificate/service identity. See the new signing setup
+  section in [Build and release](build-and-release.md#windows-authenticode-setup).
+- Work is isolated on `feature/postgresql-windows` from `fd2ec18`. Preserve the
+  uncommitted launcher, metadata and documentation follow-ups from the prior branch.
+  Owner subsequently approved committing/pushing this feature branch and running
+  the Windows-only installer workflow. No main merge or Mac workflow is authorized
+  by that follow-up. Use Git history/Actions for final commit and run identities.
+- Implemented the external-loopback Windows path: pinned PHP-archive libpq DLLs,
+  build-embedded hashes, native dependency loading, owned Job Object workers,
+  private bounded IPC and the existing pg_catalog/query/cancellation contracts.
+  Windows UI now offers external connections only. Managed Windows servers and
+  Linux browsing are not enabled. Mac runtime/pins and service ownership remain.
+- Added a Windows installer CI step using a disposable SCRAM server/native worker
+  fixture, with no personal databases or real Credential Manager mutations. That
+  Windows fixture and actual Windows compilation have **not** run on this Mac.
+  Updated the Windows UI fixture but did not run browser/E2E tests.
+- Local evidence: frontend build/47 TS tests passed; 36 PostgreSQL Rust tests passed
+  (two existing opt-in native fixtures ignored); Windows fixture contract host
+  type-check test passed; three Windows archive tests and 12 runtime packaging
+  regressions passed; strict desktop all-target Clippy and formatting passed.
+  Initial Clippy unit-expression findings were corrected. Actual pinned Windows
+  DLL APIs and native worker/server behavior still require the Windows CI run.
+
+
+## Original saved connection located (2026-11-27)
+
+- Owner saw no saved connections after switching to the new desktop shortcut.
+  Read-only metadata inspection found `Vector_One_Summit` still saved under
+  `.runtime-work/pg-ui-SJ5PeI/data/postgresql-connections/profiles.json`.
+  The new `.runtime-work/desktop-dev` profile has no saved connection metadata.
+  This does not establish database/server state; no database or password was read.
+- Added `npm run dev:desktop -- --profile pg-ui-SJ5PeI` to reopen that existing
+  profile and its original acceptance app identifier without moving/copying data.
+  Selection rejects aliases, foreign directories and path traversal. User launch
+  remains manual; no UI, Keychain, service or database operation was run here.
+
+
+## One-command native development (2026-11-27)
+
+- Owner requested a package.json shortcut instead of repeating long launch commands.
+  Added `npm run dev:desktop`, using local Tauri/Vite, Cargo PATH only in the child
+  environment, a separate app identifier and `.runtime-work/desktop-dev/{home,data}`.
+- The owned marked profile is reused so test connections survive relaunches.
+  Unsafe/aliased/unmarked existing paths are refused without overwriting them.
+  Older temporary acceptance profiles are not imported or deleted.
+- `-- --check` prepares/validates without starting an app or any services. Launcher
+  tests use disposable directories, never installed Fairway or personal settings.
+- Three focused fixtures, Node syntax, TypeScript and whitespace checks passed;
+  no app launch, build or UI/E2E test ran. Changes remain local on the feature branch.
+
+
+## Fork metadata cleanup (2026-11-27)
+
+- Owner reports the UI improvements were merged into personal fork `main` and
+  Mac/Windows sharing builds are running there. Node templates remain separate.
+- On `feature/postgresql-connection-profiles`, corrected Cargo's repository URL
+  to `RizzRioo06/fairway-xmp` and removed the identical homepage field reported
+  by CI's `cargo::redundant_homepage` warning. License/notices are unchanged.
+- This local follow-up is not committed/pushed or included in the running build.
+  No application rebuild or UI/E2E test is needed for this metadata-only change.
+
 ## SQL editor layout correction (2026-11-27)
 
 - Owner's manual screenshot showed the SQL textarea at its default narrow width

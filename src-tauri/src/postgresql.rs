@@ -10,6 +10,8 @@ pub mod explorer_contract;
 pub mod managed;
 pub mod managed_contract;
 pub mod profiles;
+#[cfg(any(windows, test))]
+pub mod windows_client;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub use managed::Managed;
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]

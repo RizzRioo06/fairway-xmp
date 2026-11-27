@@ -13,17 +13,16 @@ type Ptr = *mut c_void;
 macro_rules! api {($($field:ident:$symbol:literal($($arg:ty),*)->$ret:ty),* $(,)?)=>{
 struct Api{library:Ptr,$($field:unsafe extern "C" fn($($arg),*)->$ret),*}
 impl Api {fn load(path:&std::path::Path)->Result<Self>{
-    let name=CString::new(path.to_str().ok_or_else(||fail(Code::Unavailable,"Pinned client unavailable"))?).map_err(|_|fail(Code::Unavailable,"Pinned client unavailable"))?;
-    let library=unsafe{libc::dlopen(name.as_ptr(),libc::RTLD_NOW|libc::RTLD_LOCAL)};
-    if library.is_null(){return Err(fail(Code::Unavailable,"Pinned client unavailable"));}
-    unsafe fn get<T:Copy>(library:Ptr,name:&CStr)->Result<T>{let p=unsafe{libc::dlsym(library,name.as_ptr())};if p.is_null(){Err(fail(Code::Unavailable,"Pinned client API unavailable"))}else{Ok(unsafe{std::mem::transmute_copy(&p)})}}
+    let library=super::native_library::open(path)?;
+    use super::native_library::get;
     let result=(||{Ok(Self{library,$($field:unsafe{get(library,CStr::from_bytes_with_nul(concat!($symbol,"\0").as_bytes()).unwrap())?}),*})})();
-    if result.is_err(){unsafe{libc::dlclose(library);}}
+    if result.is_err(){unsafe{super::native_library::close(library);}}
     result
 }}
-impl Drop for Api {fn drop(&mut self){unsafe{libc::dlclose(self.library);}}}
+impl Drop for Api {fn drop(&mut self){unsafe{super::native_library::close(self.library);}}}
 }}
 api! {
+    version:"PQlibVersion"()->i32,
     connect:"PQconnectStartParams"(*const *const i8,*const *const i8,i32)->Ptr,
     connect_poll:"PQconnectPoll"(Ptr)->i32, status:"PQstatus"(Ptr)->i32, finish:"PQfinish"(Ptr)->(),
     nonblocking:"PQsetnonblocking"(Ptr,i32)->i32, socket:"PQsocket"(Ptr)->i32,
@@ -68,6 +67,7 @@ fn text(p: *const i8) -> String {
         unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
     }
 }
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn poll(fd: i32, write: bool) {
     if fd >= 0 {
         let mut p = libc::pollfd {
@@ -81,6 +81,10 @@ fn poll(fd: i32, write: bool) {
     } else {
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+#[cfg(windows)]
+fn poll(_: i32, _: bool) {
+    std::thread::sleep(Duration::from_millis(10));
 }
 impl Connection {
     fn cancelled(&self) -> Result<()> {
@@ -120,7 +124,14 @@ impl Connection {
         }
     }
     fn connect(e: &Envelope, cancel: Arc<AtomicBool>) -> Result<Self> {
-        let api = Api::load(&e.runtime.join("lib/libpq.5.dylib"))?;
+        let api = Api::load(&super::native_library::path(&e.runtime))?;
+        let version = unsafe { (api.version)() };
+        if !(170000..190000).contains(&version) {
+            return Err(fail(
+                Code::Unavailable,
+                "PostgreSQL client 17.x or 18.x with asynchronous cancellation is required",
+            ));
+        }
         // Passwords go only through private stdin/memory. libpq never expands a conninfo dbname.
         let keys = [
             "host",
@@ -150,7 +161,11 @@ impl Connection {
             e.user.clone(),
             e.database.clone(),
             String::new(),
-            "/dev/null".into(),
+            if cfg!(windows) {
+                "NUL".into()
+            } else {
+                "/dev/null".into()
+            },
             "disable".into(),
             "disable".into(),
             "3".into(),

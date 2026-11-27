@@ -8,6 +8,7 @@ Install Node.js 24, Python 3.12+, Rust stable (at least 1.90) and the platform's
 
 ```sh
 npm ci
+npm run dev:desktop            # native app with a reusable isolated development profile
 npm run dev                    # disabled browser preview
 npm run dev:ui                 # labeled in-memory UI scenarios
 python3 scripts/prepare_runtime.py
@@ -15,6 +16,22 @@ npm run tauri -- dev           # native app with the staged runtime
 ```
 
 On Windows use `python` and, if PowerShell blocks `npm.ps1`, `npm.cmd`. Runtime preparation verifies pinned official Windows archives or Mac bottles/upstream sources and stages the complete runtime without a system MySQL/PHP installation. Keep the committed download locks for ordinary preparation; do not refresh unrelated runtime inputs to resolve a local setup problem.
+
+For everyday native development, use `npm run dev:desktop`. It starts the native
+app and Vite together, finds Cargo under your home directory, and reuses
+`.runtime-work/desktop-dev/{home,data}`. Saved test connections/settings survive
+relaunches. Its separate app identifier and debug profile keep installed-app data
+separate; shell profiles and global runtime defaults are not edited. On the first
+launch, use **PostgreSQL → Prepare connection tools** if needed. This is a new
+profile; earlier temporary acceptance profiles are not imported automatically.
+To reopen one without migrating its data, use
+`npm run dev:desktop -- --profile pg-ui-NAME` (or `pg-gui-NAME`), replacing the name
+with the original folder under `.runtime-work`. Reuse that command on later launches.
+It preserves the original acceptance app identifier and existing profile data.
+Quit the development app before relaunching; Ctrl+C stops the development command.
+`npm run dev:desktop -- --check` validates/prepares the profile without starting
+an app, Vite, runtime tools or database services. Runtime resources still need to
+be staged using the normal setup above. Windows users can use `npm.cmd`.
 
 The UI simulation resets on reload, uses example paths, and does not change real files/services. To preview a machine without Node, choose **Scenario → Node not detected**, then open **Settings**. Choose **Existing fnm**, **Existing fnm store** or **fnm handover** to preview read-only guidance and explicit activation handover. The simulated Install & use flow works on both example platforms; changing scenarios resets Node installations and activation. Native development uses real services. Set `FAIRWAY_DEV_HOME` and `FAIRWAY_DEV_DATA` to isolated directories when testing startup, settings, launchers and data. See [Testing](docs/testing.md#isolated-development-profiles).
 

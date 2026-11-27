@@ -42,6 +42,33 @@ fn main() {
         bytes,
     )
     .expect("Cannot stage compile-time PostgreSQL pin");
+    // Windows libpq and its DLL closure originate in the existing checksum-pinned
+    // PHP archive. Missing pins disable only Windows PostgreSQL, not PHP/MySQL.
+    let client_pin = root.join("src-tauri/resources/runtime/windows-postgresql-client.json");
+    println!("cargo:rerun-if-changed={}", client_pin.display());
+    let client_bytes =
+        if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") && client_pin.exists() {
+            let m = fs::symlink_metadata(&client_pin).expect("Cannot inspect Windows client pin");
+            assert!(
+                m.is_file() && !m.is_symlink() && m.len() <= 65536,
+                "Unsafe Windows client pin"
+            );
+            assert_eq!(
+                client_pin.canonicalize().unwrap(),
+                root.canonicalize()
+                    .unwrap()
+                    .join("src-tauri/resources/runtime/windows-postgresql-client.json"),
+                "Windows client pin must not follow aliases"
+            );
+            fs::read(&client_pin).expect("Cannot read Windows client pin")
+        } else {
+            b"null".to_vec()
+        };
+    fs::write(
+        PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("windows-postgresql-client.json"),
+        client_bytes,
+    )
+    .expect("Cannot embed Windows client pin");
     let git = |args: &[&str]| -> Option<String> {
         let output = Command::new("git")
             .arg("-C")

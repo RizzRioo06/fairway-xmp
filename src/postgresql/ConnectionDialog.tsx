@@ -17,7 +17,7 @@ export default function ConnectionDialog({ managed, platform, initial, profile, 
   const [runtimeRecovery, setRuntimeRecovery] = useState(false);
   const runtimeMissing = needsClientRuntime(error);
   const storeName = credentialStoreName(platform);
-  const [kind, setKind] = useState(profile ? 'external' : initial?.source.kind ?? lastSource());
+  const [kind, setKind] = useState(platform === 'windows' || profile ? 'external' : initial?.source.kind ?? lastSource());
   const [db, setDb] = useState(database ?? profile?.database ?? initial?.session.database ?? 'postgres');
   const [host, setHost] = useState(profile?.host ?? (initial?.source.kind === 'external' ? initial.source.host : '127.0.0.1'));
   const [port, setPort] = useState(profile ? String(profile.port) : initial?.source.kind === 'external' ? String(initial.source.port) : '5432');
@@ -48,7 +48,7 @@ export default function ConnectionDialog({ managed, platform, initial, profile, 
       const next = e.target.value as 'managed' | 'external'; setKind(next); setConsent(false);
       try { localStorage.setItem('fairway.pg.lastSource', next); } catch { /* Preference storage is optional. */ }
       if (password.current) password.current.value = '';
-    }}><option value="external">Existing PostgreSQL server</option><option value="managed">Fairway managed PostgreSQL</option></select></label>}
+    }}><option value="external">Existing PostgreSQL server</option>{platform === 'macos' && <option value="managed">Fairway managed PostgreSQL</option>}</select></label>}
     {kind === 'external' && <p className="db-hint">Connect to your running local server. Fairway will not start, stop or reconfigure it.</p>}
     <label>Database<input aria-label="Connection database" value={db} onChange={e => setDb(e.target.value)} required maxLength={63} /></label>
     {kind === 'managed' ? <p className="db-hint">{managed?.running ? `Uses your managed cluster on port ${managed.port} and its Keychain credential.` : 'Initialize and start a managed cluster first.'}</p> : <>

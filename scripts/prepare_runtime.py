@@ -211,6 +211,9 @@ def windows(target, lock, refresh):
                 for file in unpacked.iterdir():
                     if file.suffix.lower() in ('.exe', '.dll'): copy(file, target / service / 'bin' / file.name)
                 copy(unpacked / 'ext', target / service / 'ext')
+                if service == 'php':
+                    from windows_postgres_client import write_client_manifest
+                    write_client_manifest(archive, lock[name], target)
                 for file in unpacked.glob('*LICENSE*'): copy(file, target / 'licenses' / service / file.name)
                 for file in unpacked.glob('*license*'): copy(file, target / 'licenses' / service / file.name)
             elif service == 'nginx':

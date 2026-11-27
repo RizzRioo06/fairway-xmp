@@ -24,9 +24,9 @@ pub(crate) struct Envelope {
 fn password<S: serde::Serializer>(p: &Password, s: S) -> std::result::Result<S::Ok, S::Error> {
     s.serialize_str(std::str::from_utf8(p.bytes()).map_err(serde::ser::Error::custom)?)
 }
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 pub(crate) struct PrivateBytes(pub Vec<u8>);
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 impl Drop for PrivateBytes {
     fn drop(&mut self) {
         for b in &mut self.0 {
@@ -34,7 +34,7 @@ impl Drop for PrivateBytes {
         }
     }
 }
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 pub fn entrypoint() -> bool {
     if std::env::args_os().nth(1).as_deref()
         != Some(std::ffi::OsStr::new("--fairway-postgres-query-worker"))
@@ -60,19 +60,32 @@ pub fn entrypoint() -> bool {
         let e: Envelope = serde_json::from_slice(&bytes.0)
             .map_err(|_| fail(Code::InvalidRequest, "Invalid private worker input"))?;
         super::validate_connection(&e)?;
-        let base = e
-            .runtime
-            .parent()
-            .ok_or_else(|| fail(Code::Unavailable, "Runtime unavailable"))?;
-        let rt = crate::postgresql::managed::runtime::installed(
-            &crate::postgresql::managed::files::Dir::absolute(base)
-                .map_err(|_| fail(Code::Unavailable, "Runtime unavailable"))?,
-            base,
-        )
-        .map_err(|_| fail(Code::Unavailable, "Runtime integrity check failed"))?;
-        if rt.path != e.runtime {
-            return Err(fail(Code::Unavailable, "Runtime integrity check failed"));
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            let base = e
+                .runtime
+                .parent()
+                .ok_or_else(|| fail(Code::Unavailable, "Runtime unavailable"))?;
+            let rt = crate::postgresql::managed::runtime::installed(
+                &crate::postgresql::managed::files::Dir::absolute(base)
+                    .map_err(|_| fail(Code::Unavailable, "Runtime unavailable"))?,
+                base,
+            )
+            .map_err(|_| fail(Code::Unavailable, "Runtime integrity check failed"))?;
+            if rt.path != e.runtime {
+                return Err(fail(Code::Unavailable, "Runtime integrity check failed"));
+            }
         }
+        #[cfg(windows)]
+        let _lease = {
+            if e.managed.is_some() {
+                return Err(fail(
+                    Code::Unavailable,
+                    "Windows query workers never control managed servers",
+                ));
+            }
+            crate::postgresql::windows_client::verify(&e.runtime)?
+        };
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = cancel.clone();
         std::thread::spawn(move || {

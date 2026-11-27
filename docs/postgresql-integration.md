@@ -320,9 +320,10 @@ Remove actions. Profiles retain name, host, port, database and username on this
 device. Passwords are optional and stored only through the selected OS vault,
 using `dev.fairway.external-postgresql.v1` plus opaque revision IDs, separately
 from managed-cluster secrets. The profile storage/IPC layer supports macOS,
-Windows and Linux. PostgreSQL query/runtime support and the workspace remain
-limited to the existing qualified macOS path; the owner scoped this follow-up
-to secure password storage first.
+Windows and Linux. The qualified query/runtime path remains macOS; a later owner-authorized
+[Windows external-browsing implementation](#windows-external-browsing-implementation-2026-11-27)
+is now present in source, with Windows native qualification still pending.
+Managed PostgreSQL remains macOS-only.
 
 | OS | Password provider | Requirements |
 | --- | --- | --- |
@@ -510,3 +511,50 @@ profiles, roles and backup/restore remain separately scoped future work.
 [Stage 1](postgresql-stage1-verification.md), [Stage 2](postgresql-stage2-verification.md)
 and [Stage 3 verification](postgresql-stage3-verification.md) distinguish historical
 evidence from current implementation and unresolved acceptance.
+
+## Windows external browsing implementation (2026-11-27)
+
+The Windows implementation is on `feature/postgresql-windows`. Browse Data's
+PostgreSQL tab now exposes external local connections, saved profiles, schemas,
+tables/views, exact text/NULL rows, filters, metadata and the existing SQL editor.
+The source implementation is not yet qualified by a Windows build/native run.
+Managed initialization/start/stop remains unavailable on Windows, and the managed
+service controls/connection choice are hidden there. Linux browsing remains out
+of scope. Existing PHP/MySQL/SQLite/Node behavior and download versions are retained.
+
+Windows clients reuse `php/bin/libpq.dll` and its DLL closure from the existing
+checksum-pinned default Windows PHP archive. `windows_postgres_client.py` verifies
+the archive and records each root DLL's hash/size in
+`windows-postgresql-client.json`. `build.rs` embeds that manifest; the source
+archive hash must match the committed lock. Missing build metadata disables the
+PostgreSQL connection path without changing other services. Full Windows runtime
+preparation is required for an app build; old cached runtime folders do not gain
+client trust automatically. This is not a renderer or runtime-environment override.
+
+Both the parent and helper validate the embedded pin against bounded runtime
+files, reject reparse points/hard links/unlisted DLLs, and hold shared-read file
+and ancestor handles through execution. `LoadLibraryExW` uses the verified absolute
+client path with DLL-directory/System32 dependency search. The client must export
+the PostgreSQL 17+ asynchronous cancellation APIs; unsupported clients fail closed.
+The private connection explicitly disables TLS/GSS and uses the NUL device instead
+of inherited password files. Only literal loopback addresses are accepted.
+
+The same query engine and pg_catalog SQL are reused. Windows nonblocking libpq
+polling is paced without casting socket handles through a Unix poll ABI. Query
+workers run without a console, with a cleared environment and private inherited
+stdin/stdout. No credentials are sent before an owned Job Object is attached.
+The job kills its helper tree on close and caps process memory at 512 MiB;
+requests/results are bounded and the helper has a 20-second parent deadline.
+Cancellation/owner loss uses the private input channel and existing libpq policy.
+Unexpected worker termination during modifying SQL retains an unknown outcome.
+No external server process is adopted, signaled or stopped.
+
+`check_windows_postgres.py --authorize-isolated-server` is wired into the Windows
+installer workflow after runtime preparation. It uses a new disposable cluster
+and its own native worker example; its password crosses private stdin, not argv,
+environment variables, config files or the user's credential store. It requires
+an available test-only PostgreSQL 17.x or 18.6 installation and does not install or
+control a system service. It checks exact Unicode/large-number/NULL/empty values,
+catalogs, filters, SQL consent, authentication, observed query cancellation and
+DLL tamper refusal. Native Windows execution and actual installer acceptance are
+still pending. Browser simulations are not used as native evidence.
