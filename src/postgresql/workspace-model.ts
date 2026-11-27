@@ -1,7 +1,9 @@
 // UI lifecycle only: SQL enforcement, credentials and server ownership stay native.
 import { isPgError, type PgError, type PgOperation, type PgOutput, type PgPage, type PgSession, type PgTarget } from './explorer-types.ts';
+import { needsClientRuntime } from './runtime-guidance.ts';
+import type { Profile } from './profiles.ts';
 import { isPostgresError, type ManagedPostgresSnapshot } from './types.ts';
-export type ConnectRequest = { confirmed: true; database: string; target: PgTarget };
+export type ConnectRequest = { confirmed: true; database: string; target: PgTarget | { kind: 'saved'; profile: Profile; password?: string } };
 export type Source = { kind: 'managed'; clusterId: string } | { kind: 'external'; host: string; port: number; user: string };
 export type Connection = { session: PgSession; source: Source; access: 'notChecked' | 'authenticated' | 'failed' };
 export type Pane = 'rows' | 'columns' | 'indexes' | 'view' | 'query';
@@ -82,15 +84,32 @@ export class PostgresWorkspace {
   }
   connect(request: ConnectRequest) {
     // Copy only nonsecret metadata into state. The password is never retained here.
-    const source: Source = request.target.kind === 'managed' ? { kind: 'managed', clusterId: request.target.clusterId } : { kind: 'external', host: request.target.host, port: request.target.port, user: request.target.user };
+    const target = request.target;
+    const existing = target.kind === 'session' ? this.state.connections.find(c => c.session.id === target.sessionId) : undefined;
+    const source: Source | undefined = target.kind === 'managed' ? { kind: 'managed', clusterId: target.clusterId }
+      : target.kind === 'session' ? existing?.source
+      : target.kind === 'saved' ? { kind: 'external', host: target.profile.host, port: target.profile.port, user: target.profile.user }
+      : { kind: 'external', host: target.host, port: target.port, user: target.user };
+    if (!source || this.task || this.disposed) {
+      if (target.kind === 'external') target.password = '';
+      if (target.kind === 'saved') target.password = undefined;
+      return Promise.resolve(false);
+    }
     return this.run('Connecting to PostgreSQL…', async task => {
       let session: PgSession;
       try { session = await this.api.open(request); }
-      finally { if (request.target.kind === 'external') request.target.password = ''; }
+      finally { if (request.target.kind === 'external') request.target.password = ''; if (request.target.kind === 'saved') request.target.password = undefined; }
       if (this.disposed || !task.live || task.cancelled) { await this.api.close(session.id); throw cancelled(); }
       task.session = session.id;
       this.patch({ ...this.clear(), activeId: session.id, connections: [...this.state.connections, { session, source, access: 'notChecked' }] });
-      await this.load(task);
+      try { await this.load(task); }
+      catch (error) {
+        try {
+          await this.api.close(session.id);
+          this.patch({ connections: this.state.connections.filter(c => c.session.id !== session.id), ...(this.state.activeId === session.id ? { ...this.clear(), activeId: '' } : {}) });
+        } catch { /* Keep the session visible so Disconnect can retry credential release. */ }
+        throw error;
+      }
     }, false, true, true);
   }
   select(id: string) {
@@ -150,7 +169,7 @@ export class PostgresWorkspace {
   }
   service(action: ServiceAction, port?: number) {
     return this.run('Updating managed PostgreSQL…', async () => {
-      try { this.patch({ managed: await this.api.service(action, port), serviceError: null, notice: action === 'provision' ? 'Runtime integrity verified. No cluster was initialized or started.' : 'Managed service action completed. Use Check access to verify authentication.' }); }
+      try { this.patch({ managed: await this.api.service(action, port), serviceError: null, ...(action === 'provision' && needsClientRuntime(this.state.error) ? { error: null } : {}), notice: action === 'provision' ? 'Connection tools are ready. Connect to your server again. No cluster was initialized or started.' : 'Managed service action completed. Use Check access to verify authentication.' }); }
       catch (error) { this.patch({ serviceError: problem(error) }); }
     }, false, false);
   }

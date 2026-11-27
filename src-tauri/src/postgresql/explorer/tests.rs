@@ -125,3 +125,55 @@ fn pre_dispatch_cancellation_is_not_lost_and_closed_sessions_stay_stale() {
         Code::StaleSession
     );
 }
+
+#[test]
+fn database_switch_reuses_native_credentials_and_closed_sessions_cannot_be_reused() {
+    let explorer = Explorer::default();
+    let request: Connect = serde_json::from_value(serde_json::json!({"confirmed":true,"database":"postgres","target":{"kind":"external","host":"127.0.0.1","port":5432,"user":"student","password":"fixture-only","transport":"loopback"}})).unwrap();
+    let first = explorer.connect(request).unwrap();
+    let second = explorer
+        .connect(Connect {
+            confirmed: true,
+            database: "other".into(),
+            target: Target::Session {
+                session_id: first.id.clone(),
+            },
+        })
+        .unwrap();
+    explorer
+        .disconnect(SessionRequest {
+            session_id: first.id.clone(),
+        })
+        .unwrap();
+    let sessions = explorer.sessions.lock().unwrap();
+    let c = sessions.get(&second.id).unwrap();
+    assert_eq!(c.database, "other");
+    if let ConnectionTarget::External { password, .. } = &c.target {
+        assert!(password.bytes() == b"fixture-only");
+    } else {
+        panic!("wrong source");
+    }
+    drop(sessions);
+    assert_eq!(
+        explorer
+            .connect(Connect {
+                confirmed: true,
+                database: "other".into(),
+                target: Target::Session {
+                    session_id: first.id
+                }
+            })
+            .unwrap_err()
+            .code,
+        Code::StaleSession
+    );
+    assert!(explorer
+        .connect(Connect {
+            confirmed: false,
+            database: "other".into(),
+            target: Target::Session {
+                session_id: second.id
+            }
+        })
+        .is_err());
+}

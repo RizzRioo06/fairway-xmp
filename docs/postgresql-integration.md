@@ -2,8 +2,9 @@
 
 Stage 1 implements read-only discovery; Stage 2 adds explicitly authorized managed
 lifecycle. Stage 3 adds database-explorer and SQL-editor **backend** contracts and
-native workers. No PostgreSQL service starts automatically. No graphical PostgreSQL
-workspace, persistent external profiles, role UI or backup/restore UI is implemented.
+native workers. The graphical workspace now includes saved external loopback
+connections and optional OS-vault passwords. No PostgreSQL service starts
+automatically. Role UI and backup/restore UI remain outside this scope.
 Signed runtime packaging and real signed-app Keychain acceptance remain unverified;
 Stage 3 fixtures do not establish managed release acceptance.
 
@@ -17,7 +18,7 @@ Stage 3 fixtures do not establish managed release acceptance.
 | `postgresql/explorer/catalog.rs` | PostgreSQL-native database/schema/relation/column/index/view queries with privilege checks |
 | `postgresql/explorer/process.rs`, `wire.rs` | Owned private helper, cleared environment, stdin-only secrets, bounded IPC/deadlines and helper memory supervision |
 | `postgresql/explorer/native.rs` | Verified libpq, asynchronous connect/query, single-row results, connection-bound cancellation and transaction outcomes |
-| `desktop/postgresql_explorer_commands.rs`, `src/postgresql/explorer*.ts` | Explicit typed IPC and frontend foundations; no automatic invocation or workspace UI |
+| `desktop/postgresql_explorer_commands.rs`, `src/postgresql/explorer*.ts` | Explicit typed IPC for the graphical workspace; no automatic connection |
 
 The chosen transport reuses Stage 2's pinned libpq rather than coupling PostgreSQL
 to PHP startup or adding a new driver dependency. Existing Fairway job IDs,
@@ -30,11 +31,13 @@ See [Stage 3 verification and limits](postgresql-stage3-verification.md).
 `postgres_connection_open({confirmed:true,database,target})` registers a descriptor;
 it returns `authentication:notChecked`, **not** an authenticated/ready claim.
 Targets are `{kind:managed,clusterId}` or `{kind:external,host,port,user,password,
-transport}`. A job authenticates a new bounded connection against that database.
-Select another database by opening another session, using the same explicit policy.
+transport}`, plus `{kind:session,sessionId}` to copy native session credentials
+when explicitly switching databases. Credentials are never returned to the renderer.
+A job authenticates a new bounded connection against that database.
 There are at most 16 memory-only sessions and two backend job slots. Desktop query
 IPC also uses Fairway's existing operation reservation, serializing it with other
-service/database actions. No session/SQL/history/password is written to disk.
+service/database actions. Sessions and SQL remain memory-only. Optional saved
+passwords use an OS credential vault; profile JSON never contains passwords.
 
 Managed jobs recheck the owned, running cluster and verified runtime, resolve only
 its Keychain secret, and check the server's database/role/version/data-directory/
@@ -43,7 +46,8 @@ managed memory-vault fallback. Client leases are separate shared leases; existin
 managed process/runtime leases and ownership receipts remain intact.
 
 External sessions explicitly choose `transport:loopback` and literal `127.0.0.1` or
-`::1`; their password is deliberately session-only input, not a persistence fallback.
+`::1`; passwords entered directly remain session-only unless the user explicitly
+chooses to remember one in the OS vault. Vault failure never falls back to plaintext.
 No server data directory/PID/service identity or lifecycle authority belongs to that
 target. `transport:verifyFull` records the required remote policy but currently
 returns `unavailable`: the pinned minimal client has no TLS. No downgrade, CA bypass,
@@ -304,7 +308,89 @@ Errors are `busy`, `confirmationRequired`, `staleCandidate`, or `unavailable`.
 Request DTOs reject unknown fields. IPC version inspection has no disk persistence,
 credential input, network operation, start/stop or mutation endpoint.
 
-## Historical connection/profile plan (persistent profiles remain future work)
+## Saved connections
+
+Browse Data includes MySQL, SQLite and PostgreSQL source tabs. PostgreSQL has
+no separate sidebar entry. Its embedded controller preserves sessions across
+source navigation. MySQL/SQLite retain their existing service,
+file and query behavior. Selecting PostgreSQL does not connect automatically.
+
+The PostgreSQL tab lists named external loopback profiles with Connect, Edit and
+Remove actions. Profiles retain name, host, port, database and username on this
+device. Passwords are optional and stored only through the selected OS vault,
+using `dev.fairway.external-postgresql.v1` plus opaque revision IDs, separately
+from managed-cluster secrets. The profile storage/IPC layer supports macOS,
+Windows and Linux. PostgreSQL query/runtime support and the workspace remain
+limited to the existing qualified macOS path; the owner scoped this follow-up
+to secure password storage first.
+
+| OS | Password provider | Requirements |
+| --- | --- | --- |
+| macOS | Native Keychain generic-password API | Existing Keychain access policy; no new plaintext fallback |
+| Windows | [Credential Manager generic credentials](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentialw) | User logon credential set; local-machine persistence, no credential roaming |
+| Linux | Direct [libsecret Secret Service API](https://gnome.pages.gitlab.gnome.org/libsecret/method.Service.store_sync.html) | System libsecret-1 and an available Secret Service keyring on the session bus |
+
+Linux loads libsecret from trusted system locations at runtime; it is not newly
+bundled or installed by this change. GNOME Keyring and Secret Service-enabled
+KWallet can provide the service. No service/library, a cancelled unlock or a failed
+vault operation returns a sanitized error; nothing falls back to `.pgpass`, files,
+shell commands or an alternate libsecret file backend. Direct Secret Service APIs
+are used rather than the pluggable simple password API. Operations use a native
+cancellable with a 30-second cancellation request, off the UI thread. Deletion
+searches all matching items and deletes each explicitly, so a locked item cannot
+silently be treated as a missing item. Windows returned credential blobs are wiped
+before `CredFree`, and missing-item deletion is idempotent. Empty and UTF-8
+passwords are supported; NUL/oversize credentials are refused.
+Without a saved password, connecting pre-fills the form and asks for the password.
+An empty entered password is supported. Saving does not prove authentication;
+Connected is shown only after a successful database operation.
+
+`postgres_profiles_list`, `postgres_profile_save`, `postgres_profile_remove` and
+`postgres_profile_open` expose strict native contracts. Saves/removals require
+explicit authorization. Revisions reject stale edits and stale connection attempts;
+changing server/user identity requires a fresh password when remembering it.
+At most 64 profiles are stored. Profile removal never changes servers, databases
+or open sessions. Database switching copies the active native session credential,
+and Refresh connection reloads that session without creating duplicate descriptors.
+Failed initial catalog/authentication closes its descriptor; the form keeps its
+nonsecret fields for retry. If closing fails, Disconnect remains available.
+
+Metadata lives in the private `data/postgresql-connections` directory, independently
+of managed cluster storage. Descriptor-relative directory/file checks reject
+symlinks, hard-linked metadata and unsafe ownership. An interprocess lock protects
+read/modify/write operations; atomic synced metadata commits and a durable retired
+credential journal cover interrupted vault creation/replacement/deletion.
+Windows pins directory ancestors with handles denying deletion, refuses reparse
+points/hard links and requires a protected current-user-only DACL on profile
+storage. Linux uses descriptor-relative Unix ownership/mode/link checks. Cleanup
+failures remain reported and are retried before the next save/removal. Listing
+profiles does not access the password vault. No renderer secret storage or plaintext fallback
+is used. The last selected connection source is an optional nonsecret UI preference.
+
+The managed-service controls are collapsed by default. Saved connections show
+connection progress/status, and tables/views can be searched by name. The tab
+explains database/schema/table selection and read-only row browsing. Tables use
+sticky name/type headers, numbered rows, zebra/hover/focus shading, distinct
+NULL/empty badges and an optional text-wrap control. Long Unicode previews are
+shortened for scanning; opening a cell shows the exact original returned value.
+Friendly filter labels map to the existing native operators without changing SQL.
+Pagination displays actual result row ranges and its 50-row page size. Existing
+SQL consent, cancellation and uncertain-outcome handling remain in place.
+
+Terminal verification uses disposable directories, an injected memory vault and
+injected Windows/libsecret API tables; it does not access real OS credentials or
+existing databases. The Windows credential ABI and Linux native error/lifetime
+paths run against fixtures on the Mac host. The Unix storage engine is exercised
+on the host, while Windows storage received a host-only Rust type check. These
+checks are not Windows/Linux execution evidence. A focused three-platform CI
+workflow was added but was not dispatched. Actual Windows/Linux builds, real vault
+sessions, packaged relaunch persistence and visual layout remain unverified.
+No browser/end-to-end tests were run for this change.
+
+## Historical connection/profile plan
+
+The local profile subset is now implemented; see [saved connections](#saved-connections).
+Remote/TLS and other-platform ideas below remain historical proposals.
 
 Use a discriminated target: `{kind:managed, clusterId}` or
 `{kind:external, profileId}`. A runtime toolset ID is neither target type.

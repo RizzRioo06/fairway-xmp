@@ -9,6 +9,7 @@ pub mod explorer_contract;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod managed;
 pub mod managed_contract;
+pub mod profiles;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub use managed::Managed;
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]

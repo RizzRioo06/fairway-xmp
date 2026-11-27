@@ -16,6 +16,7 @@ import ForeignKeyExamples from './ForeignKeyExamples';
 import SqlBlock from './SqlBlock';
 import { summarizeQueryResults } from './query-results';
 import { editableColumn, fromColumn, newColumn, type Column, type Definition, type LargeFields, type RowRef, type Page, type QueryResult, type Row, type Structure, type Table, type TableIndex } from './types';
+import type { SqlSourceRequest } from './BrowseData';
 import './data.css';
 
 type EditKind = 'import_sql' | 'create_database' | 'rename_database' | 'drop_database' | 'create_table' | 'rename_table' | 'drop_table' | 'add_column' | 'change_column' | 'drop_column' | 'create_index' | 'drop_index' | 'insert' | 'update' | 'delete';
@@ -34,7 +35,7 @@ function recentFiles(): string[] {
   } catch { return []; }
 }
 
-export default function DataBrowser({ ready, busy: appBusy, start, open }: { ready: boolean; busy: boolean; start: () => void; open: (target: string) => void }) {
+export default function DataBrowser({ ready, busy: appBusy, start, open, onPostgres, sourceRequest }: { ready: boolean; busy: boolean; start: () => void; open: (target: string) => void; onPostgres?: () => void; sourceRequest?: SqlSourceRequest }) {
   const maximized = useMaximizedWorkspace() === 'data';
   const [source, setSource] = useState<Source>({ driver: 'mysql' });
   const selectedSource = useRef(source);
@@ -173,6 +174,20 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
     if (sqlite) return;
     void run('Loading database…', () => switchSource({ driver: 'sqlite', path: restoreRecent.current ? recent[0] ?? null : null }));
   }
+  const consumedSourceRequest = useRef(0);
+  const selectRequestedSource = useEffectEvent(() => {
+    if (!sourceRequest || consumedSourceRequest.current === sourceRequest.key || pending) return;
+    consumedSourceRequest.current = sourceRequest.key;
+    if (sourceRequest.driver === 'mysql') selectMysql(); else selectSqlite();
+  });
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      await activeTask.current;
+      if (!disposed) selectRequestedSource();
+    })();
+    return () => { disposed = true; };
+  }, [sourceRequest, pending]);
   async function openSqlite() {
     await run('Opening SQLite file…', async () => {
       const path = await invoke<string | null>('pick_sqlite_file');
@@ -356,7 +371,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
 
   const headingActions = <div className="db-actions" inert={browsing}><button className="secondary" disabled={blocked} onClick={() => void openSqlite()}><FolderOpen size={14} />Open SQLite file…</button>{!sqlite && <button className="secondary" disabled={blocked || !ready} onClick={() => open('phpmyadmin')}>phpMyAdmin<ArrowUpRight size={14} /></button>}</div>;
   return <Workspace id="data" title="Data browser" className="db-browser" busy={!!pending} actions={headingActions}>
-    <div className="page-heading"><div><h1>Data browser</h1><p>Query and edit MySQL databases or SQLite files.</p></div><div className="workspace-heading-actions">{headingActions}<MaximizeWorkspace id="data" title="Data browser" /></div></div>
+    <div className="page-heading"><div><h1>Data browser</h1><p>Browse MySQL, SQLite and PostgreSQL databases.</p></div><div className="workspace-heading-actions">{headingActions}<MaximizeWorkspace id="data" title="Data browser" /></div></div>
     <div className={`db-notice${pageNotice ? ` notice ${pageNotice.error ? 'error' : 'success'}` : ''}`}>
       <div className="db-notice-message">
         <div role={pageNotice && !pageNotice.error ? 'status' : undefined} aria-live="polite" aria-atomic="true">{pageNotice && !pageNotice.error ? pageNotice.text : null}</div>
@@ -365,7 +380,7 @@ export default function DataBrowser({ ready, busy: appBusy, start, open }: { rea
       {pageNotice && <button aria-label="Dismiss database message" onClick={() => setNotice(null)}>×</button>}
     </div>
     <section className="db-source" inert={browsing} aria-label="Data source controls">
-      <div className="db-source-tabs" role="tablist" aria-label="Data source"><button role="tab" aria-selected={!sqlite} disabled={blocked} onClick={selectMysql}>MySQL</button><button role="tab" aria-selected={sqlite} disabled={blocked} onClick={selectSqlite}>SQLite</button></div>
+      <div className="db-source-tabs" role="tablist" aria-label="Data source"><button role="tab" aria-selected={!sqlite} disabled={blocked} onClick={selectMysql}>MySQL</button><button role="tab" aria-selected={sqlite} disabled={blocked} onClick={selectSqlite}>SQLite</button>{onPostgres && <button role="tab" aria-selected={false} disabled={blocked} onClick={onPostgres}>PostgreSQL</button>}</div>
       {sqlitePath && <section className="db-file-card" aria-label="SQLite file"><p className="db-file-path" title={sqlitePath}><strong>{fileName(sqlitePath)}</strong><span aria-label="SQLite file path">{sqlitePath}</span><small>Editing the original project file. Changes are saved immediately.</small></p><div className="db-file-actions"><button className="secondary" disabled={blocked} onClick={backupSqlite}>Back up SQLite file</button><button className="secondary" disabled={blocked} onClick={closeSqlite}>Close SQLite file</button></div></section>}
     </section>
     {sqlite && !sqlitePath ? <section className="settings-card db-empty"><FolderOpen size={28} /><h2>Open a SQLite file to browse your data</h2><p>Choose a project database. SQLite needs no running services.</p><div className="db-empty-actions"><button className="primary" disabled={blocked} onClick={() => void openSqlite()}>Open SQLite file</button>{recent[0] && <button className="secondary" disabled={blocked} title={recent[0]} onClick={() => void reopenSqlite()}>Reopen {fileName(recent[0])}</button>}</div></section> : !available ? <section className="settings-card db-empty"><Database size={28} /><h2>Start MySQL to browse your data</h2><p>Or choose <strong>Open SQLite file…</strong> above to browse a project database. SQLite needs no running services.</p><button className="primary" disabled={blocked} onClick={start}>Start MySQL</button></section> : <div className="db-content" inert={browsing}>

@@ -124,3 +124,4 @@
 .db-large-controls .db-hint { flex-basis: 100%; margin: 0; }
 
 .db-row-value-content pre.db-full-large { max-height: 20rem; overflow: auto; white-space: pre; overflow-wrap: normal; }
+.db-integrated-tabs{margin-bottom:18px;flex-wrap:wrap}

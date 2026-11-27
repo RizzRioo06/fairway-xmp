@@ -147,3 +147,42 @@ The current uncommitted graphical workspace and real Summit 17.12 connection wor
 are covered separately in [native workspace acceptance](postgresql-native-acceptance.md).
 Use its headless native check for real database evidence and its isolated launch
 commands for operator Mac GUI acceptance. `dev:ui` remains simulated throughout.
+
+## PostgreSQL saved connections
+
+Terminal-only profile regression tests use disposable metadata directories and an
+injected memory credential vault; they never access the user's real Keychain:
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked --lib postgresql::profiles
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features terminal --locked --lib postgresql::explorer::tests
+node --experimental-strip-types --test tests/postgresql-workspace.test.ts
+```
+
+Coverage includes restart persistence, rename/remove, session credential reuse,
+failed-authentication cleanup, stale revisions, unsafe metadata aliases, vault
+failure and interrupted credential cleanup. See [saved connection contracts](postgresql-integration.md#saved-connections).
+Real Mac Keychain access, packaged relaunch persistence and visual acceptance are
+operator checks. Existing browser fixture selectors were updated, but no browser
+or end-to-end test was run for this update at the owner's request.
+
+### Cross-platform password providers
+
+`postgresql::profiles` now also tests injected Windows credential API calls,
+libsecret Secret Service calls and the private Unix storage engine on the host.
+These fixtures cover namespacing, empty/UTF-8 passwords, duplicate-ID protection,
+credential-buffer release, missing items, failed writes/deletes and unavailable
+services. They never write to a real OS vault. The Unix engine uses disposable
+folders. Windows profile fixtures use a protected DACL in their disposable folder.
+
+`.github/workflows/credential-storage.yml` compiles/runs the focused fixtures on
+Windows, Ubuntu and macOS with the terminal feature, without desktop dependencies,
+database servers or GUI
+sessions. It was added but not run in this session. Host-injected API tests and
+host-only Windows storage type checks do not establish native Windows/Linux
+builds or actual credential-store acceptance. Full PostgreSQL workspace support
+on those platforms is outside this secure-storage update.
+
+A no-feature local test attempt could not compile existing `shell_environment`
+unit tests (`is_tool_variable` requires the terminal feature). Use the commands
+above with `--features terminal`; no unrelated shell code was changed.

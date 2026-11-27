@@ -1355,6 +1355,7 @@ pub fn run() {
             let startup = crate::startup::Startup::new(runtime);
             app.manage(Arc::new(crate::postgresql::Managed::new(startup.layout.clone())));
             app.manage(Arc::new(crate::postgresql::explorer::Explorer::default()));
+            app.manage(Arc::new(crate::postgresql::profiles::Profiles::new(startup.layout.clone())));
             let nodes = Arc::new(crate::node_projects::NodeProjects::new(startup.layout.clone()));
             let event_app = app.handle().clone();
             nodes.observe_runs(move |status| { let _ = event_app.emit("node-project-run-status", status); });
@@ -1401,6 +1402,10 @@ pub fn run() {
             postgresql_managed_commands::postgres_managed_snapshot,
             postgresql_managed_commands::postgres_managed_health,
             postgresql_managed_commands::postgres_managed_logs,
+            postgresql_explorer_commands::postgres_profiles_list,
+            postgresql_explorer_commands::postgres_profile_save,
+            postgresql_explorer_commands::postgres_profile_remove,
+            postgresql_explorer_commands::postgres_profile_open,
             postgresql_explorer_commands::postgres_connection_open,
             postgresql_explorer_commands::postgres_connection_close,
             postgresql_explorer_commands::postgres_explorer_execute,

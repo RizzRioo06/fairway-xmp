@@ -1,5 +1,5 @@
 // Exact PostgreSQL data and structured error contracts; no bridge or persistence.
-export type PgTarget = { kind: 'managed'; clusterId: string } | {
+export type PgTarget = { kind: 'managed'; clusterId: string } | { kind: 'session'; sessionId: string } | {
   kind: 'external'; host: string; port: number; user: string;
   /** Ephemeral native input only: never put this request in storage, history or logs. */
   password: string; transport: 'loopback' | 'verifyFull';
